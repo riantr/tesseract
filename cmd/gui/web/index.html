@@ -1,0 +1,1141 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SudokuDB · 4D</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0e1116;
+        --panel: #161b22;
+        --panel-2: #1c232c;
+        --line: #2a3440;
+        --line-soft: #222a34;
+        --ink: #e6edf3;
+        --ink-dim: #8b98a5;
+        --accent: #4c9aff;
+        --accent-soft: rgba(76, 154, 255, 0.16);
+        --ok: #3fb950;
+        --warn: #d29922;
+        --err: #f85149;
+        --d1: #2f81f7;
+        --d2: #3fb950;
+        --d3: #a371f7;
+        font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+        font-size: 13px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        overflow: hidden;
+      }
+
+      /* ---------- header ---------- */
+
+      header {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 10px 16px;
+        background: var(--panel);
+        border-bottom: 1px solid var(--line);
+        flex: 0 0 auto;
+      }
+
+      header h1 {
+        margin: 0;
+        font-size: 15px;
+        font-weight: 650;
+        letter-spacing: 0.3px;
+      }
+
+      header h1 small {
+        color: var(--ink-dim);
+        font-weight: 400;
+        margin-left: 6px;
+      }
+
+      .chips {
+        display: flex;
+        gap: 8px;
+        margin-left: auto;
+      }
+
+      .chip {
+        background: var(--panel-2);
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 4px 10px;
+        color: var(--ink-dim);
+        white-space: nowrap;
+      }
+
+      .chip b {
+        color: var(--ink);
+        font-weight: 600;
+        margin-left: 5px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .chip.bad b {
+        color: var(--err);
+      }
+
+      .chip.good b {
+        color: var(--ok);
+      }
+
+      /* ---------- layout ---------- */
+
+      main {
+        flex: 1 1 auto;
+        display: flex;
+        min-height: 0;
+      }
+
+      .left {
+        flex: 0 0 430px;
+        padding: 12px 14px;
+        border-right: 1px solid var(--line);
+        overflow: auto;
+      }
+
+      .right {
+        flex: 1 1 auto;
+        padding: 12px 14px;
+        overflow: auto;
+      }
+
+      h2 {
+        margin: 0 0 8px;
+        font-size: 12px;
+        font-weight: 650;
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+        color: var(--ink-dim);
+      }
+
+      section {
+        margin-bottom: 18px;
+      }
+
+      /* ---------- grid ---------- */
+
+      .plane-bar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 10px;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 6px;
+      }
+
+      .cell {
+        position: relative;
+        aspect-ratio: 1 / 1;
+        min-height: 96px;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        cursor: pointer;
+        padding: 7px 8px;
+        text-align: left;
+        color: var(--ink);
+        font: inherit;
+        display: flex;
+        flex-direction: column;
+        transition: border-color 0.1s, background 0.1s;
+      }
+
+      .cell:hover {
+        border-color: var(--accent);
+      }
+
+      .cell .pos {
+        font-size: 10px;
+        color: var(--ink-dim);
+        font-variant-numeric: tabular-nums;
+      }
+
+      .cell .key {
+        font-size: 12px;
+        font-weight: 600;
+        margin-top: 3px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .cell .val {
+        font-size: 11px;
+        color: var(--ink-dim);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .cell .digit {
+        position: absolute;
+        right: 7px;
+        top: 6px;
+        width: 19px;
+        height: 19px;
+        border-radius: 5px;
+        display: grid;
+        place-items: center;
+        font-size: 11px;
+        font-weight: 700;
+      }
+
+      .d1 {
+        background: rgba(47, 129, 247, 0.22);
+        color: var(--d1);
+      }
+
+      .d2 {
+        background: rgba(63, 185, 80, 0.22);
+        color: var(--d2);
+      }
+
+      .d3 {
+        background: rgba(163, 113, 247, 0.22);
+        color: var(--d3);
+      }
+
+      .cell.empty .key {
+        color: var(--ink-dim);
+        font-weight: 400;
+        font-style: italic;
+      }
+
+      .cell.sel {
+        border-color: var(--accent);
+        background: var(--accent-soft);
+      }
+
+      .cell.cursor::after {
+        content: "";
+        position: absolute;
+        inset: -1px;
+        border: 1px dashed var(--warn);
+        border-radius: 8px;
+        pointer-events: none;
+      }
+
+      .cell.mark {
+        border-color: var(--d3);
+      }
+
+      .cell.mark .key {
+        color: var(--d3);
+      }
+
+      /* ---------- forms ---------- */
+
+      label {
+        display: block;
+        color: var(--ink-dim);
+        font-size: 11px;
+        margin-bottom: 3px;
+      }
+
+      input,
+      select,
+      textarea {
+        width: 100%;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        color: var(--ink);
+        font: inherit;
+        padding: 6px 8px;
+      }
+
+      input:focus,
+      select:focus,
+      textarea:focus {
+        outline: none;
+        border-color: var(--accent);
+      }
+
+      textarea {
+        font-family: "Cascadia Mono", Consolas, monospace;
+        font-size: 12px;
+        resize: vertical;
+      }
+
+      .row {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+
+      .row > div {
+        flex: 1 1 0;
+        min-width: 0;
+      }
+
+      button {
+        background: var(--panel-2);
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        color: var(--ink);
+        font: inherit;
+        padding: 6px 10px;
+        cursor: pointer;
+      }
+
+      button:hover {
+        border-color: var(--accent);
+      }
+
+      button.primary {
+        background: var(--accent-soft);
+        border-color: var(--accent);
+        color: #cfe3ff;
+      }
+
+      button.danger:hover {
+        border-color: var(--err);
+        color: var(--err);
+      }
+
+      .btns {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-bottom: 8px;
+      }
+
+      .digits {
+        display: flex;
+        gap: 6px;
+      }
+
+      .digits button {
+        width: 44px;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+
+      .hint {
+        color: var(--ink-dim);
+        font-size: 11px;
+        line-height: 1.5;
+      }
+
+      .inspect {
+        background: var(--panel);
+        border: 1px solid var(--line-soft);
+        border-radius: 8px;
+        padding: 9px 11px;
+        font-size: 12px;
+        line-height: 1.7;
+      }
+
+      .inspect code {
+        font-family: "Cascadia Mono", Consolas, monospace;
+        color: var(--accent);
+      }
+
+      /* ---------- bottom panel ---------- */
+
+      .bottom {
+        flex: 0 0 230px;
+        border-top: 1px solid var(--line);
+        background: var(--panel);
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+      }
+
+      .tabs {
+        display: flex;
+        gap: 2px;
+        padding: 6px 10px 0;
+        border-bottom: 1px solid var(--line);
+        flex: 0 0 auto;
+      }
+
+      .tab {
+        background: none;
+        border: none;
+        border-bottom: 2px solid transparent;
+        border-radius: 0;
+        color: var(--ink-dim);
+        padding: 6px 12px 7px;
+      }
+
+      .tab.on {
+        color: var(--ink);
+        border-bottom-color: var(--accent);
+      }
+
+      .panes {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: auto;
+        padding: 10px 14px;
+      }
+
+      .pane {
+        display: none;
+      }
+
+      .pane.on {
+        display: block;
+      }
+
+      pre {
+        margin: 0;
+        font-family: "Cascadia Mono", Consolas, monospace;
+        font-size: 12px;
+        line-height: 1.55;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+
+      .ok {
+        color: var(--ok);
+      }
+
+      .err {
+        color: var(--err);
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+      }
+
+      th,
+      td {
+        border-bottom: 1px solid var(--line-soft);
+        padding: 4px 7px;
+        text-align: left;
+        white-space: nowrap;
+      }
+
+      th {
+        color: var(--ink-dim);
+        font-weight: 600;
+      }
+
+      td.mono,
+      th.mono {
+        font-family: "Cascadia Mono", Consolas, monospace;
+      }
+
+      .logline {
+        display: flex;
+        gap: 8px;
+        font-family: "Cascadia Mono", Consolas, monospace;
+        font-size: 11.5px;
+        line-height: 1.6;
+        border-bottom: 1px solid var(--line-soft);
+        padding: 1px 0;
+      }
+
+      .lvl {
+        flex: 0 0 62px;
+        color: var(--ink-dim);
+      }
+
+      .lvl.ERROR {
+        color: var(--err);
+      }
+
+      .lvl.WARNING {
+        color: var(--warn);
+      }
+
+      .msg {
+        flex: 1 1 auto;
+      }
+
+      .det {
+        color: var(--ink-dim);
+      }
+    </style>
+  </head>
+
+  <body>
+    <header>
+      <h1>SudokuDB<small>3×3×3×3 · 81 格 · 108 线</small></h1>
+      <div class="chips" id="chips"></div>
+    </header>
+
+    <main>
+      <div class="left">
+        <section>
+          <h2>平面 (x, y)</h2>
+          <div class="plane-bar">
+            <select id="selX" style="width: 64px"></select>
+            <select id="selY" style="width: 64px"></select>
+            <span class="hint">行 = z，列 = w</span>
+          </div>
+          <div class="grid" id="grid"></div>
+        </section>
+
+        <section>
+          <h2>选中格</h2>
+          <div class="inspect" id="inspect">未选中。点击左侧格子。</div>
+        </section>
+
+        <section>
+          <h2>几何查询</h2>
+          <div class="row">
+            <div style="flex: 0 0 96px">
+              <label>类型</label>
+              <select id="geoKind">
+                <option value="line">线 (3 格)</option>
+                <option value="slab">板 (27 格)</option>
+                <option value="peers" selected>同位 (8 格)</option>
+              </select>
+            </div>
+            <div style="flex: 0 0 84px">
+              <label>轴</label>
+              <select id="geoAxis">
+                <option value="0">x</option>
+                <option value="1">y</option>
+                <option value="2">z</option>
+                <option value="3">w</option>
+              </select>
+            </div>
+            <div style="flex: 1 1 auto; align-self: flex-end">
+              <button class="primary" id="btnGeo">查询</button>
+            </div>
+          </div>
+          <div class="inspect" id="geoOut">围绕选中格查询，并在网格上高亮。</div>
+        </section>
+      </div>
+
+      <div class="right">
+        <section>
+          <h2>写入</h2>
+          <div class="row">
+            <div>
+              <label>键 key</label>
+              <input id="fKey" placeholder="user_001" />
+            </div>
+            <div>
+              <label>值 value</label>
+              <input id="fValue" placeholder='{"age": 25}' />
+            </div>
+          </div>
+          <div class="row">
+            <div style="flex: 0 0 130px">
+              <label>位置（空 = 光标）</label>
+              <input id="fPos" placeholder="1..81" />
+            </div>
+            <div style="flex: 0 0 120px">
+              <label>数位 digit</label>
+              <select id="fDigit">
+                <option value="0">无</option>
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+              </select>
+            </div>
+          </div>
+          <div class="btns">
+            <button class="primary" id="btnInsert">写入 INSERT</button>
+            <button id="btnUpdate">更新 UPDATE</button>
+            <button class="danger" id="btnDelete">删除 DELETE</button>
+            <button id="btnCursor">设为光标</button>
+          </div>
+          <div class="hint">
+            键和值都不能为空；位置留空时写入插入光标当前所在格，写完光标自动前进一格。
+            「删除 DELETE」只删位置指定的那一格；数位选「无」会清掉该格的数位。
+          </div>
+        </section>
+
+        <section>
+          <h2>数位</h2>
+          <div class="digits">
+            <button class="d1" data-d="1">1</button>
+            <button class="d2" data-d="2">2</button>
+            <button class="d3" data-d="3">3</button>
+            <button data-d="0">清除</button>
+          </div>
+          <div class="hint" style="margin-top: 6px">
+            对选中格落子。共享同一条轴向直线的两格不能带同一个数位——冲突会返回
+            <code>SUDOKU_CONFLICT</code>。空格会先补上键 <code>cell_N</code>。
+          </div>
+        </section>
+
+        <section>
+          <h2>整套操作</h2>
+          <div class="btns">
+            <button id="btnSolve">填入闭式解（81 格）</button>
+            <button class="danger" id="btnDemo">示例数据巡演（先清空）</button>
+            <button class="danger" id="btnClear">清空整个点阵</button>
+          </div>
+          <div class="hint">
+            两个红色按钮都会先清空整个点阵。「示例数据巡演」的第一条语句就是
+            <code>DELETE FROM sudokuDB;</code>，所以它无法保留现有数据。
+          </div>
+        </section>
+
+        <section>
+          <h2>SQL 控制台</h2>
+          <textarea id="sql" rows="3">SELECT * FROM sudokuDB;</textarea>
+          <div class="btns" style="margin-top: 8px">
+            <button class="primary" id="btnSql">执行</button>
+            <button data-sql="SELECT * FROM sudokuDB;">全表 SELECT</button>
+            <button data-sql="SELECT * FROM sudokuDB WHERE digit = 1;">有数位 1 的格</button>
+            <button data-sql="SELECT * FROM sudokuDB AT (0,0,0,*);">切片 AT (0,0,0,*)</button>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <div class="bottom">
+      <div class="tabs">
+        <button class="tab on" data-pane="resp">响应</button>
+        <button class="tab" data-pane="rows">结果行</button>
+        <button class="tab" data-pane="log">日志</button>
+        <button class="tab" data-pane="io">导入 / 导出</button>
+      </div>
+      <div class="panes">
+        <div class="pane on" id="pane-resp"><pre id="outResp">就绪。</pre></div>
+        <div class="pane" id="pane-rows"><pre id="outRows">还没有查询。</pre></div>
+        <div class="pane" id="pane-log" style="height: 100%"><div id="outLog"></div></div>
+        <div class="pane" id="pane-io">
+          <div class="row">
+            <div style="flex: 0 0 130px">
+              <label>格式</label>
+              <select id="ioFormat">
+                <option value="sdb">.sdb (JSON)</option>
+                <option value="md">Markdown 表</option>
+                <option value="sql">SQL dump</option>
+                <option value="lattice">ASCII 点阵</option>
+              </select>
+            </div>
+            <div style="flex: 0 0 auto; align-self: flex-end">
+              <button class="primary" id="btnExport">导出</button>
+              <button id="btnImport">导入</button>
+            </div>
+          </div>
+          <textarea id="ioText" rows="10" placeholder="点“导出”生成内容，或把内容粘在这里再点“导入”。"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // Every call into MoonBit goes through the proton bridge. The page never
+      // touches the lattice directly, so the store's own rules - the digit
+      // clash, the C# error codes - still decide what happens.
+      //
+      // A rejected call is reported rather than swallowed: the bridge rejects
+      // the promise on a payload the backend cannot decode (a position the page
+      // sent as `null`, a number outside Int range), and without this the page
+      // would keep showing the previous green tick as if nothing happened.
+      const op = async (name, payload) => {
+        try {
+          return await window.__MoonBit__.core.invokeOp("app:" + name, payload);
+        } catch (e) {
+          say('<span class="err">✗ 桥接调用失败 · ' + esc(name) + "</span> · " + esc(e));
+          throw e;
+        }
+      };
+
+      // Responses can arrive out of order when two operations overlap, and a
+      // late snapshot would repaint the page - and the plane selectors - with
+      // state the user has already moved past. Every op takes the next number
+      // and a snapshot is only applied if nothing newer has landed since.
+      const S = { x: 0, y: 0, sel: null, marks: new Set(), seq: 0, applied: 0 };
+
+      const $ = (id) => document.getElementById(id);
+      const esc = (s) =>
+        String(s === null || s === undefined ? "" : s).replace(
+          /[&<>"']/g,
+          (c) =>
+            ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c],
+        );
+
+      // A position box is either empty (meaning "the insert cursor") or an
+      // integer. Anything else - "abc", "1e999", a 19-digit number - would be
+      // serialised by JSON.stringify into `null` and rejected by the backend,
+      // so it is caught here where the message can name the field.
+      function readPosition() {
+        const raw = $("fPos").value.trim();
+        if (raw === "") return { omit: true };
+        if (!/^-?\d+$/.test(raw)) {
+          say('<span class="err">✗ 位置不是整数</span> · ' + esc(raw));
+          return { bad: true };
+        }
+        const n = parseInt(raw, 10);
+        if (!Number.isSafeInteger(n) || n < -2147483648 || n > 2147483647) {
+          say('<span class="err">✗ 位置超出整数范围</span> · ' + esc(raw));
+          return { bad: true };
+        }
+        return { value: n };
+      }
+
+      function tab(name) {
+        document.querySelectorAll(".tab").forEach((t) => {
+          t.classList.toggle("on", t.dataset.pane === name);
+        });
+        document.querySelectorAll(".pane").forEach((p) => {
+          p.classList.toggle("on", p.id === "pane-" + name);
+        });
+      }
+
+      function say(html, cls) {
+        const el = $("outResp");
+        el.className = cls || "";
+        el.innerHTML = html;
+        tab("resp");
+      }
+
+      // ---- render -------------------------------------------------------
+
+      function renderChips(st) {
+        const s = st.status;
+        const p = st.puzzle;
+        // `is_solution` only means "no line or slab rule is broken" - the
+        // library skips empty cells when checking - so "complete" has to be
+        // read as every cell carrying a digit as well.
+        const verdict = p.complete
+          ? p.placed === s.total_cells
+            ? "完整解"
+            : "无冲突 (" + p.placed + "/" + s.total_cells + ")"
+          : p.violations.length
+            ? p.violations.length + " 条冲突"
+            : "未落子";
+        const chips = [
+          ["记录", s.occupancy + " / " + s.total_cells, ""],
+          ["数位", String(s.digit_count), ""],
+          ["光标", String(s.cursor), ""],
+          ["数位规则", verdict, p.complete ? "good" : p.violations.length ? "bad" : ""],
+        ];
+        $("chips").innerHTML = chips
+          .map((c) => '<div class="chip ' + c[2] + '">' + c[0] + "<b>" + esc(c[1]) + "</b></div>")
+          .join("");
+      }
+
+      function renderGrid(st) {
+        const g = $("grid");
+        g.innerHTML = st.cells
+          .map((c) => {
+            const cls = ["cell"];
+            if (!c.occupied) cls.push("empty");
+            if (S.sel === c.position) cls.push("sel");
+            if (S.marks.has(c.position)) cls.push("mark");
+            if (c.position === st.status.cursor) cls.push("cursor");
+            const d = c.digit
+              ? '<span class="digit d' + c.digit + '">' + c.digit + "</span>"
+              : "";
+            return (
+              '<button class="' +
+              cls.join(" ") +
+              '" data-p="' +
+              c.position +
+              '">' +
+              '<span class="pos">' +
+              c.position +
+              " · " +
+              "(" +
+              c.x +
+              c.y +
+              c.z +
+              c.w +
+              ")" +
+              "</span>" +
+              d +
+              '<span class="key">' +
+              (c.occupied ? esc(c.key) : "空") +
+              "</span>" +
+              '<span class="val">' +
+              (c.occupied ? esc(c.value) : "") +
+              "</span>" +
+              "</button>"
+            );
+          })
+          .join("");
+        g.querySelectorAll(".cell").forEach((b) => {
+          b.onclick = () => {
+            S.sel = parseInt(b.dataset.p, 10);
+            const cell = st.cells.find((c) => c.position === S.sel);
+            if (cell) $("fPos").value = String(cell.position);
+            $("fKey").value = cell && cell.occupied ? cell.key : "";
+            $("fValue").value = cell && cell.occupied ? cell.value : "";
+            $("fDigit").value = String(cell ? cell.digit : 0);
+            renderGrid(st);
+            renderInspect(st);
+          };
+        });
+      }
+
+      function renderInspect(st) {
+        const c = st.cells.find((x) => x.position === S.sel);
+        const box = $("inspect");
+        if (!c) {
+          box.textContent = "未选中。点击左侧格子。";
+          return;
+        }
+        box.innerHTML =
+          "位置 <code>" +
+          c.position +
+          "</code> · 坐标 <code>(" +
+          c.x +
+          ", " +
+          c.y +
+          ", " +
+          c.z +
+          ", " +
+          c.w +
+          ")</code><br>" +
+          "键 <code>" +
+          (c.occupied ? esc(c.key) : "—") +
+          "</code> · 值 <code>" +
+          (c.occupied ? esc(c.value) : "—") +
+          "</code><br>" +
+          "数位 <code>" +
+          (c.digit ? c.digit : "无") +
+          "</code> · 时间戳 <code>" +
+          (c.timestamp || "—") +
+          "</code>";
+      }
+
+      function renderLogs(logs) {
+        const box = $("outLog");
+        if (!logs.length) {
+          box.innerHTML = '<div class="hint">还没有日志。</div>';
+          return;
+        }
+        box.innerHTML = logs
+          .map(
+            (l) =>
+              '<div class="logline"><span class="lvl ' +
+              esc(l.level) +
+              '">#' +
+              l.seq +
+              " " +
+              esc(l.level) +
+              '</span><span class="msg">' +
+              esc(l.message) +
+              ' <span class="det">' +
+              esc(l.details) +
+              "</span></span></div>",
+          )
+          .join("");
+        // .panes is the scrolling box; .pane has no overflow of its own, so
+        // assigning to the pane's scrollTop did nothing.
+        $("pane-log").parentElement.scrollTop = 1e9;
+      }
+
+      // Pulls the write form back in line with the store, using the selected
+      // cell. Without this the form keeps the key and value the cell held
+      // before the last mutation, so the inspector underneath says "—" while
+      // the form offers stale text that a digit press would re-insert.
+      function syncForm(cells) {
+        if (S.sel == null) return;
+        const c = cells.find((x) => x.position === S.sel);
+        if (!c) return;
+        $("fKey").value = c.occupied ? c.key : "";
+        $("fValue").value = c.occupied ? c.value : "";
+        $("fPos").value = String(c.position);
+        $("fDigit").value = String(c.digit);
+      }
+
+      // Switching planes drops the selection instead of carrying the position
+// across: the same position names a different cell in the new plane, and the
+// geometry marks were being cleared anyway, so keeping the highlight was
+// showing a selection the page had already disowned. The form goes with it -
+// leaving the old plane's key in the box would let a DELETE land on a cell
+// that is no longer on screen.
+function clearSelection() {
+  S.sel = null;
+  S.marks.clear();
+  $("fKey").value = "";
+  $("fValue").value = "";
+  $("fPos").value = "";
+  $("fDigit").value = "0";
+  $("inspect").textContent = "未选中。点击左侧格子。";
+  $("geoOut").innerHTML = "围绕选中格查询，并在网格上高亮。";
+}
+
+// `seq` is the number the request carried. A snapshot older than one
+      // already applied is dropped rather than repainting the page backwards.
+      function applyState(st, seq) {
+        if (seq !== undefined && seq < S.applied) return false;
+        if (seq !== undefined) S.applied = seq;
+        S.cells = st.cells;
+        S.x = st.plane_x;
+        S.y = st.plane_y;
+        // The plane selectors are the only place the chosen plane is shown in
+        // the chrome, so they follow the snapshot rather than keeping whatever
+        // the user last picked. Without this they disagree with the grid after
+        // anything that repaints from the backend.
+        $("selX").value = String(st.plane_x);
+        $("selY").value = String(st.plane_y);
+        renderChips(st);
+        renderGrid(st);
+        renderInspect(st);
+        renderLogs(st.logs);
+        syncForm(st.cells);
+        return true;
+      }
+
+      // ---- commands -----------------------------------------------------
+
+      async function refresh() {
+        const seq = ++S.seq;
+        const r = await op("state", { x: S.x, y: S.y });
+        applyState(r, seq);
+      }
+
+      function showResponse(r) {
+        const head = r.success
+          ? '<span class="ok">✓ ' +
+            esc(r.operation || "OK") +
+            (r.affected_rows ? " · 影响 " + r.affected_rows + " 行" : "") +
+            "</span>"
+          : '<span class="err">✗ ' +
+            esc(r.error_code || "ERROR") +
+            "</span> · " +
+            esc(r.error);
+        say(head + "\n" + esc(r.text || r.message));
+        return r;
+      }
+
+      async function write(kind, extra) {
+        const pos = readPosition();
+        if (pos.bad) return null;
+        const key = $("fKey").value.trim();
+        // `delete` has two forms in the library: a key with no position
+        // removes *every* cell carrying that key. This button is framed around
+        // one cell, so a key-only form would wipe rows that are not on screen;
+        // deleting all cells by key belongs in the SQL console, where the
+        // statement says so.
+        let target = pos;
+        if (kind === "delete" && pos.omit) {
+          if (S.sel != null) {
+            target = { value: S.sel };
+          } else if (key !== "") {
+            say(
+              '<span class="err">删除按格进行</span> · 请填位置或先选中一格；按键删除所有同 key 的格请用 SQL 控制台。',
+            );
+            return null;
+          }
+        }
+        // Optional request fields are *omitted*, never sent as null: the
+        // MoonBit decoder for `Int?` takes a number or no key at all, and
+        // treats an explicit null as a type error.
+        //
+        // The digit is always sent, 0 included. "无" is a value the store
+        // understands - update takes digit 0 and drops the digit - so omitting
+        // it means "leave the digit alone", which made the select and the
+        // digit row disagree about the same intent.
+        const payload = {
+          op: kind,
+          key: key,
+          value: $("fValue").value.trim(),
+          x: S.x,
+          y: S.y,
+          digit: parseInt($("fDigit").value, 10),
+        };
+        if (!target.omit) payload.position = target.value;
+        Object.assign(payload, extra || {});
+        const seq = ++S.seq;
+        const r = await op("write", payload);
+        showResponse(r.response);
+        applyState(r.state, seq);
+        return r;
+      }
+
+      async function runSql() {
+        const sql = $("sql").value.trim();
+        if (!sql) {
+          say('<span class="err">SQL 控制台是空的。</span>');
+          return;
+        }
+        const seq = ++S.seq;
+        const r = await op("query", { sql: sql, x: S.x, y: S.y });
+        showResponse(r.response);
+        applyState(r.state);
+        if (r.rows.length) {
+          const head = ["position", "coords", "key", "value", "digit", "timestamp"];
+          const body = r.rows
+            .map(
+              (row) =>
+                "<tr><td class='mono'>" +
+                row.position +
+                "</td><td class='mono'>" +
+                esc(row.coords) +
+                "</td><td>" +
+                esc(row.key) +
+                "</td><td>" +
+                esc(row.value) +
+                "</td><td class='mono'>" +
+                (row.digit || "—") +
+                "</td><td class='mono'>" +
+                esc(row.timestamp) +
+                "</td></tr>",
+            )
+            .join("");
+          $("outRows").innerHTML =
+            "<table><thead><tr>" +
+            head.map((h) => "<th>" + h + "</th>").join("") +
+            "</tr></thead><tbody>" +
+            body +
+            "</tbody></table>";
+        } else {
+          $("outRows").textContent = "查询成功，但没有返回任何行。";
+        }
+        tab("rows");
+      }
+
+      async function runGeometry() {
+        if (!S.sel) {
+          say('<span class="err">先在左侧选一个格子。</span>');
+          return;
+        }
+        const r = await op("geometry", {
+          position: S.sel,
+          kind: $("geoKind").value,
+          axis: parseInt($("geoAxis").value, 10),
+          x: S.x,
+          y: S.y,
+        });
+        S.marks = new Set(r.positions);
+        showResponse(r.response);
+        applyState(r.state);
+        $("geoOut").innerHTML =
+          "覆盖 <code>" +
+          r.positions.length +
+          "</code> 格，其中已占用 <code>" +
+          r.rows.length +
+          "</code> 格（网格上以紫色边框标出）。";
+      }
+
+      // ---- wiring -------------------------------------------------------
+
+      function axisOptions(sel) {
+        for (let i = 0; i < 3; i++) {
+          const o = document.createElement("option");
+          o.value = String(i);
+          o.textContent = String(i);
+          sel.appendChild(o);
+        }
+      }
+
+      axisOptions($("selX"));
+      axisOptions($("selY"));
+
+      $("selX").onchange = async (e) => {
+        S.x = parseInt(e.target.value, 10);
+        clearSelection();
+        await refresh();
+      };
+      $("selY").onchange = async (e) => {
+        S.y = parseInt(e.target.value, 10);
+        clearSelection();
+        await refresh();
+      };
+
+      $("btnInsert").onclick = () => write("insert");
+      $("btnUpdate").onclick = () => write("update");
+      $("btnDelete").onclick = () => write("delete");
+      $("btnCursor").onclick = () => write("cursor");
+      $("btnSolve").onclick = () => write("solve");
+      $("btnDemo").onclick = () => write("demo");
+      $("btnClear").onclick = () => write("clear");
+
+      document.querySelectorAll(".digits button").forEach((b) => {
+        b.onclick = async () => {
+          if (!S.sel) {
+            say('<span class="err">先在左侧选一个格子。</span>');
+            return;
+          }
+          const cell = S.cells.find((c) => c.position === S.sel);
+          const d = parseInt(b.dataset.d, 10);
+          // "清除" on a cell that is already empty used to take the insert
+          // branch and materialise a `cell_N` record whose value is "0" - a
+          // record with no digit and nothing else, created by the one control
+          // whose only purpose is to remove something.
+          if (d === 0 && !(cell && cell.occupied)) {
+            say("格子 " + S.sel + " 本来就是空的，无需清除。");
+            return;
+          }
+          $("fPos").value = String(S.sel);
+          $("fDigit").value = String(d);
+          $("fKey").value =
+            $("fKey").value.trim() || (cell && cell.occupied ? cell.key : "cell_" + S.sel);
+          $("fValue").value =
+            $("fValue").value.trim() || (cell && cell.occupied ? cell.value : String(d));
+          // digit goes through as an explicit 0 too: "no digit" is a value the
+          // store understands, not a field to leave unset.
+          await write(cell && cell.occupied ? "update" : "insert", {
+            position: S.sel,
+            digit: d,
+          });
+        };
+      });
+
+      $("btnGeo").onclick = runGeometry;
+      $("btnSql").onclick = runSql;
+      document.querySelectorAll("[data-sql]").forEach((b) => {
+        b.onclick = () => {
+          $("sql").value = b.dataset.sql;
+          runSql();
+        };
+      });
+
+      $("btnExport").onclick = async () => {
+        const r = await op("export", { format: $("ioFormat").value });
+        $("ioText").value = r.text;
+        say("已导出 <code>" + esc(r.format) + "</code>，共 " + r.text.length + " 字符。");
+      };
+
+      $("btnImport").onclick = async () => {
+        const text = $("ioText").value;
+        if (!text.trim()) {
+          say('<span class="err">先点“导出”，或把内容粘进文本框。</span>');
+          return;
+        }
+        const r = await op("import", {
+          format: $("ioFormat").value,
+          text: text,
+          x: S.x,
+          y: S.y,
+        });
+        applyState(r.state);
+        say(
+          r.ok
+            ? '<span class="ok">✓ 导入完成</span> · ' + esc(r.detail)
+            : '<span class="err">✗ 导入失败</span> · ' + esc(r.detail),
+        );
+      };
+
+      document.querySelectorAll(".tab").forEach((t) => {
+        t.onclick = () => tab(t.dataset.pane);
+      });
+
+      // ---- boot ---------------------------------------------------------
+
+      (async () => {
+        applyState(await op("state", { x: 0, y: 0 }));
+      })().catch((e) => {
+        say('<span class="err">桥接失败：' + esc(e) + "</span>");
+      });
+    </script>
+  </body>
+</html>

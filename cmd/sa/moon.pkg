@@ -1,0 +1,10 @@
+import {
+  "riantr/tesseract/src/sudokudb_sa",
+  "moonbit-community/sqlite3",
+  "moonbitlang/core/env",
+  "moonbitlang/x/fs" @xfs,
+}
+
+supported_targets = "native+wasm"
+
+pkgtype(kind: "executable")

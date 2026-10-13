@@ -1,0 +1,36 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "riantr/tesseract/src/sudokudb_sqlite"
+
+import {
+  "moonbit-community/sqlite3",
+  "moonbitlang/core/debug",
+  "riantr/tesseract/src/sudokudb",
+}
+
+// Values
+pub fn ensure_schema(@sqlite3.Connection) -> Unit raise
+
+pub fn load(String, @sudokudb.SudokuDB) -> LoadReport raise
+
+pub fn save(String, @sudokudb.SudokuDB) -> Int raise
+
+// Errors
+
+// Types and methods
+pub struct CellRow {
+  position : Int
+  key : String
+  value : String
+  digit : Int
+  timestamp : String
+}
+
+pub struct LoadReport {
+  loaded : Int
+  rejected : Int
+  cursor : Int
+} derive(Eq, @debug.Debug)
+
+// Type aliases
+
+// Traits

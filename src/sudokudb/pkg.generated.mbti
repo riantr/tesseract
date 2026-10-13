@@ -1,0 +1,306 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "riantr/tesseract/src/sudokudb"
+
+import {
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub const DIM : Int = 4
+
+pub const FIRST_POSITION : Int = 1
+
+pub const LAST_POSITION : Int = 81
+
+pub const MAX_DIGIT : Int = 3
+
+pub const MAX_LOGS : Int = 100
+
+pub const NO_DIGIT : Int = 0
+
+pub const SIDE : Int = 3
+
+pub const TOTAL : Int = 81
+
+pub fn all_coords() -> Array[Coords]
+
+pub fn all_lines() -> Array[Array[Coords]]
+
+pub fn all_slabs() -> Array[Array[Coords]]
+
+pub fn canonical_digits() -> Array[Int]
+
+pub fn cell_is_empty(GridCell) -> Bool
+
+pub fn contains_ci(String, String) -> Bool
+
+pub fn coord_at(Coords, Int) -> Int
+
+pub fn coord_filter(Int, Int, Int, Int) -> CoordFilter
+
+pub fn coords(Int, Int, Int, Int) -> Coords
+
+pub fn coords_in_bounds(Coords) -> Bool
+
+pub fn coords_of(Int) -> Coords?
+
+pub fn copy_digits(Array[Int]) -> Array[Int]
+
+pub fn cu_char(Int) -> Char
+
+pub fn cu_lower(Int) -> Int
+
+pub fn cu_upper(Int) -> Int
+
+pub fn digit_at(Array[Int], Int) -> Int
+
+pub fn ellipsize(String, Int) -> String
+
+pub fn empty_cell(Int) -> GridCell
+
+pub fn empty_digits() -> Array[Int]
+
+pub fn eq_ci(String, String) -> Bool
+
+pub fn err_response(String, String) -> DBResponse
+
+pub fn execute(SudokuDB, String) -> DBResponse
+
+pub fn export_markdown(SudokuDB) -> String
+
+pub fn export_sdb(SudokuDB) -> String
+
+pub fn export_sql(SudokuDB) -> String
+
+pub fn filter_matches(CoordFilter, Coords) -> Bool
+
+pub fn find_all_by_key(SudokuDB, String) -> Array[Int]
+
+pub fn find_by_key(SudokuDB, String) -> Int?
+
+pub fn format_coords(Coords) -> String
+
+pub fn format_details(Map[String, String]) -> String
+
+pub fn format_record(Record) -> String
+
+pub fn format_response(DBResponse) -> String
+
+pub fn free_axis_of(Array[Coords]) -> Int
+
+pub fn import_markdown(SudokuDB, String) -> Result[Int, String]
+
+pub fn import_sdb(SudokuDB, String) -> Result[Int, String]
+
+pub fn import_sql(SudokuDB, String) -> Result[Int, String]
+
+pub fn index0(Coords) -> Int
+
+pub fn index_of_ci(String, String) -> Int?
+
+pub fn is_solution(Array[Int]) -> Bool
+
+pub fn is_space(Int) -> Bool
+
+pub fn join(Array[String], String) -> String
+
+pub fn level_name(LogLevel) -> String
+
+pub fn like_matches(String, String) -> Bool
+
+pub fn line_key(Array[Coords]) -> String
+
+pub fn line_through(Coords, Int) -> Array[Coords]
+
+pub fn line_violations(Array[Int]) -> Array[String]
+
+pub fn lower(String) -> String
+
+pub fn neighbours(Coords, Int) -> Array[Coords]
+
+pub fn new_db(String, SudokuDBLogger) -> SudokuDB
+
+pub fn new_logger(String) -> SudokuDBLogger
+
+pub fn no_filter() -> CoordFilter
+
+pub fn no_where() -> Where
+
+pub fn ok_response(String) -> DBResponse
+
+pub fn pad_left(String, Int) -> String
+
+pub fn pad_right(String, Int) -> String
+
+pub fn parse_coords(String) -> Coords?
+
+pub fn parse_int(String) -> Int?
+
+pub fn parse_where(String) -> Result[Where, DBResponse]
+
+pub fn peer_count() -> Int
+
+pub fn peers(Coords) -> Array[Coords]
+
+pub fn plane_through(Coords, Int, Int) -> Result[Array[Coords], String]
+
+pub fn position_in_bounds(Int) -> Bool
+
+pub fn position_of(Coords) -> Int
+
+pub fn render_lattice(SudokuDB, Int) -> String
+
+pub fn set_digit(Array[Int], Int, Int) -> Unit
+
+pub fn shares_line(Coords, Coords) -> Bool
+
+pub fn slab_through(Coords, Int) -> Array[Coords]
+
+pub fn slab_violations(Array[Int]) -> Array[String]
+
+pub fn slice(String, Int, Int) -> String
+
+pub fn solve_lattice(Int) -> Array[Array[Int]]
+
+pub fn split(String, String) -> Array[String]
+
+pub fn starts_ci(String, String) -> Bool
+
+pub fn starts_with(String, String) -> Bool
+
+pub fn trim_ws(String) -> String
+
+pub fn upper(String) -> String
+
+pub fn with_coord(Coords, Int, Int) -> Coords
+
+// Errors
+
+// Types and methods
+pub struct CoordFilter {
+  x : Int
+  y : Int
+  z : Int
+  w : Int
+}
+
+pub struct Coords {
+  x : Int
+  y : Int
+  z : Int
+  w : Int
+} derive(Eq, @debug.Debug)
+pub fn Coords::equal(Self, Self) -> Bool
+pub fn Coords::not_equal(Self, Self) -> Bool
+pub fn Coords::to_repr(Self) -> @debug.Repr
+
+pub struct DBResponse {
+  success : Bool
+  operation : String
+  affected_rows : Int
+  position : Int
+  error : String
+  error_code : String
+  message : String
+  data : Array[Record]
+  total_records : Int
+}
+
+pub struct DBStatus {
+  db_name : String
+  total_cells : Int
+  current_count : Int
+  current_position : Int
+  digit_count : Int
+}
+
+pub enum Geometry {
+  None
+  Line(Int, Int)
+  Slab(Int, Int)
+  Peers(Int)
+}
+
+pub struct GridCell {
+  position : Int
+  key : String
+  value : String
+  timestamp : String
+  digit : Int
+}
+
+pub struct LogEntry {
+  seq : Int
+  stamp : String
+  level : LogLevel
+  message : String
+  details : String
+}
+
+pub enum LogLevel {
+  Debug
+  Info
+  Warning
+  Error
+}
+
+pub struct Record {
+  key : String
+  value : String
+  position : Int
+  coords : Coords
+  timestamp : String
+  digit : Int
+}
+
+pub struct SudokuDB {
+  db_name : String
+  cells : Array[GridCell]
+  mut current_position : Int
+  logger : SudokuDBLogger
+}
+pub fn SudokuDB::cell_at(Self, Int) -> GridCell?
+pub fn SudokuDB::delete(Self, String, Int?) -> DBResponse
+pub fn SudokuDB::digit_conflict(Self, Int, Int) -> GridCell?
+pub fn SudokuDB::digit_count(Self) -> Int
+pub fn SudokuDB::get_logger(Self) -> SudokuDBLogger
+pub fn SudokuDB::insert(Self, String, String, Int?, Int) -> DBResponse
+pub fn SudokuDB::insert_stamped(Self, String, String, Int?, Int, String?) -> DBResponse
+pub fn SudokuDB::line_query(Self, Int, Int) -> DBResponse
+pub fn SudokuDB::occupancy(Self) -> Int
+pub fn SudokuDB::peer_query(Self, Int) -> DBResponse
+pub fn SudokuDB::select(Self, String, String, Int?, CoordFilter, Int?) -> DBResponse
+pub fn SudokuDB::set_position(Self, Int) -> Unit
+pub fn SudokuDB::slab_query(Self, Int, Int) -> DBResponse
+pub fn SudokuDB::status(Self) -> DBStatus
+pub fn SudokuDB::update(Self, String, String, Int?, Int?) -> DBResponse
+
+pub struct SudokuDBLogger {
+  name : String
+  mut logs : Array[LogEntry]
+  mut seq : Int
+  mut echo : Bool
+}
+pub fn SudokuDBLogger::add(Self, LogLevel, String, String) -> Unit
+pub fn SudokuDBLogger::clear(Self) -> Unit
+pub fn SudokuDBLogger::count(Self) -> Int
+pub fn SudokuDBLogger::entries(Self) -> Array[LogEntry]
+pub fn SudokuDBLogger::log_debug(Self, String, Map[String, String]) -> Unit
+pub fn SudokuDBLogger::log_error(Self, String, Map[String, String]) -> Unit
+pub fn SudokuDBLogger::log_info(Self, String, Map[String, String]) -> Unit
+pub fn SudokuDBLogger::log_operation(Self, String, Bool, Map[String, String]) -> Unit
+pub fn SudokuDBLogger::log_warning(Self, String, Map[String, String]) -> Unit
+pub fn SudokuDBLogger::set_echo(Self, Bool) -> Unit
+
+pub struct Where {
+  key : String
+  pattern : String
+  position : Int?
+  coords : CoordFilter
+  digit : Int?
+  geometry : Geometry
+}
+
+// Type aliases
+
+// Traits

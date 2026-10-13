@@ -1,0 +1,192 @@
+TARGET	<ROOT>	<ROOT>
+SCANNED	39 files under <ROOT>
+CLEAN	.mbti	<ROOT>/pkg.generated.mbti
+CLEAN	.mbt.md	<ROOT>/README.mbt.md
+CLEAN	.mbti	<ROOT>/src/sudokudb_sqlite/pkg.generated.mbti
+PARTIAL	.mbt	defects=0	notices=3	read up to line 68, 135 after it not shown	<ROOT>/src/sudokudb_sqlite/store.mbt
+38:1 - error: struct declaration is outside the analyzed subset; its body was not analyzed (ParseError) [structural]
+
+48:1 - error: struct declaration is outside the analyzed subset; its body was not analyzed (ParseError) [structural]
+
+52:3 - error: derive declaration is outside the analyzed subset; its body was not analyzed (ParseError) [structural]
+
+PARTIAL	.mbt	defects=0	notices=2	read up to line 43, 158 after it not shown	<ROOT>/src/sudokudb_sa/model.mbt
+29:1 - error: enum declaration is outside the analyzed subset; its body was not analyzed (ParseError) [structural]
+
+37:3 - error: derive declaration is outside the analyzed subset; its body was not analyzed (ParseError) [structural]
+
+CLEAN	.mbti	<ROOT>/src/sudokudb_sa/pkg.generated.mbti
+PARTIAL	.mbt	defects=1	notices=0	read up to line 21, 45 after it not shown	<ROOT>/src/sudokudb_sa/sa_test.mbt
+20:11 - warning: parameter 'path' may not be used (UnusedParam) [structural]
+  in remove at sa_test.mbt:20
+
+PARTIAL	.mbt	defects=0	notices=5	read up to line 32, 400 after it not shown	<ROOT>/src/sudokudb_sa/store.mbt
+15:1 - error: const declaration is outside the analyzed subset (ParseError) [structural]
+
+18:1 - error: const declaration is outside the analyzed subset (ParseError) [structural]
+
+21:1 - error: const declaration is outside the analyzed subset (ParseError) [structural]
+
+24:1 - error: const declaration is outside the analyzed subset (ParseError) [structural]
+
+27:1 - error: const declaration is outside the analyzed subset (ParseError) [structural]
+
+CLEAN	.mbti	<ROOT>/src/sudokudb_dgp/pkg.generated.mbti
+PARTIAL	.mbt	defects=0	notices=4	read up to line 66, 177 after it not shown	<ROOT>/src/sudokudb_dgp/record.mbt
+21:1 - error: struct declaration is outside the analyzed subset; its body was not analyzed (ParseError) [structural]
+
+34:1 - error: struct declaration is outside the analyzed subset; its body was not analyzed (ParseError) [structural]
+
+51:1 - error: struct declaration is outside the analyzed subset; its body was not analyzed (ParseError) [structural]
+
+60:3 - error: derive declaration is outside the analyzed subset; its body was not analyzed (ParseError) [structural]
+
+PARTIAL	.mbt	defects=0	notices=9	read up to line 63, 80 after it not shown	<ROOT>/src/sudokudb/coords.mbt
+20:1 - error: const declaration is outside the analyzed subset (ParseError) [structural]
+
+24:1 - error: const declaration is outside the analyzed subset (ParseError) [structural]
+
+28:1 - error: const declaration is outside the analyzed subset (ParseError) [structural]
+
+32:1 - error: const declaration is outside the analyzed subset (ParseError) [structural]
+
+36:1 - error: const declaration is outside the analyzed subset (ParseError) [structural]
+
+40:1 - error: const declaration is outside the analyzed subset (ParseError) [structural]
+
+44:1 - error: const declaration is outside the analyzed subset (ParseError) [structural]
+
+52:1 - error: struct declaration is outside the analyzed subset; its body was not analyzed (ParseError) [structural]
+
+57:3 - error: derive declaration is outside the analyzed subset; its body was not analyzed (ParseError) [structural]
+
+FOUND	.mbt	defects=0	notices=11	<ROOT>/src/sudokudb/coords_test.mbt
+3:1 - error: test declaration is outside the analyzed subset; its body was not analyzed (ParseError) [structural]
+
+16:1 - error: test declaration is outside the analyzed subset; its body was not analyzed (ParseError) [structural]
+
+27:1 - error: test declaration is outside the analyzed subset; its body was not analyzed (ParseError) [structural]
+
+35:1 - error: test declaration is outside the analyzed subset; its body was not analyzed (ParseError) [structural]
+
+45:1 - error: test declaration is outside the analyzed subset; its body was not analyzed (ParseError) [structural]
+
+54:1 - error: test declaration is outside the analyzed subset; its body was not analyzed (ParseError) [structural]
+
+64:1 - error: test declaration is outside the analyzed subset; its body was not analyzed (ParseError) [structural]
+
+75:1 - error: test declaration is outside the analyzed subset; its body was not analyzed (ParseError) [structural]
+
+90:1 - error: test declaration is outside the analyzed subset; its body was not analyzed (ParseError) [structural]
+
+105:1 - error: test declaration is outside the analyzed subset; its body was not analyzed (ParseError) [structural]
+
+123:1 - error: test declaration is outside the analyzed subset; its body was not analyzed (ParseError) [structural]
+
+PARTIAL	.mbt	defects=0	notices=1	read up to line 29, 635 after it not shown	<ROOT>/src/sudokudb/db.mbt
+19:1 - error: struct declaration is outside the analyzed subset; its body was not analyzed (ParseError) [structural]
+
+PARTIAL	.mbt	defects=1	notices=0	read up to line 22, 56 after it not shown	<ROOT>/src/sudokudb/lattice.mbt
+20:21 - warning: parameter 'c' may not be used (UnusedParam) [structural]
+  in line_through at lattice.mbt:20
+
+FOUND	.mbt	defects=0	notices=9	<ROOT>/src/sudokudb/lattice_test.mbt
+3:1 - error: test declaration is outside the analyzed subset; its body was not analyzed (ParseError) [structural]
+
+33:1 - error: test declaration is outside the analyzed subset; its body was not analyzed (ParseError) [structural]
+
+52:1 - error: test declaration is outside the analyzed subset; its body was not analyzed (ParseError) [structural]
+
+64:1 - error: test declaration is outside the analyzed subset; its body was not analyzed (ParseError) [structural]
+
+90:1 - error: test declaration is outside the analyzed subset; its body was not analyzed (ParseError) [structural]
+
+115:1 - error: test declaration is outside the analyzed subset; its body was not analyzed (ParseError) [structural]
+
+130:1 - error: test declaration is outside the analyzed subset; its body was not analyzed (ParseError) [structural]
+
+153:1 - error: test declaration is outside the analyzed subset; its body was not analyzed (ParseError) [structural]
+
+176:1 - error: test declaration is outside the analyzed subset; its body was not analyzed (ParseError) [structural]
+
+PARTIAL	.mbt	defects=0	notices=2	read up to line 26, 156 after it not shown	<ROOT>/src/sudokudb/logger.mbt
+12:1 - error: const declaration is outside the analyzed subset (ParseError) [structural]
+
+16:1 - error: enum declaration is outside the analyzed subset; its body was not analyzed (ParseError) [structural]
+
+CLEAN	.mbti	<ROOT>/src/sudokudb/pkg.generated.mbti
+PARTIAL	.mbt	defects=0	notices=2	read up to line 48, 803 after it not shown	<ROOT>/src/sudokudb/sql.mbt
+36:1 - error: enum declaration is outside the analyzed subset; its body was not analyzed (ParseError) [structural]
+
+45:1 - error: struct declaration is outside the analyzed subset; its body was not analyzed (ParseError) [structural]
+
+FOUND	.mbt	defects=0	notices=12	<ROOT>/src/sudokudb/sudoku_test.mbt
+9:1 - error: test declaration is outside the analyzed subset; its body was not analyzed (ParseError) [structural]
+
+17:1 - error: test declaration is outside the analyzed subset; its body was not analyzed (ParseError) [structural]
+
+31:1 - error: test declaration is outside the analyzed subset; its body was not analyzed (ParseError) [structural]
+
+42:1 - error: test declaration is outside the analyzed subset; its body was not analyzed (ParseError) [structural]
+
+65:1 - error: test declaration is outside the analyzed subset; its body was not analyzed (ParseError) [structural]
+
+77:1 - error: test declaration is outside the analyzed subset; its body was not analyzed (ParseError) [structural]
+
+86:1 - error: test declaration is outside the analyzed subset; its body was not analyzed (ParseError) [structural]
+
+95:1 - error: test declaration is outside the analyzed subset; its body was not analyzed (ParseError) [structural]
+
+102:1 - error: test declaration is outside the analyzed subset; its body was not analyzed (ParseError) [structural]
+
+110:1 - error: test declaration is outside the analyzed subset; its body was not analyzed (ParseError) [structural]
+
+131:1 - error: test declaration is outside the analyzed subset; its body was not analyzed (ParseError) [structural]
+
+159:1 - error: test declaration is outside the analyzed subset; its body was not analyzed (ParseError) [structural]
+
+PARTIAL	.mbt	defects=0	notices=1	read up to line 22, 92 after it not shown	<ROOT>/src/sudokudb/types.mbt
+11:1 - error: struct declaration is outside the analyzed subset; its body was not analyzed (ParseError) [structural]
+
+PARTIAL	.mbt	defects=2	notices=0	read up to line 45, 145 after it not shown	<ROOT>/cmd/sa/main.mbt
+26:11 - error: undefined function 'eprintln' (UndefinedName) [structural+behavior]
+  in main() at main.mbt:87
+  in warn at main.mbt:25
+
+34:10 - error: undefined function 'println' (UndefinedName) [structural+behavior]
+  in main() at main.mbt:92
+  in out at main.mbt:33
+
+CLEAN	.mbti	<ROOT>/cmd/sa/pkg.generated.mbti
+PARTIAL	.mbt	defects=0	notices=1	read up to line 42, 116 after it not shown	<ROOT>/cmd/persist/main.mbt
+35:1 - error: struct declaration is outside the analyzed subset; its body was not analyzed (ParseError) [structural]
+
+CLEAN	.mbti	<ROOT>/cmd/persist/pkg.generated.mbti
+PARTIAL	.mbt	defects=0	notices=1	read up to line 33, 223 after it not shown	<ROOT>/cmd/main/main.mbt
+27:1 - error: struct declaration is outside the analyzed subset; its body was not analyzed (ParseError) [structural]
+
+CLEAN	.mbti	<ROOT>/cmd/main/pkg.generated.mbti
+PARTIAL	.mbt	defects=0	notices=2	read up to line 24, 400 after it not shown	<ROOT>/cmd/gui/commands.mbt
+12:1 - error: struct declaration is outside the analyzed subset; its body was not analyzed (ParseError) [structural]
+
+15:3 - error: derive declaration is outside the analyzed subset; its body was not analyzed (ParseError) [structural]
+
+PARTIAL	.mbt	defects=0	notices=2	read up to line 24, 14 after it not shown	<ROOT>/cmd/gui/main.mbt
+12:1 - error: const declaration is outside the analyzed subset (ParseError) [structural]
+
+21:1 - error: const declaration is outside the analyzed subset (ParseError) [structural]
+
+PARSED	12/39 files understood (30.7%); 27 more read only up to their first parse error
+BYKIND	.mbt	files=30	parsed=3	defects=4	notices=67
+BYKIND	.mbti	files=8	parsed=8	defects=0	notices=0
+BYKIND	.mbt.md	files=1	parsed=1	defects=0	notices=0
+NOTPARSE	27 files, 1487 finding(s) withheld — they measure what this analyzer does not understand, not what your code does
+  8x  unexpected token
+      e.g. <ROOT>/src/sudokudb_sqlite/store_test.mbt
+      e.g. <ROOT>/src/sudokudb_sa/parse.mbt
+      e.g. <ROOT>/src/sudokudb_dgp/dgp.mbt
+  3x  only named functions can be called
+      e.g. <ROOT>/src/sudokudb/serialize.mbt
+      e.g. <ROOT>/src/sudokudb/sudoku.mbt
+      e.g. <ROOT>/src/sudokudb/text.mbt
+SUMMARY	files=39	parsed=12	actionable=4	notices=67	unreliable=5122	withheld=1487	total=5193	(actionable+notices+unreliable+withheld = total)

@@ -1,0 +1,6 @@
+import {
+  "riantr/tesseract/src/sudokudb",
+  "moonbitlang/core/env",
+}
+
+pkgtype(kind: "executable")

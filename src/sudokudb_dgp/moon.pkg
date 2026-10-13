@@ -1,0 +1,11 @@
+import {
+  "riantr/tesseract/src/sudokudb",
+  "riantr/moonbit_doubleML",
+  "moonbitlang/core/json",
+}
+
+/// `riantr/moonbit_doubleML` builds for every backend, and this package adds
+/// no backend-specific code, so it declares all four explicitly rather than
+/// inheriting the toolchain default and silently narrowing later.
+
+supported_targets = "native+wasm+wasm-gc+js"

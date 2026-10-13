@@ -1,0 +1,19 @@
+{
+  "identifier": "dev.sudokudb.gui",
+  "backend": {
+    "path": ".",
+    "package": "cmd/gui"
+  },
+  "package": {
+    "product_name": "SudokuDB",
+    "version": "0.1.0",
+    "formats": [
+      "app",
+      "zip"
+    ],
+    "resources": [
+      "cmd/gui/web"
+    ],
+    "output": "dist"
+  }
+}

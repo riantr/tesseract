@@ -1,0 +1,61 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "riantr/tesseract/src/sudokudb_dgp"
+
+import {
+  "moonbitlang/core/debug",
+  "riantr/tesseract/src/sudokudb",
+}
+
+// Values
+pub const CELL_COUNT : Int = 81
+
+pub fn decode(String) -> Observation?
+
+pub fn encode(Observation) -> String?
+
+pub fn irm_dataset(Int, Int, Double, Int) -> Dataset
+
+pub fn observation_key(Int) -> String
+
+pub fn plr_dataset(Int, Int, Double, Int) -> Dataset
+
+pub fn read_back(@sudokudb.SudokuDB, Dataset) -> Array[Observation]?
+
+pub fn record(@sudokudb.SudokuDB, Dataset) -> RecordReport
+
+pub fn recorded(@sudokudb.SudokuDB) -> Array[@sudokudb.Record]
+
+pub fn to_sql(Dataset) -> String
+
+// Errors
+
+// Types and methods
+pub struct Dataset {
+  source : String
+  theta : Double
+  dim_x : Int
+  observations : Array[Observation]
+}
+pub fn Dataset::new(String, Double, Int, Array[Observation]) -> Self
+
+pub struct Observation {
+  index : Int
+  d : Double
+  y : Double
+  x : Array[Double]
+}
+pub fn Observation::new(Int, Double, Double, Array[Double]) -> Self
+
+pub struct RecordReport {
+  recorded : Int
+  rejected : Int
+  offered : Int
+  stopped_at : Int
+} derive(Eq, @debug.Debug)
+pub fn RecordReport::equal(Self, Self) -> Bool
+pub fn RecordReport::not_equal(Self, Self) -> Bool
+pub fn RecordReport::to_repr(Self) -> @debug.Repr
+
+// Type aliases
+
+// Traits
