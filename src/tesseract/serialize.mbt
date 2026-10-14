@@ -100,7 +100,7 @@ fn json_str(v : Json, key : String) -> String {
 
 ///|
 /// Reads a value at a JSON key as an integer, or `fallback`.
-fn json_int(v : Json, key : String, fallback : Int) -> Int {
+fn json_int(v : Json, key : String, fallback : Int32) -> Int32 {
   match json_field(v, key) {
     Some(Json::Number(n, repr=_)) => n.to_int()
     _ => fallback
@@ -112,7 +112,7 @@ fn json_int(v : Json, key : String, fallback : Int) -> Int {
 ///
 /// The database is cleared first, so a failed load leaves an empty database
 /// rather than a half-overwritten one mixed with whatever was there before.
-pub fn import_tsr(db : Tesseract, text : String) -> Result[Int, String] {
+pub fn import_tsr(db : Tesseract, text : String) -> Result[Int32, String] {
   if !@json.valid(text) {
     return Err("Not valid JSON")
   }
@@ -340,7 +340,7 @@ fn is_table_rule(cells : Array[String]) -> Bool {
 
 ///|
 /// Index of `name` in a Markdown header row, or -1.
-fn md_column(header : Array[String], name : String) -> Int {
+fn md_column(header : Array[String], name : String) -> Int32 {
   let mut i = 0
   while i < header.length() {
     if eq_ci(header[i], name) {
@@ -356,7 +356,7 @@ fn md_column(header : Array[String], name : String) -> Int {
 ///
 /// The C# header (`位置 | Key | Value | 时间戳`) is accepted too, as long as
 /// it carries at least a key and a value column.
-pub fn import_markdown(db : Tesseract, text : String) -> Result[Int, String] {
+pub fn import_markdown(db : Tesseract, text : String) -> Result[Int32, String] {
   let lines = split(text, "\n")
   let mut header : Array[String] = []
   let mut loaded = 0
@@ -587,7 +587,7 @@ fn strip_sql_comments(text : String) -> String {
 
 ///|
 /// Runs a SQL script, returning how many statements succeeded.
-pub fn import_sql(db : Tesseract, text : String) -> Result[Int, String] {
+pub fn import_sql(db : Tesseract, text : String) -> Result[Int32, String] {
   let statements = split_statements(text)
   if statements.length() == 0 {
     return Err("No statements found")
@@ -627,7 +627,7 @@ pub fn import_sql(db : Tesseract, text : String) -> Result[Int, String] {
 
 ///|
 /// One cell rendered for the lattice view.
-fn lattice_cell(db : Tesseract, position : Int, cursor : Int) -> String {
+fn lattice_cell(db : Tesseract, position : Int32, cursor : Int32) -> String {
   let cell = db.cells[position - 1]
   let marker = if position == cursor { ">" } else { " " }
   let label = if cell_is_empty(cell) {
@@ -657,7 +657,7 @@ fn lattice_cell(db : Tesseract, position : Int, cursor : Int) -> String {
 /// With only 3 cells per axis there is no single "right" way to flatten four
 /// dimensions onto a terminal, so this fixes the two slowest axes and lays the
 /// remaining 3x3 out as a grid — the same reading a 2D sudoku grid gets.
-pub fn render_lattice(db : Tesseract, cursor : Int) -> String {
+pub fn render_lattice(db : Tesseract, cursor : Int32) -> String {
   let b = StringBuilder::StringBuilder()
   let mut x = 0
   while x < SIDE {

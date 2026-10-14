@@ -161,7 +161,11 @@ test "a partially filled slab is not reported as imbalanced" {
   assert_eq(slab.length(), 27)
   let mut i = 0
   while i < 7 {
-    @tesseract.set_digit(d, @tesseract.position_of(slab[i]), @tesseract.NO_DIGIT)
+    @tesseract.set_digit(
+      d,
+      @tesseract.position_of(slab[i]),
+      @tesseract.NO_DIGIT,
+    )
     i = i + 1
   }
   assert_eq(@tesseract.line_violations(d).length(), 0)

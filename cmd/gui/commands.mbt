@@ -10,8 +10,8 @@
 ///|
 /// Which plane the page is looking at.
 struct StateReq {
-  x : Int
-  y : Int
+  x : Int32
+  y : Int32
 } derive(FromJson)
 
 ///|
@@ -21,10 +21,10 @@ struct WriteReq {
   op : String
   key : String
   value : String
-  position : Int?
-  digit : Int?
-  x : Int
-  y : Int
+  position : Int32?
+  digit : Int32?
+  x : Int32
+  y : Int32
 } derive(FromJson)
 
 ///|
@@ -39,8 +39,8 @@ struct WriteResp {
 /// keeps showing it.
 struct QueryReq {
   sql : String
-  x : Int
-  y : Int
+  x : Int32
+  y : Int32
 } derive(FromJson)
 
 ///|
@@ -55,11 +55,11 @@ struct QueryResp {
 /// A lattice question about one cell. `kind` is `line`, `slab` or `peers`;
 /// `axis` is 0..3 and is ignored for `peers`.
 struct GeometryReq {
-  position : Int
+  position : Int32
   kind : String
-  axis : Int
-  x : Int
-  y : Int
+  axis : Int32
+  x : Int32
+  y : Int32
 } derive(FromJson)
 
 ///|
@@ -68,7 +68,7 @@ struct GeometryReq {
 struct GeometryResp {
   response : RespView
   rows : Array[RecordView]
-  positions : Array[Int]
+  positions : Array[Int32]
   state : StateResp
 } derive(ToJson)
 
@@ -90,8 +90,8 @@ struct ExportResp {
 struct ImportReq {
   format : String
   text : String
-  x : Int
-  y : Int
+  x : Int32
+  y : Int32
 } derive(FromJson)
 
 ///|
@@ -263,7 +263,7 @@ fn write_response(req : WriteReq) -> RespView {
 ///|
 /// `set_position` reports nothing, so this builds the message the CLI's
 /// `.pos` prints.
-fn cursor_response(target : Int?) -> RespView {
+fn cursor_response(target : Int32?) -> RespView {
   let wanted = match target {
     Some(p) => p
     None => 0
@@ -412,7 +412,7 @@ fn demo_response() -> RespView {
 }
 
 ///|
-fn digit_or_zero(d : Int?) -> Int {
+fn digit_or_zero(d : Int32?) -> Int32 {
   match d {
     Some(v) => v
     None => @tesseract.NO_DIGIT
@@ -484,7 +484,7 @@ fn handle_geometry(req : GeometryReq) -> GeometryResp {
 
 ///|
 /// Positions of a set of cells.
-fn positions_of(cells : Array[@tesseract.Coords]) -> Array[Int] {
+fn positions_of(cells : Array[@tesseract.Coords]) -> Array[Int32] {
   cells.map(fn(c) { @tesseract.position_of(c) })
 }
 

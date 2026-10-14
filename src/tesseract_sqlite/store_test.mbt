@@ -63,10 +63,10 @@ fn save_fails(path : String, db : @tesseract.Tesseract) -> Bool {
 /// Adds a row straight into the file, bypassing the store.
 fn add_row(
   path : String,
-  position : Int,
+  position : Int32,
   key : String,
   value : String,
-  digit : Int,
+  digit : Int32,
 ) -> Unit raise {
   let conn = @sqlite3.Connection::open(path)
   defer conn.close()
@@ -99,7 +99,7 @@ fn block_inserts(path : String) -> Unit raise {
 
 ///|
 /// Rewrites one cell's timestamp straight in the file.
-fn set_stamp(path : String, position : Int, stamp : String) -> Unit raise {
+fn set_stamp(path : String, position : Int32, stamp : String) -> Unit raise {
   let conn = @sqlite3.Connection::open(path)
   defer conn.close()
   let upd = conn.prepare(
@@ -116,7 +116,7 @@ fn set_stamp(path : String, position : Int, stamp : String) -> Unit raise {
 ///
 /// Searches by position instead of indexing, so these tests do not also depend
 /// on the order `select` happens to return rows in.
-fn stamp_at(db : @tesseract.Tesseract, position : Int) -> String {
+fn stamp_at(db : @tesseract.Tesseract, position : Int32) -> String {
   for row in occupied(db) {
     if row.position == position {
       return row.timestamp

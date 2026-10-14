@@ -48,7 +48,7 @@
 /// line, so those two have to be taken from the right. `tesseract` exposes
 /// `index_of_ci`, which finds the first and is case-insensitive; neither is
 /// what this needs.
-fn last_index_of(haystack : String, needle : String) -> Int? {
+fn last_index_of(haystack : String, needle : String) -> Int32? {
   let mut i = haystack.length() - needle.length()
   while i >= 0 {
     if @tesseract.slice(haystack, i, i + needle.length()) == needle {
@@ -135,7 +135,7 @@ fn parse_finding(line : String, path : String) -> Finding? {
 
 ///|
 /// The `key=value` pairs of a `SUMMARY` or `BYKIND` line.
-fn field_value(fields : Array[String], key : String) -> Int? {
+fn field_value(fields : Array[String], key : String) -> Int32? {
   for f in fields {
     if @tesseract.starts_with(f, key + "=") {
       return @tesseract.parse_int(
@@ -155,7 +155,7 @@ fn field_value(fields : Array[String], key : String) -> Int? {
 /// becomes a plausible-looking zero. There is deliberately no error return: a
 /// field that is not a count is not a parse failure, it is a count of nothing,
 /// and every call site here is on a shape the tool controls.
-fn leading_count(s : String) -> Int {
+fn leading_count(s : String) -> Int32 {
   let digits : Array[Char] = []
   for c in s {
     if c >= '0' && c <= '9' {
@@ -192,7 +192,7 @@ fn is_reason_line(line : String) -> Bool {
 ///|
 /// How far a `PARTIAL` file was read: `read up to line 63, 80 after it not
 /// shown`. Returns `(0, 0)` for any other shape.
-fn partial_extent(field : String) -> (Int, Int) {
+fn partial_extent(field : String) -> (Int32, Int32) {
   let parts = @tesseract.split(field, ",")
   if parts.length() < 2 {
     return (0, 0)
@@ -311,7 +311,10 @@ pub fn parse(output : String) -> Result[ScanReport, String] {
       // a wrong one: splitting on it yields a single element, `target` keeps
       // both paths joined by a tab, and `root` comes back empty - which reads
       // as "the scan had no root" rather than as a parse bug.
-      let parts = @tesseract.split(@tesseract.slice(line, 7, line.length()), "\t")
+      let parts = @tesseract.split(
+        @tesseract.slice(line, 7, line.length()),
+        "\t",
+      )
       if parts.length() > 0 {
         target = parts[0]
       }

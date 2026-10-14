@@ -9,7 +9,7 @@
 
 ///|
 /// Oldest entries past this count are dropped, matching the C# limit.
-pub const MAX_LOGS : Int = 100
+pub const MAX_LOGS : Int32 = 100
 
 ///|
 /// Severity of a log entry.
@@ -34,7 +34,7 @@ pub fn level_name(l : LogLevel) -> String {
 ///|
 /// One recorded event.
 pub struct LogEntry {
-  seq : Int
+  seq : Int32
   stamp : String
   level : LogLevel
   message : String
@@ -86,7 +86,7 @@ pub fn format_details(details : Map[String, String]) -> String {
 pub struct TesseractLogger {
   name : String
   mut logs : Array[LogEntry]
-  mut seq : Int
+  mut seq : Int32
   mut echo : Bool
 }
 
@@ -104,7 +104,7 @@ pub fn TesseractLogger::set_echo(self : TesseractLogger, on : Bool) -> Unit {
 
 ///|
 /// The current entry count.
-pub fn TesseractLogger::count(self : TesseractLogger) -> Int {
+pub fn TesseractLogger::count(self : TesseractLogger) -> Int32 {
   self.logs.length()
 }
 

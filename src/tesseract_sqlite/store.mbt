@@ -36,19 +36,19 @@
 /// `coords` field the file does not store — coordinates are derived from the
 /// position on load rather than persisted twice.
 pub struct CellRow {
-  position : Int
+  position : Int32
   key : String
   value : String
-  digit : Int
+  digit : Int32
   timestamp : String
 }
 
 ///|
 /// What a load put into the store.
 pub struct LoadReport {
-  loaded : Int
-  rejected : Int
-  cursor : Int
+  loaded : Int32
+  rejected : Int32
+  cursor : Int32
 } derive(Eq, Debug)
 
 ///|
@@ -87,7 +87,7 @@ pub fn ensure_schema(conn : @sqlite3.Connection) -> Unit raise {
 /// therefore rolls back rather than leaving a half-replaced lattice behind:
 /// `conn.close()` on a connection with an open transaction is what performs
 /// that rollback.
-pub fn save(path : String, db : @tesseract.Tesseract) -> Int raise {
+pub fn save(path : String, db : @tesseract.Tesseract) -> Int32 raise {
   let conn = @sqlite3.Connection::open(path)
   defer conn.close()
   ensure_schema(conn)

@@ -20,7 +20,7 @@
 /// One row of a dataset, before it is written into the lattice.
 pub struct Observation {
   /// Row index in the source dataset, `0`-based.
-  index : Int
+  index : Int32
   /// Treatment value `d`.
   d : Double
   /// Outcome value `y`.
@@ -37,7 +37,7 @@ pub struct Dataset {
   /// The causal parameter the DGP was built around.
   theta : Double
   /// Number of covariate columns per row.
-  dim_x : Int
+  dim_x : Int32
   /// The rows, in source order.
   observations : Array[Observation]
 }
@@ -50,13 +50,13 @@ pub struct Dataset {
 /// two different answers.
 pub struct RecordReport {
   /// Rows the store accepted.
-  recorded : Int
+  recorded : Int32
   /// Rows the store refused.
-  rejected : Int
+  rejected : Int32
   /// Rows the dataset held.
-  offered : Int
+  offered : Int32
   /// The first cell the pass could not use, or 0 when every row was placed.
-  stopped_at : Int
+  stopped_at : Int32
 } derive(Eq, Debug)
 
 ///|
@@ -67,7 +67,7 @@ pub extend RecordReport with Debug::{to_repr}
 
 ///|
 /// The lattice's cell count, which is also this package's per-dataset ceiling.
-pub const CELL_COUNT : Int = 81
+pub const CELL_COUNT : Int32 = 81
 
 ///|
 /// Builds one observation.
@@ -78,7 +78,7 @@ pub const CELL_COUNT : Int = 81
 /// callers a function is also the better shape for a type that has a fixed
 /// field order.
 pub fn Observation::new(
-  index : Int,
+  index : Int32,
   d : Double,
   y : Double,
   x : Array[Double],
@@ -93,7 +93,7 @@ pub fn Observation::new(
 pub fn Dataset::new(
   source : String,
   theta : Double,
-  dim_x : Int,
+  dim_x : Int32,
   observations : Array[Observation],
 ) -> Dataset {
   { source, theta, dim_x, observations, }
@@ -287,7 +287,7 @@ pub fn to_sql(data : Dataset) -> String {
 ///
 /// Derived from the dataset row index rather than from the cell, so that
 /// moving a row to a different cell cannot silently rename it.
-pub fn observation_key(index : Int) -> String {
+pub fn observation_key(index : Int32) -> String {
   "obs_" + index.to_string()
 }
 

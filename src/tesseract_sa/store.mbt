@@ -75,7 +75,7 @@ pub fn ensure_schema(conn : @sqlite3.Connection) -> Unit raise {
 /// ships no transaction helper - the same arrangement `src/tesseract_sqlite`
 /// uses. A half-written run would be worse than none: a summary with no file
 /// rows reads as "the scan found nothing".
-pub fn save(path : String, report : ScanReport) -> Int raise {
+pub fn save(path : String, report : ScanReport) -> Int32 raise {
   let conn = @sqlite3.Connection::open(path)
   defer conn.close()
   ensure_schema(conn)
@@ -95,7 +95,7 @@ pub fn save(path : String, report : ScanReport) -> Int raise {
 /// The id comes back from `ORDER BY id DESC LIMIT 1` rather than from
 /// `last_insert_rowid`: the sqlite3 package this project uses exposes
 /// `changes()`, which counts rows affected, not the new row id.
-fn insert_run(conn : @sqlite3.Connection, report : ScanReport) -> Int raise {
+fn insert_run(conn : @sqlite3.Connection, report : ScanReport) -> Int32 raise {
   let ins = conn.prepare(
     "INSERT INTO sa_runs (target, root, files, parsed, parsed_pct, partial_files, actionable, notices, unreliable, withheld, total) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
   )
@@ -124,7 +124,7 @@ fn insert_run(conn : @sqlite3.Connection, report : ScanReport) -> Int raise {
 ///|
 fn insert_files(
   conn : @sqlite3.Connection,
-  run_id : Int,
+  run_id : Int32,
   rows : Array[FileResult],
 ) -> Unit raise {
   let ins = conn.prepare(
@@ -149,7 +149,7 @@ fn insert_files(
 ///|
 fn insert_findings(
   conn : @sqlite3.Connection,
-  run_id : Int,
+  run_id : Int32,
   rows : Array[Finding],
 ) -> Unit raise {
   let ins = conn.prepare(
@@ -175,7 +175,7 @@ fn insert_findings(
 ///|
 fn insert_unparsed(
   conn : @sqlite3.Connection,
-  run_id : Int,
+  run_id : Int32,
   rows : Array[UnparsedGroup],
 ) -> Unit raise {
   let ins = conn.prepare(
@@ -198,7 +198,7 @@ fn insert_unparsed(
 ///|
 fn insert_by_kind(
   conn : @sqlite3.Connection,
-  run_id : Int,
+  run_id : Int32,
   rows : Array[ByKind],
 ) -> Unit raise {
   let ins = conn.prepare(
@@ -219,7 +219,7 @@ fn insert_by_kind(
 
 ///|
 /// The newest run's id, or `None` on a database with no runs.
-pub fn latest_run(path : String) -> Int? raise {
+pub fn latest_run(path : String) -> Int32? raise {
   let conn = @sqlite3.Connection::open(path)
   defer conn.close()
   ensure_schema(conn)
@@ -270,14 +270,14 @@ pub fn list_runs(path : String) -> Array[RunSummary] raise {
 
 ///|
 /// One text column, read once.
-fn read_text(stmt : @sqlite3.Statement, index : Int) -> String raise {
+fn read_text(stmt : @sqlite3.Statement, index : Int32) -> String raise {
   let v : String = stmt.column(index~)
   v
 }
 
 ///|
 /// One integer column, read once.
-fn read_int(stmt : @sqlite3.Statement, index : Int) -> Int raise {
+fn read_int(stmt : @sqlite3.Statement, index : Int32) -> Int32 raise {
   let v : Int64 = stmt.column(index~)
   v.to_int()
 }
@@ -286,7 +286,7 @@ fn read_int(stmt : @sqlite3.Statement, index : Int) -> Int raise {
 /// Reads a run back out, for verifying that what was stored is what was parsed.
 ///
 /// `None` when the run id is not in the database.
-pub fn load(path : String, run_id : Int) -> ScanReport? raise {
+pub fn load(path : String, run_id : Int32) -> ScanReport? raise {
   let conn = @sqlite3.Connection::open(path)
   defer conn.close()
   ensure_schema(conn)
@@ -325,7 +325,7 @@ pub fn load(path : String, run_id : Int) -> ScanReport? raise {
 ///|
 fn read_files(
   conn : @sqlite3.Connection,
-  run_id : Int,
+  run_id : Int32,
   into : Array[FileResult],
 ) -> Unit raise {
   let sel = conn.prepare(
@@ -350,7 +350,7 @@ fn read_files(
 ///|
 fn read_findings(
   conn : @sqlite3.Connection,
-  run_id : Int,
+  run_id : Int32,
   into : Array[Finding],
 ) -> Unit raise {
   let sel = conn.prepare(
@@ -374,7 +374,7 @@ fn read_findings(
 ///|
 fn read_unparsed(
   conn : @sqlite3.Connection,
-  run_id : Int,
+  run_id : Int32,
   into : Array[UnparsedGroup],
 ) -> Unit raise {
   let sel = conn.prepare(
@@ -396,7 +396,7 @@ fn read_unparsed(
 ///|
 fn read_by_kind(
   conn : @sqlite3.Connection,
-  run_id : Int,
+  run_id : Int32,
   into : Array[ByKind],
 ) -> Unit raise {
   let sel = conn.prepare(

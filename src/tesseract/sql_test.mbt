@@ -126,7 +126,10 @@ test "a WHERE inside a SET literal does not cut the UPDATE in two" {
     db, "UPDATE tesseract SET value = 'x WHERE y = z' WHERE key = 'k';",
   )
   assert_true(r.success)
-  assert_eq(@tesseract.Tesseract::cell_at(db, 1).unwrap().value, "x WHERE y = z")
+  assert_eq(
+    @tesseract.Tesseract::cell_at(db, 1).unwrap().value,
+    "x WHERE y = z",
+  )
   let two = run_sql(
     db, "UPDATE tesseract SET value = 'a=b WHERE c' WHERE key = 'k';",
   )
@@ -444,7 +447,10 @@ test "a full statement cycle matches the C# demo sequence" {
       db, "UPDATE tesseract SET value = '{\"age\": 26}' WHERE key = 'user_001';",
     ),
   )
-  assert_eq(@tesseract.Tesseract::cell_at(db, 1).unwrap().value, "{\"age\": 26}")
+  assert_eq(
+    @tesseract.Tesseract::cell_at(db, 1).unwrap().value,
+    "{\"age\": 26}",
+  )
   ignore(run_sql(db, "DELETE FROM tesseract WHERE key = 'user_002';"))
   assert_eq(run_sql(db, "SELECT * FROM tesseract;").total_records, 1)
 }

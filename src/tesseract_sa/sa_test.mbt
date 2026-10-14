@@ -88,7 +88,9 @@ fn sample() -> @tesseract_sa.ScanReport {
       ),
     ],
     [
-      @tesseract_sa.UnparsedGroup::new("unexpected token", 2, ["/tmp/demo/d.mbt"]),
+      @tesseract_sa.UnparsedGroup::new("unexpected token", 2, [
+        "/tmp/demo/d.mbt",
+      ]),
     ],
     [
       @tesseract_sa.ByKind::new(".mbt", 2, 1, 2, 3),

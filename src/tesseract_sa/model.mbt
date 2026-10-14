@@ -78,17 +78,17 @@ pub struct FileResult {
   path : String
   outcome : FileOutcome
   /// Findings the analyzer believes are defects.
-  defects : Int
+  defects : Int32
   /// Findings that report constructs outside the analyzed subset.
-  notices : Int
+  notices : Int32
   /// How many finding lines were actually rendered. Less than the header's
   /// total means the stored list is a sample, not the whole set.
-  shown : Int
+  shown : Int32
   /// For a `Partial` file, the last line that was read. 0 otherwise.
-  read_up_to : Int
+  read_up_to : Int32
   /// For a `Partial` file, how many lines after `read_up_to` were not shown.
   /// 0 otherwise.
-  not_shown : Int
+  not_shown : Int32
 } derive(Debug)
 
 ///|
@@ -98,10 +98,10 @@ pub extend FileResult with Debug::{to_repr}
 /// One `BYKIND` row: the per-file-kind rollup 0.4.0 prints.
 pub struct ByKind {
   kind : String
-  files : Int
-  parsed : Int
-  defects : Int
-  notices : Int
+  files : Int32
+  parsed : Int32
+  defects : Int32
+  notices : Int32
 } derive(Debug)
 
 ///|
@@ -112,8 +112,8 @@ pub extend ByKind with Debug::{to_repr}
 pub struct Finding {
   /// The file the `FOUND` line above it named.
   path : String
-  line : Int
-  column : Int
+  line : Int32
+  column : Int32
   /// `error`, `warning` or `hint`.
   severity : String
   /// The finding family, e.g. `UndefinedName`.
@@ -131,7 +131,7 @@ pub extend Finding with Debug::{to_repr}
 pub struct UnparsedGroup {
   reason : String
   /// How many files failed for this reason.
-  count : Int
+  count : Int32
   /// Example paths, at most three. The tool prints at most three, so this is a
   /// sample and must not be read as the full list.
   examples : Array[String]
@@ -160,23 +160,23 @@ pub struct ScanReport {
   /// The directory the scan rooted at.
   root : String
   /// Files the scan walked.
-  files : Int
+  files : Int32
   /// Files it read end to end.
-  parsed : Int
+  parsed : Int32
   /// As printed, e.g. `30.7` — kept as text so the store records what was
   /// reported rather than a recomputation that could disagree.
   parsed_pct : String
   /// As the tool counts them, read only up to a first parse error — which
   /// includes the files it printed no header for at all. 0 before 0.4.0.
-  partial_files : Int
+  partial_files : Int32
   /// The only count that describes the code.
-  actionable : Int
+  actionable : Int32
   /// Constructs outside the analyzed subset. Not defects.
-  notices : Int
+  notices : Int32
   /// Findings from partial reads, which the tool rates unreliable. Not defects.
-  unreliable : Int
+  unreliable : Int32
   /// Findings on files the analyzer could not read at all. Not defects.
-  withheld : Int
+  withheld : Int32
   /// As printed. 0.4.0 labels this line
   /// `(actionable+notices+unreliable+withheld = total)`, and on this project's
   /// scan that identity does not hold — 4 + 67 + 5122 + 1487 is 6680 against a
@@ -184,7 +184,7 @@ pub struct ScanReport {
   /// findings on files the analyzer read at least part of. The number is
   /// recorded as printed rather than recomputed, because it is the tool's
   /// figure to be right or wrong about, not this store's.
-  total : Int
+  total : Int32
   file_results : Array[FileResult]
   findings : Array[Finding]
   unparsed : Array[UnparsedGroup]
@@ -209,11 +209,11 @@ pub fn FileResult::new(
   kind : String,
   path : String,
   outcome : FileOutcome,
-  defects : Int,
-  notices : Int,
-  shown : Int,
-  read_up_to : Int,
-  not_shown : Int,
+  defects : Int32,
+  notices : Int32,
+  shown : Int32,
+  read_up_to : Int32,
+  not_shown : Int32,
 ) -> FileResult {
   { kind, path, outcome, defects, notices, shown, read_up_to, not_shown, }
 }
@@ -227,18 +227,18 @@ pub fn FileResult::new(
 /// would make a caller's `file_results.length()` read as "this scan covered no
 /// files" rather than "this listing does not carry file rows".
 pub struct RunSummary {
-  id : Int
+  id : Int32
   target : String
   root : String
-  files : Int
-  parsed : Int
+  files : Int32
+  parsed : Int32
   parsed_pct : String
-  partial_files : Int
-  actionable : Int
-  notices : Int
-  unreliable : Int
-  withheld : Int
-  total : Int
+  partial_files : Int32
+  actionable : Int32
+  notices : Int32
+  unreliable : Int32
+  withheld : Int32
+  total : Int32
 } derive(Debug)
 
 ///|
@@ -248,18 +248,18 @@ pub extend RunSummary with Debug::{to_repr}
 
 ///|
 pub fn RunSummary::new(
-  id : Int,
+  id : Int32,
   target : String,
   root : String,
-  files : Int,
-  parsed : Int,
+  files : Int32,
+  parsed : Int32,
   parsed_pct : String,
-  partial_files : Int,
-  actionable : Int,
-  notices : Int,
-  unreliable : Int,
-  withheld : Int,
-  total : Int,
+  partial_files : Int32,
+  actionable : Int32,
+  notices : Int32,
+  unreliable : Int32,
+  withheld : Int32,
+  total : Int32,
 ) -> RunSummary {
   {
     id,
@@ -280,8 +280,8 @@ pub fn RunSummary::new(
 ///|
 pub fn Finding::new(
   path : String,
-  line : Int,
-  column : Int,
+  line : Int32,
+  column : Int32,
   severity : String,
   family : String,
   lenses : String,
@@ -293,7 +293,7 @@ pub fn Finding::new(
 ///|
 pub fn UnparsedGroup::new(
   reason : String,
-  count : Int,
+  count : Int32,
   examples : Array[String],
 ) -> UnparsedGroup {
   { reason, count, examples, }
@@ -302,10 +302,10 @@ pub fn UnparsedGroup::new(
 ///|
 pub fn ByKind::new(
   kind : String,
-  files : Int,
-  parsed : Int,
-  defects : Int,
-  notices : Int,
+  files : Int32,
+  parsed : Int32,
+  defects : Int32,
+  notices : Int32,
 ) -> ByKind {
   { kind, files, parsed, defects, notices, }
 }
@@ -314,15 +314,15 @@ pub fn ByKind::new(
 pub fn ScanReport::new(
   target : String,
   root : String,
-  files : Int,
-  parsed : Int,
+  files : Int32,
+  parsed : Int32,
   parsed_pct : String,
-  partial_files : Int,
-  actionable : Int,
-  notices : Int,
-  unreliable : Int,
-  withheld : Int,
-  total : Int,
+  partial_files : Int32,
+  actionable : Int32,
+  notices : Int32,
+  unreliable : Int32,
+  withheld : Int32,
+  total : Int32,
   file_results : Array[FileResult],
   findings : Array[Finding],
   unparsed : Array[UnparsedGroup],

@@ -19,7 +19,7 @@ fn rows_from(
   x : @moonbit_doubleML.Matrix,
   y : Array[Double],
   d : Array[Double],
-  n_obs : Int,
+  n_obs : Int32,
 ) -> Array[Observation] {
   let dim_x = x.cols()
   let out : Array[Observation] = []
@@ -39,10 +39,10 @@ fn rows_from(
 /// Binary treatment drawn from a logistic propensity, so `d` is exactly `0.0`
 /// or `1.0`; the outcomes and covariates are not round numbers.
 pub fn irm_dataset(
-  n_obs : Int,
-  dim_x : Int,
+  n_obs : Int32,
+  dim_x : Int32,
   theta : Double,
-  seed : Int,
+  seed : Int32,
 ) -> Dataset {
   let raw = @moonbit_doubleML.make_irm_data(n_obs, dim_x, theta, seed)
   {
@@ -59,10 +59,10 @@ pub fn irm_dataset(
 /// The treatment `d` is confounded and continuous, so every value in the
 /// column is an arbitrary double - the hardest of the two for a store to hold.
 pub fn plr_dataset(
-  n_obs : Int,
-  dim_x : Int,
+  n_obs : Int32,
+  dim_x : Int32,
   theta : Double,
-  seed : Int,
+  seed : Int32,
 ) -> Dataset {
   let raw = @moonbit_doubleML.make_plr_CCDDHNR2018(n_obs, dim_x, theta, seed)
   {

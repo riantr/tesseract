@@ -9,16 +9,16 @@
 ///|
 /// One lattice cell's contents. A cell with `key = ""` is empty.
 pub struct GridCell {
-  position : Int
+  position : Int32
   key : String
   value : String
   timestamp : String
-  digit : Int
+  digit : Int32
 }
 
 ///|
 /// An empty cell at `position`.
-pub fn empty_cell(position : Int) -> GridCell {
+pub fn empty_cell(position : Int32) -> GridCell {
   { position, key: "", value: "", timestamp: "", digit: NO_DIGIT, }
 }
 
@@ -33,10 +33,10 @@ pub fn cell_is_empty(c : GridCell) -> Bool {
 pub struct Record {
   key : String
   value : String
-  position : Int
+  position : Int32
   coords : Coords
   timestamp : String
-  digit : Int
+  digit : Int32
 }
 
 ///|
@@ -44,13 +44,13 @@ pub struct Record {
 pub struct DBResponse {
   success : Bool
   operation : String
-  affected_rows : Int
-  position : Int
+  affected_rows : Int32
+  position : Int32
   error : String
   error_code : String
   message : String
   data : Array[Record]
-  total_records : Int
+  total_records : Int32
 }
 
 ///|
@@ -89,10 +89,10 @@ pub fn err_response(code : String, error : String) -> DBResponse {
 /// Lattice occupancy snapshot.
 pub struct DBStatus {
   db_name : String
-  total_cells : Int
-  current_count : Int
-  current_position : Int
-  digit_count : Int
+  total_cells : Int32
+  current_count : Int32
+  current_position : Int32
+  digit_count : Int32
 }
 
 ///|

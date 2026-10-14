@@ -270,7 +270,7 @@ fn list_runs(db : String) -> Unit raise {
 
 ///|
 /// Right-aligns `s` in `width` columns.
-fn pad(width : Int, s : String) -> String {
+fn pad(width : Int32, s : String) -> String {
   let mut out = s
   while out.length() < width {
     out = " " + out

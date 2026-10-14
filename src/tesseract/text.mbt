@@ -9,13 +9,13 @@
 
 ///|
 /// True for the ASCII whitespace Tesseract trims around SQL tokens.
-pub fn is_space(c : Int) -> Bool {
+pub fn is_space(c : Int32) -> Bool {
   c == 32 || c == 9 || c == 10 || c == 13
 }
 
 ///|
 /// ASCII upper-cases a single code unit.
-pub fn cu_upper(c : Int) -> Int {
+pub fn cu_upper(c : Int32) -> Int32 {
   if c >= 97 && c <= 122 {
     c - 32
   } else {
@@ -25,7 +25,7 @@ pub fn cu_upper(c : Int) -> Int {
 
 ///|
 /// ASCII lower-cases a single code unit.
-pub fn cu_lower(c : Int) -> Int {
+pub fn cu_lower(c : Int32) -> Int32 {
   if c >= 65 && c <= 90 {
     c + 32
   } else {
@@ -35,8 +35,8 @@ pub fn cu_lower(c : Int) -> Int {
 
 ///|
 /// Appends one code unit, dropping anything outside the Char range.
-fn write_cu(b : StringBuilder, c : Int) -> Unit {
-  match Int::to_char(c) {
+fn write_cu(b : StringBuilder, c : Int32) -> Unit {
+  match Int32::to_char(c) {
     Some(ch) => b.write_char(ch)
     None => ()
   }
@@ -44,7 +44,7 @@ fn write_cu(b : StringBuilder, c : Int) -> Unit {
 
 ///|
 /// Copies `s[start, end)` into a fresh string, clamped to `s.length()`.
-pub fn slice(s : String, start : Int, end : Int) -> String {
+pub fn slice(s : String, start : Int32, end : Int32) -> String {
   let hi = if end > s.length() { s.length() } else { end }
   let b = StringBuilder::StringBuilder()
   let mut i = start
@@ -57,8 +57,8 @@ pub fn slice(s : String, start : Int, end : Int) -> String {
 
 ///|
 /// One code unit as a `Char`; anything outside the Char range becomes `?`.
-pub fn cu_char(c : Int) -> Char {
-  match Int::to_char(c) {
+pub fn cu_char(c : Int32) -> Char {
+  match Int32::to_char(c) {
     Some(ch) => ch
     None => '?'
   }
@@ -107,7 +107,7 @@ pub fn trim_ws(s : String) -> String {
 ///
 /// Returns `None` for empty or non-digit input rather than a silent 0 — the SQL
 /// layer needs to tell "grid_position = abc" apart from "grid_position = 0".
-pub fn parse_int(s : String) -> Int? {
+pub fn parse_int(s : String) -> Int32? {
   let t = trim_ws(s)
   if t.length() == 0 {
     return None
@@ -191,7 +191,7 @@ pub fn starts_ci(s : String, p : String) -> Bool {
 
 ///|
 /// Index of the first ASCII case-insensitive occurrence of `sub`, or `None`.
-pub fn index_of_ci(s : String, sub : String) -> Int? {
+pub fn index_of_ci(s : String, sub : String) -> Int32? {
   let n = sub.length()
   if n == 0 {
     return Some(0)
@@ -279,7 +279,7 @@ pub fn join(parts : Array[String], sep : String) -> String {
 
 ///|
 /// Right-pads with spaces to `w`, for table rendering.
-pub fn pad_right(s : String, w : Int) -> String {
+pub fn pad_right(s : String, w : Int32) -> String {
   let b = StringBuilder::StringBuilder(size_hint=w)
   b.write_string(s)
   let mut i = s.length()
@@ -292,7 +292,7 @@ pub fn pad_right(s : String, w : Int) -> String {
 
 ///|
 /// Left-pads with spaces to `w`, for table rendering.
-pub fn pad_left(s : String, w : Int) -> String {
+pub fn pad_left(s : String, w : Int32) -> String {
   let b = StringBuilder::StringBuilder(size_hint=w)
   let mut i = s.length()
   while i < w {
@@ -305,7 +305,7 @@ pub fn pad_left(s : String, w : Int) -> String {
 
 ///|
 /// Shortens to `w` columns with a trailing `~` when it has to cut.
-pub fn ellipsize(s : String, w : Int) -> String {
+pub fn ellipsize(s : String, w : Int32) -> String {
   if s.length() <= w {
     return s
   }

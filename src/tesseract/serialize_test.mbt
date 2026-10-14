@@ -80,7 +80,9 @@ test "lattice view shows the digit, not a truncated key" {
   // ellipsizing to 6 columns cut the digit off again - every solved cell used
   // to render as `cell_~`.
   let db2 = @tesseract.new_db("tesseract", @tesseract.new_logger("t"))
-  ignore(@tesseract.Tesseract::insert(db2, "cell_1", "{\"pos\": 1}", Some(1), 3))
+  ignore(
+    @tesseract.Tesseract::insert(db2, "cell_1", "{\"pos\": 1}", Some(1), 3),
+  )
   let view2 = @tesseract.render_lattice(db2, @tesseract.FIRST_POSITION)
   assert_false(view2.contains("cell_~"))
   // The key gives up one column to the digit: `ellipsize` spends 5 on `cell_1`

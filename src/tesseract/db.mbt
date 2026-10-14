@@ -17,10 +17,10 @@
 ///|
 /// Coordinate filter; -1 means "unconstrained on this axis".
 pub struct CoordFilter {
-  x : Int
-  y : Int
-  z : Int
-  w : Int
+  x : Int32
+  y : Int32
+  z : Int32
+  w : Int32
 }
 
 ///|
@@ -31,7 +31,7 @@ pub fn no_filter() -> CoordFilter {
 
 ///|
 /// A filter constraining the given axes; pass -1 to leave one unconstrained.
-pub fn coord_filter(x : Int, y : Int, z : Int, w : Int) -> CoordFilter {
+pub fn coord_filter(x : Int32, y : Int32, z : Int32, w : Int32) -> CoordFilter {
   { x, y, z, w, }
 }
 
@@ -58,7 +58,7 @@ pub fn filter_matches(f : CoordFilter, c : Coords) -> Bool {
 pub struct Tesseract {
   db_name : String
   cells : Array[GridCell]
-  mut current_position : Int
+  mut current_position : Int32
   logger : TesseractLogger
 }
 
@@ -84,7 +84,7 @@ pub fn Tesseract::get_logger(db : Tesseract) -> TesseractLogger {
 
 ///|
 /// The cell at 1-based `position`, or `None` when out of range.
-pub fn Tesseract::cell_at(db : Tesseract, position : Int) -> GridCell? {
+pub fn Tesseract::cell_at(db : Tesseract, position : Int32) -> GridCell? {
   if !position_in_bounds(position) {
     return None
   }
@@ -93,7 +93,7 @@ pub fn Tesseract::cell_at(db : Tesseract, position : Int) -> GridCell? {
 
 ///|
 /// Number of cells holding a record.
-pub fn Tesseract::occupancy(db : Tesseract) -> Int {
+pub fn Tesseract::occupancy(db : Tesseract) -> Int32 {
   let mut n = 0
   let mut i = 0
   while i < db.cells.length() {
@@ -107,7 +107,7 @@ pub fn Tesseract::occupancy(db : Tesseract) -> Int {
 
 ///|
 /// Number of cells carrying a sudoku digit.
-pub fn Tesseract::digit_count(db : Tesseract) -> Int {
+pub fn Tesseract::digit_count(db : Tesseract) -> Int32 {
   let mut n = 0
   let mut i = 0
   while i < db.cells.length() {
@@ -127,8 +127,8 @@ pub fn Tesseract::digit_count(db : Tesseract) -> Int {
 /// share such a line exactly when they agree on three of four coordinates.
 pub fn Tesseract::digit_conflict(
   db : Tesseract,
-  position : Int,
-  digit : Int,
+  position : Int32,
+  digit : Int32,
 ) -> GridCell? {
   match coords_of(position) {
     Some(c) => {
@@ -146,7 +146,7 @@ pub fn Tesseract::digit_conflict(
 
 ///|
 /// Moves the insert cursor. Out-of-range positions are ignored, as in C#.
-pub fn Tesseract::set_position(db : Tesseract, position : Int) -> Unit {
+pub fn Tesseract::set_position(db : Tesseract, position : Int32) -> Unit {
   if position_in_bounds(position) {
     db.current_position = position
     db.logger.log_info("Position set to: " + position.to_string(), Map([]))
@@ -172,7 +172,7 @@ fn Tesseract::log_operation(
   operation : String,
   success : Bool,
   key : String,
-  position : Int,
+  position : Int32,
 ) -> Unit {
   let details : Map[String, String] = Map([])
   details["key"] = key
@@ -190,8 +190,8 @@ pub fn Tesseract::insert(
   db : Tesseract,
   key : String,
   value : String,
-  target : Int?,
-  digit : Int,
+  target : Int32?,
+  digit : Int32,
 ) -> DBResponse {
   Tesseract::insert_stamped(db, key, value, target, digit, None)
 }
@@ -212,8 +212,8 @@ pub fn Tesseract::insert_stamped(
   db : Tesseract,
   key : String,
   value : String,
-  target : Int?,
-  digit : Int,
+  target : Int32?,
+  digit : Int32,
   stamp : String?,
 ) -> DBResponse {
   if key == "" || value == "" {
@@ -329,9 +329,9 @@ pub fn Tesseract::select(
   db : Tesseract,
   key : String,
   pattern : String,
-  position_filter : Int?,
+  position_filter : Int32?,
   coords_filter : CoordFilter,
-  digit_filter : Int?,
+  digit_filter : Int32?,
 ) -> DBResponse {
   let rows : Array[Record] = []
   let mut i = 0
@@ -388,8 +388,8 @@ pub fn Tesseract::update(
   db : Tesseract,
   key : String,
   value : String,
-  position_filter : Int?,
-  digit : Int?,
+  position_filter : Int32?,
+  digit : Int32?,
 ) -> DBResponse {
   if !position_in_bounds(db.current_position) && position_filter == None {
     return err_response("POSITION_OUT_OF_RANGE", "Insert cursor out of range")
@@ -476,7 +476,7 @@ pub fn Tesseract::update(
 
 ///|
 /// The message both the insert and update paths use for a digit collision.
-fn digit_conflict_message(digit : Int, position : Int) -> String {
+fn digit_conflict_message(digit : Int32, position : Int32) -> String {
   let b = StringBuilder::StringBuilder()
   b.write_string("Digit ")
   b.write_object(digit)
@@ -487,7 +487,7 @@ fn digit_conflict_message(digit : Int, position : Int) -> String {
 
 ///|
 /// First occupied position carrying `key`, scanning in position order.
-pub fn find_by_key(db : Tesseract, key : String) -> Int? {
+pub fn find_by_key(db : Tesseract, key : String) -> Int32? {
   if key == "" {
     return None
   }
@@ -507,8 +507,8 @@ pub fn find_by_key(db : Tesseract, key : String) -> Int? {
 /// Descending matches the C# comment about deleting high positions first; with
 /// a fixed lattice it is only about reporting order, but keeping it costs
 /// nothing and keeps the exported SQL stable.
-pub fn find_all_by_key(db : Tesseract, key : String) -> Array[Int] {
-  let out : Array[Int] = []
+pub fn find_all_by_key(db : Tesseract, key : String) -> Array[Int32] {
+  let out : Array[Int32] = []
   if key == "" {
     return out
   }
@@ -531,7 +531,7 @@ pub fn find_all_by_key(db : Tesseract, key : String) -> Array[Int] {
 pub fn Tesseract::delete(
   db : Tesseract,
   key : String,
-  position_filter : Int?,
+  position_filter : Int32?,
 ) -> DBResponse {
   let mut affected = 0
   let mut first_position = 0
@@ -610,8 +610,8 @@ pub fn Tesseract::delete(
 /// Occupied cells on the axis-parallel line through `position` along `axis`.
 pub fn Tesseract::line_query(
   db : Tesseract,
-  position : Int,
-  axis : Int,
+  position : Int32,
+  axis : Int32,
 ) -> DBResponse {
   let rows : Array[Record] = []
   match coords_of(position) {
@@ -646,8 +646,8 @@ pub fn Tesseract::line_query(
 /// Occupied cells in the 27-cell slab sharing `position`'s `axis` coordinate.
 pub fn Tesseract::slab_query(
   db : Tesseract,
-  position : Int,
-  axis : Int,
+  position : Int32,
+  axis : Int32,
 ) -> DBResponse {
   let rows : Array[Record] = []
   match coords_of(position) {
@@ -680,7 +680,7 @@ pub fn Tesseract::slab_query(
 
 ///|
 /// Occupied cells among the 8 that share a line with `position`.
-pub fn Tesseract::peer_query(db : Tesseract, position : Int) -> DBResponse {
+pub fn Tesseract::peer_query(db : Tesseract, position : Int32) -> DBResponse {
   let rows : Array[Record] = []
   match coords_of(position) {
     Some(c) =>

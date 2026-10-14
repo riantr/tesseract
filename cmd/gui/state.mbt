@@ -16,20 +16,20 @@ let db : @tesseract.Tesseract = @tesseract.new_db(
 
 ///|
 /// How many log entries the window keeps on screen.
-const LOG_TAIL : Int = 40
+const LOG_TAIL : Int32 = 40
 
 ///|
 /// One lattice cell as the page needs it: its position, its four coordinates,
 /// and whatever it currently holds.
 struct CellView {
-  position : Int
-  x : Int
-  y : Int
-  z : Int
-  w : Int
+  position : Int32
+  x : Int32
+  y : Int32
+  z : Int32
+  w : Int32
   key : String
   value : String
-  digit : Int
+  digit : Int32
   timestamp : String
   occupied : Bool
 } derive(ToJson)
@@ -37,7 +37,7 @@ struct CellView {
 ///|
 /// One log line, newest last.
 struct LogView {
-  seq : Int
+  seq : Int32
   stamp : String
   level : String
   message : String
@@ -49,7 +49,7 @@ struct LogView {
 /// cells carry a digit, which axis-parallel lines are broken, and whether the
 /// assignment is a complete solution.
 struct PuzzleView {
-  placed : Int
+  placed : Int32
   violations : Array[String]
   complete : Bool
 } derive(ToJson)
@@ -58,10 +58,10 @@ struct PuzzleView {
 /// The status line the C# view model showed above the grid.
 struct StatusView {
   db_name : String
-  total_cells : Int
-  occupancy : Int
-  cursor : Int
-  digit_count : Int
+  total_cells : Int32
+  occupancy : Int32
+  cursor : Int32
+  digit_count : Int32
 } derive(ToJson)
 
 ///|
@@ -69,8 +69,8 @@ struct StatusView {
 /// has to reconcile two snapshots.
 struct StateResp {
   status : StatusView
-  plane_x : Int
-  plane_y : Int
+  plane_x : Int32
+  plane_y : Int32
   cells : Array[CellView]
   puzzle : PuzzleView
   logs : Array[LogView]
@@ -86,9 +86,9 @@ struct RespView {
   message : String
   error : String
   error_code : String
-  affected_rows : Int
-  position : Int
-  total_records : Int
+  affected_rows : Int32
+  position : Int32
+  total_records : Int32
   text : String
 } derive(ToJson)
 
@@ -97,15 +97,15 @@ struct RespView {
 struct RecordView {
   key : String
   value : String
-  position : Int
+  position : Int32
   coords : String
   timestamp : String
-  digit : Int
+  digit : Int32
 } derive(ToJson)
 
 ///|
 /// The view of one cell, empty or not.
-fn cell_view(position : Int) -> CellView {
+fn cell_view(position : Int32) -> CellView {
   let c = @tesseract.coords_of(position).unwrap()
   match @tesseract.Tesseract::cell_at(db, position) {
     Some(cell) =>
@@ -143,7 +143,7 @@ fn cell_view(position : Int) -> CellView {
 /// `(x, y)` picks one of the nine 3x3 boxes; `(z, w)` is the classic row and
 /// column inside it. `position = 1 + x*27 + y*9 + z*3 + w` is the library's
 /// own formula, not a second one.
-fn plane_cells(x : Int, y : Int) -> Array[CellView] {
+fn plane_cells(x : Int32, y : Int32) -> Array[CellView] {
   let out : Array[CellView] = []
   let mut row = 0
   while row < @tesseract.SIDE {
@@ -222,7 +222,7 @@ fn puzzle_view() -> PuzzleView {
 
 ///|
 /// A full repaint of one plane.
-fn state_resp(x : Int, y : Int) -> StateResp {
+fn state_resp(x : Int32, y : Int32) -> StateResp {
   StateResp::{
     status: status_view(),
     plane_x: clamp_axis(x),
@@ -240,7 +240,7 @@ fn state_resp(x : Int, y : Int) -> StateResp {
 /// the page's 0..2 selectors cannot produce an invalid plane. The value is
 /// still clamped rather than rejected, because a plane is a *view* choice and
 /// there is no cell it could write to the wrong place.
-fn clamp_axis(v : Int) -> Int {
+fn clamp_axis(v : Int32) -> Int32 {
   if v < 0 || v >= @tesseract.SIDE {
     0
   } else {

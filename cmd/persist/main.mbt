@@ -200,7 +200,10 @@ fn main {
   }
   let logger = @tesseract.new_logger("tesseract")
   let db = @tesseract.new_db("tesseract", logger)
-  @tesseract.TesseractLogger::set_echo(@tesseract.Tesseract::get_logger(db), true)
+  @tesseract.TesseractLogger::set_echo(
+    @tesseract.Tesseract::get_logger(db),
+    true,
+  )
   let mut i = 0
   while i < args.length() {
     // A command and its argument arrive as two argv entries under ordinary

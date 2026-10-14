@@ -69,7 +69,10 @@ fn main {
   }
   let logger = @tesseract.new_logger("tesseract")
   let db = @tesseract.new_db("tesseract", logger)
-  @tesseract.TesseractLogger::set_echo(@tesseract.Tesseract::get_logger(db), true)
+  @tesseract.TesseractLogger::set_echo(
+    @tesseract.Tesseract::get_logger(db),
+    true,
+  )
   let mut k = 0
   while k < args.length() {
     if @tesseract.starts_with(args[k], ".export") {
@@ -153,7 +156,10 @@ fn handle_dot(db : @tesseract.Tesseract, line : String) -> Bool {
     return true
   }
   if @tesseract.starts_with(line, ".pos ") {
-    move_cursor(db, @tesseract.trim_ws(@tesseract.slice(line, 5, line.length())))
+    move_cursor(
+      db,
+      @tesseract.trim_ws(@tesseract.slice(line, 5, line.length())),
+    )
     return true
   }
   if @tesseract.starts_with(line, ".neighbours ") {
@@ -352,7 +358,9 @@ fn run_demo(db : @tesseract.Tesseract) -> Unit {
   )
   out("3. select all")
   out(
-    @tesseract.format_response(@tesseract.execute(db, "SELECT * FROM tesseract;")),
+    @tesseract.format_response(
+      @tesseract.execute(db, "SELECT * FROM tesseract;"),
+    ),
   )
   out("4. update user_001")
   ignore(
@@ -380,7 +388,9 @@ fn run_demo(db : @tesseract.Tesseract) -> Unit {
   out("8. occupied neighbours of position 1")
   out(@tesseract.format_response(@tesseract.Tesseract::peer_query(db, 1)))
   out("9. delete user_003 and report")
-  ignore(@tesseract.execute(db, "DELETE FROM tesseract WHERE key = 'user_003';"))
+  ignore(
+    @tesseract.execute(db, "DELETE FROM tesseract WHERE key = 'user_003';"),
+  )
   print_status(db)
   out("demo complete")
 }
