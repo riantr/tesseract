@@ -89,16 +89,66 @@ test "two cells share a line exactly when they agree on three coordinates" {
 ///|
 test "coord_at and with_coord agree on all four axes" {
   let c = @tesseract.coords(1, 2, 0, 1)
-  assert_eq(@tesseract.coord_at(c, 0), 1)
-  assert_eq(@tesseract.coord_at(c, 1), 2)
-  assert_eq(@tesseract.coord_at(c, 2), 0)
-  assert_eq(@tesseract.coord_at(c, 3), 1)
+  assert_eq(@tesseract.coord_at(c, 0).unwrap(), 1)
+  assert_eq(@tesseract.coord_at(c, 1).unwrap(), 2)
+  assert_eq(@tesseract.coord_at(c, 2).unwrap(), 0)
+  assert_eq(@tesseract.coord_at(c, 3).unwrap(), 1)
   let axis = 2
   let moved = @tesseract.with_coord(c, axis, 2)
-  assert_eq(@tesseract.coord_at(moved, axis), 2)
-  assert_eq(@tesseract.coord_at(moved, 0), 1)
-  assert_eq(@tesseract.coord_at(moved, 1), 2)
-  assert_eq(@tesseract.coord_at(moved, 3), 1)
+  assert_eq(@tesseract.coord_at(moved, axis).unwrap(), 2)
+  assert_eq(@tesseract.coord_at(moved, 0).unwrap(), 1)
+  assert_eq(@tesseract.coord_at(moved, 1).unwrap(), 2)
+  assert_eq(@tesseract.coord_at(moved, 3).unwrap(), 1)
+}
+
+///|
+test "an axis outside the lattice is reported, not answered as the last one" {
+  // `w` is 2 in this cell, so a fallthrough would hand back 2 for every one of
+  // these and look like a real coordinate.
+  let c = @tesseract.coords(1, 2, 0, 2)
+  assert_eq(@tesseract.coord_at(c, 0), Some(1))
+  assert_eq(@tesseract.coord_at(c, 1), Some(2))
+  assert_eq(@tesseract.coord_at(c, 2), Some(0))
+  assert_eq(@tesseract.coord_at(c, 3), Some(2))
+  // Above the last axis, below zero, and far out of range.
+  assert_eq(@tesseract.coord_at(c, 4), None)
+  assert_eq(@tesseract.coord_at(c, 7), None)
+  assert_eq(@tesseract.coord_at(c, 99), None)
+  assert_eq(@tesseract.coord_at(c, 0 - 1), None)
+  assert_eq(@tesseract.coord_at(c, 0 - 99), None)
+  // The boundary is the axis count, not a hardcoded 3 or 4.
+  assert_eq(@tesseract.coord_at(c, @tesseract.DIM), None)
+  assert_eq(@tesseract.coord_at(c, @tesseract.DIM - 1), Some(2))
+}
+
+///|
+test "the geometry helpers refuse an axis they do not have" {
+  // Each of these used to answer with the w-axis geometry, reporting it as the
+  // axis that was asked for.
+  let c = @tesseract.coords(1, 2, 0, 2)
+  let w_line = @tesseract.line_through(c, 3)
+  let w_slab = @tesseract.slab_through(c, 3)
+  // Controls: the valid axes still work, so an empty list below means "bad
+  // axis" rather than "this shape happens to be empty". `w` is 2 here, so
+  // axis 3 sits at the end of its axis and has one neighbour; axis 0 is
+  // x=1, in the middle, and has two.
+  assert_eq(w_line.length(), 3)
+  assert_eq(w_slab.length(), 27)
+  assert_eq(@tesseract.neighbours(c, 3).length(), 1)
+  assert_eq(@tesseract.neighbours(c, 0).length(), 2)
+  assert_eq(@tesseract.line_through(c, 3)[0], @tesseract.coords(1, 2, 0, 0))
+  // Now the bad axes.
+  assert_eq(@tesseract.line_through(c, 4).length(), 0)
+  assert_eq(@tesseract.line_through(c, 99).length(), 0)
+  assert_eq(@tesseract.line_through(c, 0 - 1).length(), 0)
+  assert_eq(@tesseract.slab_through(c, 4).length(), 0)
+  assert_eq(@tesseract.slab_through(c, 99).length(), 0)
+  assert_eq(@tesseract.slab_through(c, 0 - 1).length(), 0)
+  assert_eq(@tesseract.neighbours(c, 4).length(), 0)
+  assert_eq(@tesseract.neighbours(c, 99).length(), 0)
+  assert_eq(@tesseract.neighbours(c, 0 - 1).length(), 0)
+  // An empty list is not the w-axis line in disguise.
+  assert_eq(@tesseract.line_through(c, 9).length() == w_line.length(), false)
 }
 
 ///|

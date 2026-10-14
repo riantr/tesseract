@@ -17,8 +17,8 @@
 
 ///|
 /// A digit per cell, indexed by `position - 1`; 0 means "no digit".
-pub fn empty_digits() -> Array[Int] {
-  let d : Array[Int] = []
+pub fn empty_digits() -> Array[Int32] {
+  let d : Array[Int32] = []
   let mut i = 0
   while i < TOTAL {
     d.push(NO_DIGIT)
@@ -29,8 +29,8 @@ pub fn empty_digits() -> Array[Int] {
 
 ///|
 /// An independent copy of a digit assignment.
-pub fn copy_digits(d : Array[Int]) -> Array[Int] {
-  let out : Array[Int] = []
+pub fn copy_digits(d : Array[Int32]) -> Array[Int32] {
+  let out : Array[Int32] = []
   let mut i = 0
   while i < d.length() {
     out.push(d[i])
@@ -41,7 +41,7 @@ pub fn copy_digits(d : Array[Int]) -> Array[Int] {
 
 ///|
 /// The digit at `position`, or 0.
-pub fn digit_at(d : Array[Int], position : Int) -> Int {
+pub fn digit_at(d : Array[Int32], position : Int32) -> Int32 {
   if !position_in_bounds(position) {
     return NO_DIGIT
   }
@@ -50,7 +50,7 @@ pub fn digit_at(d : Array[Int], position : Int) -> Int {
 
 ///|
 /// Places a digit, ignoring out-of-range positions.
-pub fn set_digit(d : Array[Int], position : Int, digit : Int) -> Unit {
+pub fn set_digit(d : Array[Int32], position : Int32, digit : Int32) -> Unit {
   if position_in_bounds(position) {
     d[position - 1] = digit
   }
@@ -62,7 +62,7 @@ pub fn set_digit(d : Array[Int], position : Int, digit : Int) -> Unit {
 /// Stepping one cell along any axis adds 1 modulo 3, so each axis-parallel line
 /// cycles through all three digits. Useful as a known-good starting point and
 /// as the fixture the checkers are tested against.
-pub fn canonical_digits() -> Array[Int] {
+pub fn canonical_digits() -> Array[Int32] {
   let d = empty_digits()
   for c in all_coords() {
     set_digit(d, position_of(c), (c.x + c.y + c.z + c.w) % SIDE + 1)
@@ -75,10 +75,10 @@ pub fn canonical_digits() -> Array[Int] {
 ///
 /// Reports one message per offending line. An empty result means every
 /// axis-parallel line holds 1, 2 and 3 exactly once.
-pub fn line_violations(d : Array[Int]) -> Array[String] {
+pub fn line_violations(d : Array[Int32]) -> Array[String] {
   let out : Array[String] = []
   for line in all_lines() {
-    let seen : Array[Int] = []
+    let seen : Array[Int32] = []
     let mut bad = false
     let mut i = 0
     while i < line.length() {
@@ -114,7 +114,7 @@ pub fn line_violations(d : Array[Int]) -> Array[String] {
 /// A balanced slab holds each digit exactly 9 times. Cells with no digit are
 /// skipped, so a partially filled lattice only reports slabs that are already
 /// full.
-pub fn slab_violations(d : Array[Int]) -> Array[String] {
+pub fn slab_violations(d : Array[Int32]) -> Array[String] {
   let out : Array[String] = []
   let mut axis = 0
   while axis < DIM {
@@ -172,7 +172,7 @@ pub fn slab_violations(d : Array[Int]) -> Array[String] {
 
 ///|
 /// True when `d` has no line violation and no slab imbalance.
-pub fn is_solution(d : Array[Int]) -> Bool {
+pub fn is_solution(d : Array[Int32]) -> Bool {
   line_violations(d).length() == 0 && slab_violations(d).length() == 0
 }
 
@@ -188,7 +188,7 @@ fn earlier_peers(c : Coords) -> Array[Coords] {
   let out : Array[Coords] = []
   let mut axis = 0
   while axis < DIM {
-    let mut back = coord_at(c, axis) - 1
+    let mut back = coord_at_unchecked(c, axis) - 1
     while back >= 0 {
       out.push(with_coord(c, axis, back))
       back = back - 1
@@ -201,10 +201,10 @@ fn earlier_peers(c : Coords) -> Array[Coords] {
 ///|
 /// Depth-first fill honouring the line rule, collecting up to `limit` results.
 fn backtrack(
-  d : Array[Int],
-  index : Int,
-  limit : Int,
-  out : Array[Array[Int]],
+  d : Array[Int32],
+  index : Int32,
+  limit : Int32,
+  out : Array[Array[Int32]],
 ) -> Bool {
   if out.length() >= limit {
     return true
@@ -241,8 +241,8 @@ fn backtrack(
 /// Independent of `canonical_digits`, which is what makes it useful: the
 /// closed form proves the structure is satisfiable, and this proves the
 /// *implication* that slab balance follows, on solutions nobody designed.
-pub fn solve_lattice(limit : Int) -> Array[Array[Int]] {
-  let out : Array[Array[Int]] = []
+pub fn solve_lattice(limit : Int32) -> Array[Array[Int32]] {
+  let out : Array[Array[Int32]] = []
   ignore(backtrack(empty_digits(), 0, limit, out))
   out
 }

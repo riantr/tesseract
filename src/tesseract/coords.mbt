@@ -17,31 +17,31 @@
 
 ///|
 /// Cells along each of the four axes.
-pub const SIDE : Int = 3
+pub const SIDE : Int32 = 3
 
 ///|
 /// Number of axes.
-pub const DIM : Int = 4
+pub const DIM : Int32 = 4
 
 ///|
 /// Total cells in the lattice: 3^4 = 81.
-pub const TOTAL : Int = 81
+pub const TOTAL : Int32 = 81
 
 ///|
 /// Lowest valid 1-based position.
-pub const FIRST_POSITION : Int = 1
+pub const FIRST_POSITION : Int32 = 1
 
 ///|
 /// Highest valid 1-based position.
-pub const LAST_POSITION : Int = 81
+pub const LAST_POSITION : Int32 = 81
 
 ///|
 /// Sudoku digits live in `1..SIDE`; 0 means "this cell carries no digit".
-pub const NO_DIGIT : Int = 0
+pub const NO_DIGIT : Int32 = 0
 
 ///|
 /// Highest sudoku digit.
-pub const MAX_DIGIT : Int = 3
+pub const MAX_DIGIT : Int32 = 3
 
 ///|
 /// A cell in the 4D lattice. Each coordinate is in `0..SIDE-1`.
@@ -50,10 +50,10 @@ pub const MAX_DIGIT : Int = 3
 /// trait methods from being implicitly promoted as regular methods, which the
 /// compiler warns about.
 pub struct Coords {
-  x : Int
-  y : Int
-  z : Int
-  w : Int
+  x : Int32
+  y : Int32
+  z : Int32
+  w : Int32
 } derive(Eq, Debug)
 
 ///|
@@ -64,13 +64,13 @@ pub extend Coords with @debug.Debug::{to_repr}
 
 ///|
 /// Builds a coordinate tuple.
-pub fn coords(x : Int, y : Int, z : Int, w : Int) -> Coords {
+pub fn coords(x : Int32, y : Int32, z : Int32, w : Int32) -> Coords {
   { x, y, z, w, }
 }
 
 ///|
 /// One coordinate inside the lattice.
-fn coord_in_bounds(v : Int) -> Bool {
+fn coord_in_bounds(v : Int32) -> Bool {
   v >= 0 && v < SIDE
 }
 
@@ -86,13 +86,36 @@ pub fn coords_in_bounds(c : Coords) -> Bool {
 
 ///|
 /// True when `p` is a valid 1-based position.
-pub fn position_in_bounds(p : Int) -> Bool {
+pub fn position_in_bounds(p : Int32) -> Bool {
   p >= FIRST_POSITION && p <= LAST_POSITION
 }
 
 ///|
 /// The `axis`-th coordinate of `c`, counting `x=0, y=1, z=2, w=3`.
-pub fn coord_at(c : Coords, axis : Int) -> Int {
+///
+/// `None` when `axis` is outside `0..DIM-1`.
+///
+/// The previous version answered `w` for anything that was not 0, 1 or 2, so
+/// `coord_at(c, 4)`, `coord_at(c, 99)` and `coord_at(c, -1)` each returned the
+/// fourth coordinate as if the caller had asked for it. A wrong coordinate is
+/// the one failure a caller cannot notice from the result: every value is a
+/// legitimate coordinate of `c`, and nothing marks it as the wrong one.
+pub fn coord_at(c : Coords, axis : Int32) -> Int32? {
+  if axis < 0 || axis >= DIM {
+    return None
+  }
+  Some(coord_at_unchecked(c, axis))
+}
+
+///|
+/// `coord_at` without the range check, for callers that have already
+/// established `axis < DIM`.
+///
+/// Private on purpose. Every caller here is a `while axis < DIM` loop, where a
+/// `None` branch is unreachable; writing `.unwrap()` at each would put a guard
+/// that can never fail into the code, which reads like a check and checks
+/// nothing. An outside caller goes through `coord_at`, which reports the range.
+fn coord_at_unchecked(c : Coords, axis : Int32) -> Int32 {
   match axis {
     0 => c.x
     1 => c.y
@@ -103,7 +126,7 @@ pub fn coord_at(c : Coords, axis : Int) -> Int {
 
 ///|
 /// `c` with its `axis`-th coordinate replaced by `v`.
-pub fn with_coord(c : Coords, axis : Int, v : Int) -> Coords {
+pub fn with_coord(c : Coords, axis : Int32, v : Int32) -> Coords {
   match axis {
     0 => { x: v, y: c.y, z: c.z, w: c.w, }
     1 => { x: c.x, y: v, z: c.z, w: c.w, }
@@ -114,13 +137,13 @@ pub fn with_coord(c : Coords, axis : Int, v : Int) -> Coords {
 
 ///|
 /// Zero-based row-major index of `c`.
-pub fn index0(c : Coords) -> Int {
+pub fn index0(c : Coords) -> Int32 {
   c.x * 27 + c.y * 9 + c.z * 3 + c.w
 }
 
 ///|
 /// The 1-based position of `c`.
-pub fn position_of(c : Coords) -> Int {
+pub fn position_of(c : Coords) -> Int32 {
   index0(c) + 1
 }
 
@@ -129,7 +152,7 @@ pub fn position_of(c : Coords) -> Int {
 ///
 /// Returns `None` for positions outside `1..81`; the caller decides whether
 /// that is an error or just an empty result.
-pub fn coords_of(p : Int) -> Coords? {
+pub fn coords_of(p : Int32) -> Coords? {
   if !position_in_bounds(p) {
     return None
   }
@@ -180,7 +203,7 @@ pub fn parse_coords(s : String) -> Coords? {
   if parts.length() != DIM {
     return None
   }
-  let vals : Array[Int] = []
+  let vals : Array[Int32] = []
   let mut i = 0
   while i < DIM {
     match parse_int(parts[i]) {
@@ -197,13 +220,22 @@ pub fn parse_coords(s : String) -> Coords? {
 }
 
 ///|
-/// The two cells adjacent to `c` along `axis`, or an empty list at an edge.
+/// The cells adjacent to `c` along `axis`: two in the middle of the axis, one
+/// at either end.
 ///
 /// Sudoku lines are bounded, never wrapped: stepping off the lattice is a real
 /// boundary, so a walk that wraps would report cells that are not neighbours.
-pub fn neighbours(c : Coords, axis : Int) -> Array[Coords] {
+///
+/// An `axis` outside `0..DIM-1` gives an empty list. For a real axis this
+/// function never returns an empty list - every cell has at least one
+/// neighbour on a 3-long axis - so an empty result is unambiguously a bad axis
+/// and not a cell that happens to stand alone.
+pub fn neighbours(c : Coords, axis : Int32) -> Array[Coords] {
   let out : Array[Coords] = []
-  let here = coord_at(c, axis)
+  let here = match coord_at(c, axis) {
+    None => return out
+    Some(v) => v
+  }
   if here - 1 >= 0 {
     out.push(with_coord(c, axis, here - 1))
   }

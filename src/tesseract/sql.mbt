@@ -35,9 +35,9 @@
 /// A geometric restriction that replaces the ordinary cell scan.
 pub enum Geometry {
   None
-  Line(Int, Int)
-  Slab(Int, Int)
-  Peers(Int)
+  Line(Int32, Int32)
+  Slab(Int32, Int32)
+  Peers(Int32)
 }
 
 ///|
@@ -45,9 +45,9 @@ pub enum Geometry {
 pub struct Where {
   key : String
   pattern : String
-  position : Int?
+  position : Int32?
   coords : CoordFilter
-  digit : Int?
+  digit : Int32?
   geometry : Geometry
 }
 
@@ -92,7 +92,7 @@ fn with_pattern(w : Where, pattern : String) -> Where {
 
 ///|
 /// A copy of `w` with a different position predicate.
-fn with_position(w : Where, position : Int) -> Where {
+fn with_position(w : Where, position : Int32) -> Where {
   {
     key: w.key,
     pattern: w.pattern,
@@ -105,7 +105,7 @@ fn with_position(w : Where, position : Int) -> Where {
 
 ///|
 /// A copy of `w` with a different digit predicate.
-fn with_digit(w : Where, digit : Int) -> Where {
+fn with_digit(w : Where, digit : Int32) -> Where {
   {
     key: w.key,
     pattern: w.pattern,
@@ -144,7 +144,7 @@ fn with_geometry(w : Where, geometry : Geometry) -> Where {
 
 ///|
 /// A copy of `f` with `axis` constrained to `v`.
-fn set_axis(f : CoordFilter, axis : Int, v : Int) -> CoordFilter {
+fn set_axis(f : CoordFilter, axis : Int32, v : Int32) -> CoordFilter {
   match axis {
     0 => { x: v, y: f.y, z: f.z, w: f.w, }
     1 => { x: f.x, y: v, z: f.z, w: f.w, }
@@ -155,7 +155,7 @@ fn set_axis(f : CoordFilter, axis : Int, v : Int) -> CoordFilter {
 
 ///|
 /// True for a SQL identifier character.
-fn is_word_char(c : Int) -> Bool {
+fn is_word_char(c : Int32) -> Bool {
   let alpha = (c >= 65 && c <= 90) || (c >= 97 && c <= 122)
   let digit = c >= 48 && c <= 57
   alpha || digit || c == 95
@@ -163,7 +163,7 @@ fn is_word_char(c : Int) -> Bool {
 
 ///|
 /// Index of `kw` in `s` at a word boundary at or after `from`, or `None`.
-fn find_word(s : String, kw : String, from : Int) -> Int? {
+fn find_word(s : String, kw : String, from : Int32) -> Int32? {
   let mut at = from
   while at <= s.length() - kw.length() {
     match index_of_ci(slice(s, at, s.length()), kw) {
@@ -185,7 +185,7 @@ fn find_word(s : String, kw : String, from : Int) -> Int? {
 
 ///|
 /// Index of the `(` at or after `from`, ignoring quoted text.
-fn find_paren(s : String, from : Int) -> Int? {
+fn find_paren(s : String, from : Int32) -> Int32? {
   let mut i = from
   let mut in_quote = false
   let mut escape = false
@@ -207,7 +207,7 @@ fn find_paren(s : String, from : Int) -> Int? {
 
 ///|
 /// Index of the `)` closing the group opened at `open`, ignoring quoted text.
-fn close_paren(s : String, open : Int) -> Int? {
+fn close_paren(s : String, open : Int32) -> Int32? {
   let mut i = open + 1
   let mut depth = 0
   let mut in_quote = false
@@ -431,7 +431,7 @@ fn like_pattern(s : String) -> Result[String, String] {
 
 ///|
 /// Parses `name(a, b)`, returning the name and its integer arguments.
-fn call_predicate(s : String) -> (String, Array[Int])? {
+fn call_predicate(s : String) -> (String, Array[Int32])? {
   let open = match find_paren(s, 0) {
     Some(o) => o
     None => return None
@@ -444,7 +444,7 @@ fn call_predicate(s : String) -> (String, Array[Int])? {
     return None
   }
   let name = trim_ws(slice(s, 0, open))
-  let args : Array[Int] = []
+  let args : Array[Int32] = []
   for part in split_top_level(slice(s, open + 1, close)) {
     let lit = match unquote(part) {
       Ok(v) => v
@@ -477,11 +477,14 @@ fn parse_condition(w : Where, cond : String) -> Result[Where, DBResponse] {
           )
         }
         let axis = args[1]
-        // Without this, `line(1,7)` silently became `line(1,3)`: `coord_at`
-        // and `with_coord` fall through to the last axis for anything out of
-        // range, and for negative values index from the end. An axis the
-        // lattice does not have has to be a syntax error, not a different
-        // question than the one that was asked.
+        // This guard is what turns a mistake into an error rather than a
+        // different question than the one that was asked. `coord_at` used to
+        // fall through to the last axis for anything out of range, and
+        // `with_coord` still does, so `line(1,7)` answered exactly what
+        // `line(1,3)` answers. Both helpers now refuse a bad axis themselves —
+        // they answer an empty result — so this is defence at the SQL
+        // boundary, where a wrong axis can be reported as `INVALID_SYNTAX`
+        // instead of as an empty row set.
         if axis < 0 || axis >= DIM {
           return Err(
             err_response(
@@ -567,7 +570,7 @@ fn coord_pred(
   w : Where,
   lhs : String,
   rhs : String,
-  axis : Int,
+  axis : Int32,
 ) -> Result[Where, DBResponse] {
   match parse_int(rhs) {
     Some(v) => Ok(with_coords(w, set_axis(w.coords, axis, v)))
@@ -597,7 +600,7 @@ pub fn parse_where(body : String) -> Result[Where, DBResponse] {
 /// key='k'` cut the statement at the literal's `WHERE` and then failed to parse
 /// the remainder. `SELECT` and `DELETE` escaped this only because their `WHERE`
 /// always comes before any literal.
-fn find_word_outside(s : String, kw : String, from : Int) -> Int {
+fn find_word_outside(s : String, kw : String, from : Int32) -> Int32 {
   let mut i = from
   let mut depth = 0
   let mut in_quote = false
@@ -633,7 +636,7 @@ fn find_word_outside(s : String, kw : String, from : Int) -> Int {
 /// Callers that need to cut the statement in two use the *keyword* index, not
 /// the index of the body after it — the body starts one character later, at the
 /// space, and cutting there leaves the tail of the SET list attached.
-fn where_index(sql : String) -> Int {
+fn where_index(sql : String) -> Int32 {
   find_word_outside(sql, "WHERE", 0)
 }
 
@@ -649,7 +652,7 @@ fn where_body(sql : String) -> String {
 
 ///|
 /// Resolves an `AT <position|(x,y,z,w)>` target to a position.
-fn parse_at(sql : String) -> Result[Int?, DBResponse] {
+fn parse_at(sql : String) -> Result[Int32?, DBResponse] {
   let at = match find_word(sql, "AT", 0) {
     Some(i) => i
     None => return Ok(None)
@@ -812,7 +815,7 @@ fn parse_update(db : Tesseract, sql : String) -> DBResponse {
   let head = slice(sql, set_at + 3, stop)
   let body = if cut < 0 { "" } else { slice(sql, cut + 5, sql.length()) }
   let mut value = ""
-  let mut digit : Int? = None
+  let mut digit : Int32? = None
   let mut seen_value = false
   for assign in split_top_level(head) {
     let eq = match index_of_ci(assign, "=") {

@@ -112,8 +112,11 @@ test "the canonical solution shifts by one along every axis" {
   let mut axis = 0
   while axis < @tesseract.DIM {
     for c in @tesseract.all_coords() {
-      if @tesseract.coord_at(c, axis) < @tesseract.SIDE - 1 {
-        let next = @tesseract.with_coord(c, axis, @tesseract.coord_at(c, axis) + 1)
+      // The loop bound is what makes these `Some`; `coord_at` itself is
+      // checked and would answer None for an axis outside 0..DIM-1.
+      let here_coord = @tesseract.coord_at(c, axis).unwrap()
+      if here_coord < @tesseract.SIDE - 1 {
+        let next = @tesseract.with_coord(c, axis, here_coord + 1)
         let here = @tesseract.digit_at(d, @tesseract.position_of(c))
         let there = @tesseract.digit_at(d, @tesseract.position_of(next))
         assert_eq(there, here % @tesseract.SIDE + 1)

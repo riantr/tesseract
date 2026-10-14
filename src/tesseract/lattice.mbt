@@ -17,8 +17,18 @@
 
 ///|
 /// The 3 cells on the axis-parallel line through `c` along `axis`.
-pub fn line_through(c : Coords, axis : Int) -> Array[Coords] {
+///
+/// An `axis` outside `0..DIM-1` gives an empty list. A real axis always yields
+/// 3 cells, so an empty result is unambiguously a bad axis. The guard is needed
+/// even though nothing here reads a coordinate: `with_coord` answers `w` for an
+/// axis it does not recognise, so without it `line_through(c, 9)` returned the
+/// w-axis line and reported it as the axis the caller asked for.
+pub fn line_through(c : Coords, axis : Int32) -> Array[Coords] {
   let out : Array[Coords] = []
+  match coord_at(c, axis) {
+    None => return out
+    Some(_) => ()
+  }
   let mut v = 0
   while v < SIDE {
     out.push(with_coord(c, axis, v))
@@ -32,11 +42,18 @@ pub fn line_through(c : Coords, axis : Int) -> Array[Coords] {
 ///
 /// This is the 4D generalisation of a 3x3 box's bounding region: it is a
 /// three-dimensional sub-lattice, not a sudoku box.
-pub fn slab_through(c : Coords, axis : Int) -> Array[Coords] {
+///
+/// An `axis` outside `0..DIM-1` gives an empty list. A real axis always yields
+/// 27 cells, so an empty result is unambiguously a bad axis.
+pub fn slab_through(c : Coords, axis : Int32) -> Array[Coords] {
   let out : Array[Coords] = []
-  let fixed = coord_at(c, axis)
+  let fixed = match coord_at(c, axis) {
+    None => return out
+    Some(v) => v
+  }
+  // The guard above is what makes `axis` a real one for the rest of this loop.
   for other in all_coords() {
-    if coord_at(other, axis) == fixed {
+    if coord_at_unchecked(other, axis) == fixed {
       out.push(other)
     }
   }
@@ -50,13 +67,19 @@ pub fn slab_through(c : Coords, axis : Int) -> Array[Coords] {
 /// coordinates are being fixed and so should still hold 9 cells, but both
 /// constraints collapse onto one axis and the answer silently becomes the
 /// 27-cell slab along it — a call asking about a plane handed back a third of
-/// the lattice. The axis range is checked for the same reason `line()` and
-/// `slab()` check theirs: out of range does not fail, `coord_at` falls through
-/// to the last axis.
+/// the lattice.
+///
+/// This is the only one of the three that reports the axis range as an error,
+/// because it is the only one with a channel for it: the other two answer an
+/// out-of-range axis with an empty list, which is unambiguous only because a
+/// valid line is always 3 cells and a valid slab always 27. `coord_at` used to
+/// answer `w` for any axis it did not recognise, so all three of them silently
+/// returned the w-axis geometry; that is what this guard and the empty lists
+/// above now prevent.
 pub fn plane_through(
   c : Coords,
-  axis_a : Int,
-  axis_b : Int,
+  axis_a : Int32,
+  axis_b : Int32,
 ) -> Result[Array[Coords], String] {
   if axis_a < 0 || axis_a >= DIM || axis_b < 0 || axis_b >= DIM {
     return Err(
@@ -74,10 +97,12 @@ pub fn plane_through(
     )
   }
   let out : Array[Coords] = []
-  let fa = coord_at(c, axis_a)
-  let fb = coord_at(c, axis_b)
+  // Both axes were just checked against DIM, so these cannot be None.
+  let fa = coord_at_unchecked(c, axis_a)
+  let fb = coord_at_unchecked(c, axis_b)
   for other in all_coords() {
-    if coord_at(other, axis_a) == fa && coord_at(other, axis_b) == fb {
+    if coord_at_unchecked(other, axis_a) == fa &&
+      coord_at_unchecked(other, axis_b) == fb {
       out.push(other)
     }
   }
@@ -94,7 +119,7 @@ pub fn all_lines() -> Array[Array[Coords]] {
   let mut axis = 0
   while axis < DIM {
     for c in all_coords() {
-      if coord_at(c, axis) == 0 {
+      if coord_at_unchecked(c, axis) == 0 {
         out.push(line_through(c, axis))
       }
     }
@@ -124,16 +149,18 @@ pub fn all_slabs() -> Array[Array[Coords]] {
 ///
 /// For a proper 3-cell line exactly one axis differs across the cells, so the
 /// free axis is the *least* agreeing one, not the most.
-pub fn free_axis_of(line : Array[Coords]) -> Int {
+pub fn free_axis_of(line : Array[Coords]) -> Int32 {
   let mut best = 0
   let mut best_agree = DIM
   let mut axis = 0
   while axis < DIM {
     let mut agree = 0
-    if line.length() > 1 && coord_at(line[1], axis) == coord_at(line[0], axis) {
+    if line.length() > 1 &&
+      coord_at_unchecked(line[1], axis) == coord_at_unchecked(line[0], axis) {
       agree = agree + 1
     }
-    if line.length() > 2 && coord_at(line[2], axis) == coord_at(line[0], axis) {
+    if line.length() > 2 &&
+      coord_at_unchecked(line[2], axis) == coord_at_unchecked(line[0], axis) {
       agree = agree + 1
     }
     if agree < best_agree {
@@ -186,6 +213,6 @@ pub fn peers(c : Coords) -> Array[Coords] {
 
 ///|
 /// Number of cells sharing a line with `c`. Constant at 8 on a 3^4 lattice.
-pub fn peer_count() -> Int {
+pub fn peer_count() -> Int32 {
   DIM * (SIDE - 1)
 }
