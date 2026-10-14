@@ -10,7 +10,7 @@
 ///
 /// - **coordinates** `(x, y, z, w)` are 0-based, matching array indexing;
 /// - **positions** `1..81` are 1-based, matching the C# `grid_position`
-///   column, so stored SQL and `.sdb` files keep the same shape.
+///   column, so stored SQL and `.tsr` files keep the same shape.
 ///
 /// `position = 1 + x*27 + y*9 + z*3 + w` (row-major, `x` slowest) and the
 /// inverse is exact for all 81 cells.

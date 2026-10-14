@@ -1,5 +1,7 @@
 $ErrorActionPreference = 'Stop'
-$root = 'D:/src/MiniMax/Projects/tesseract/sudokudb-mbt'
+# Derived from the script's own location rather than hardcoded, so renaming the
+# project directory does not silently point the scan at the wrong tree.
+$root = Split-Path $PSScriptRoot -Parent
 $out  = "$root/_verify"
 
 function Invoke-Scan([string]$version, [string]$dest) {

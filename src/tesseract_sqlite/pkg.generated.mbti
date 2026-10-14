@@ -1,18 +1,18 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "riantr/tesseract/src/sudokudb_sqlite"
+package "riantr/tesseract/src/tesseract_sqlite"
 
 import {
   "moonbit-community/sqlite3",
   "moonbitlang/core/debug",
-  "riantr/tesseract/src/sudokudb",
+  "riantr/tesseract/src/tesseract",
 }
 
 // Values
 pub fn ensure_schema(@sqlite3.Connection) -> Unit raise
 
-pub fn load(String, @sudokudb.SudokuDB) -> LoadReport raise
+pub fn load(String, @tesseract.Tesseract) -> LoadReport raise
 
-pub fn save(String, @sudokudb.SudokuDB) -> Int raise
+pub fn save(String, @tesseract.Tesseract) -> Int raise
 
 // Errors
 

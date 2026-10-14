@@ -1,15 +1,15 @@
 ///|
-/// A `.db` file that holds one SudokuDB lattice.
+/// A `.db` file that holds one Tesseract lattice.
 ///
 /// This is a persistence *adapter*, not a second store. The lattice rules — the
 /// digit conflict, the coordinate arithmetic, the C# error vocabulary — all
-/// stay in `sudokudb`; what lives here is only how a snapshot of that store
+/// stay in `tesseract`; what lives here is only how a snapshot of that store
 /// reaches a file and comes back. A save is a snapshot, not a synchronised
 /// backend: the file is written when you ask for it, not on every write.
 ///
 /// ## Why this is not a SQL engine replacement
 ///
-/// The hand-written parser in `sudokudb/sql.mbt` exists to accept one specific
+/// The hand-written parser in `tesseract/sql.mbt` exists to accept one specific
 /// C# dialect: twelve documented error codes, `AT (x,y,z,w)`, and the
 /// `line()` / `slab()` / `peers()` predicates. SQLite understands none of them.
 /// Routing `execute` through SQLite would replace that dialect rather than
@@ -18,21 +18,21 @@
 /// ## Timestamps round trip
 ///
 /// The `timestamp` column is written from the store and read back into it, via
-/// `SudokuDB::insert_stamped` — the same call `import_sdb` makes, which is why
+/// `Tesseract::insert_stamped` — the same call `import_tsr` makes, which is why
 /// `insert_stamped` is public. A reopened `.db` therefore carries the stamps it
 /// was saved with, not ones derived from however many log lines this process
 /// happened to emit first. A row whose `timestamp` column is empty falls back to
-/// a fresh stamp rather than storing an empty string, matching `import_sdb`.
+/// a fresh stamp rather than storing an empty string, matching `import_tsr`.
 ///
 /// What does *not* round trip is the log itself. The logger's sequence counter
 /// keeps counting from where the new process started, so timestamps minted
-/// *after* a load do not continue the saved file's numbering. `.sdb` is the
+/// *after* a load do not continue the saved file's numbering. `.tsr` is the
 /// format to use when that continuity matters; `.db` restores what it stored.
 
 ///|
 /// One row of the cell table.
 ///
-/// Its own type rather than `@sudokudb.Record`, because `Record` carries a
+/// Its own type rather than `@tesseract.Record`, because `Record` carries a
 /// `coords` field the file does not store — coordinates are derived from the
 /// position on load rather than persisted twice.
 pub struct CellRow {
@@ -87,16 +87,16 @@ pub fn ensure_schema(conn : @sqlite3.Connection) -> Unit raise {
 /// therefore rolls back rather than leaving a half-replaced lattice behind:
 /// `conn.close()` on a connection with an open transaction is what performs
 /// that rollback.
-pub fn save(path : String, db : @sudokudb.SudokuDB) -> Int raise {
+pub fn save(path : String, db : @tesseract.Tesseract) -> Int raise {
   let conn = @sqlite3.Connection::open(path)
   defer conn.close()
   ensure_schema(conn)
-  let rows = @sudokudb.SudokuDB::select(
+  let rows = @tesseract.Tesseract::select(
       db,
       "",
       "",
       None,
-      @sudokudb.no_filter(),
+      @tesseract.no_filter(),
       None,
     ).data
   run(conn, "BEGIN")
@@ -112,7 +112,7 @@ pub fn save(path : String, db : @sudokudb.SudokuDB) -> Int raise {
 /// The insert loop, scoped so its statement is finalized before the commit.
 fn write_cells(
   conn : @sqlite3.Connection,
-  rows : Array[@sudokudb.Record],
+  rows : Array[@tesseract.Record],
 ) -> Unit raise {
   let ins = conn.prepare(
     "INSERT INTO sudoku_cells (grid_position, key, value, digit, timestamp) VALUES (?, ?, ?, ?, ?)",
@@ -136,9 +136,9 @@ fn write_cells(
 /// The cursor, so a reopened file resumes where the last one left off.
 fn write_meta(
   conn : @sqlite3.Connection,
-  db : @sudokudb.SudokuDB,
+  db : @tesseract.Tesseract,
 ) -> Unit raise {
-  let status = @sudokudb.SudokuDB::status(db)
+  let status = @tesseract.Tesseract::status(db)
   let ins = conn.prepare("INSERT INTO sudoku_meta (name, value) VALUES (?, ?)")
   defer ins.finalize()
   ins.reset(clear_bindings=true)
@@ -191,7 +191,7 @@ fn read_meta(conn : @sqlite3.Connection, name : String) -> String? raise {
 ///|
 /// Replaces the contents of `db` with the file at `path`.
 ///
-/// The store is cleared first, for the same reason `import_sdb` clears: a load
+/// The store is cleared first, for the same reason `import_tsr` clears: a load
 /// that merges leaves behind records the file never mentioned, and the count it
 /// reports then describes only the file rather than the store.
 ///
@@ -202,21 +202,21 @@ fn read_meta(conn : @sqlite3.Connection, name : String) -> String? raise {
 ///
 /// Each row is reinserted through `insert_stamped` with the timestamp the file
 /// carried, so the lattice that comes back is the one that was saved.
-pub fn load(path : String, db : @sudokudb.SudokuDB) -> LoadReport raise {
+pub fn load(path : String, db : @tesseract.Tesseract) -> LoadReport raise {
   let conn = @sqlite3.Connection::open(path)
   defer conn.close()
   ensure_schema(conn)
   let rows = read_cells(conn)
   let cursor = read_meta(conn, "cursor")
-  ignore(@sudokudb.SudokuDB::delete(db, "", None))
+  ignore(@tesseract.Tesseract::delete(db, "", None))
   let mut loaded = 0
   let mut rejected = 0
   for row in rows {
     // An empty `timestamp` means the row was written by something that had no
-    // stamp to give; `None` lets the logger mint one, exactly as `import_sdb`
-    // does for a `.sdb` record with no `timestamp` field.
+    // stamp to give; `None` lets the logger mint one, exactly as `import_tsr`
+    // does for a `.tsr` record with no `timestamp` field.
     let stamp = if row.timestamp == "" { None } else { Some(row.timestamp) }
-    let response = @sudokudb.SudokuDB::insert_stamped(
+    let response = @tesseract.Tesseract::insert_stamped(
       db,
       row.key,
       row.value,
@@ -234,10 +234,10 @@ pub fn load(path : String, db : @sudokudb.SudokuDB) -> LoadReport raise {
   // store where `delete` put it rather than failing the whole load.
   match cursor {
     Some(text) =>
-      match @sudokudb.parse_int(text) {
+      match @tesseract.parse_int(text) {
         Some(p) =>
-          if @sudokudb.position_in_bounds(p) {
-            @sudokudb.SudokuDB::set_position(db, p)
+          if @tesseract.position_in_bounds(p) {
+            @tesseract.Tesseract::set_position(db, p)
           }
         None => ()
       }
@@ -246,6 +246,6 @@ pub fn load(path : String, db : @sudokudb.SudokuDB) -> LoadReport raise {
   LoadReport::{
     loaded,
     rejected,
-    cursor: @sudokudb.SudokuDB::status(db).current_position,
+    cursor: @tesseract.Tesseract::status(db).current_position,
   }
 }

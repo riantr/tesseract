@@ -1,16 +1,16 @@
 ///|
 /// Sudoku sub-structures, checked as complete partitions rather than subsets.
 test "there are 108 lines of 3 cells, and every cell lies on exactly 4" {
-  let lines = @sudokudb.all_lines()
-  assert_eq(lines.length(), @sudokudb.DIM * 27)
+  let lines = @tesseract.all_lines()
+  assert_eq(lines.length(), @tesseract.DIM * 27)
   assert_eq(lines.length(), 108)
-  let counts = @sudokudb.empty_digits()
+  let counts = @tesseract.empty_digits()
   let mut i = 0
   while i < lines.length() {
-    assert_eq(lines[i].length(), @sudokudb.SIDE)
+    assert_eq(lines[i].length(), @tesseract.SIDE)
     let mut j = 0
     while j < lines[i].length() {
-      counts[@sudokudb.index0(lines[i][j])] = counts[@sudokudb.index0(
+      counts[@tesseract.index0(lines[i][j])] = counts[@tesseract.index0(
           lines[i][j],
         )] +
         1
@@ -20,8 +20,8 @@ test "there are 108 lines of 3 cells, and every cell lies on exactly 4" {
   }
   let mut wrong = 0
   let mut k = 0
-  while k < @sudokudb.TOTAL {
-    if counts[k] != @sudokudb.DIM {
+  while k < @tesseract.TOTAL {
+    if counts[k] != @tesseract.DIM {
       wrong = wrong + 1
     }
     k = k + 1
@@ -31,12 +31,12 @@ test "there are 108 lines of 3 cells, and every cell lies on exactly 4" {
 
 ///|
 test "no two lines are the same set of cells" {
-  let lines = @sudokudb.all_lines()
+  let lines = @tesseract.all_lines()
   let seen : Array[String] = []
   let mut duplicates = 0
   let mut i = 0
   while i < lines.length() {
-    let key = @sudokudb.line_key(lines[i])
+    let key = @tesseract.line_key(lines[i])
     if seen.contains(key) {
       duplicates = duplicates + 1
     } else {
@@ -50,8 +50,8 @@ test "no two lines are the same set of cells" {
 
 ///|
 test "there are 12 slabs of 27 cells" {
-  let slabs = @sudokudb.all_slabs()
-  assert_eq(slabs.length(), @sudokudb.DIM * @sudokudb.SIDE)
+  let slabs = @tesseract.all_slabs()
+  assert_eq(slabs.length(), @tesseract.DIM * @tesseract.SIDE)
   assert_eq(slabs.length(), 12)
   let mut i = 0
   while i < slabs.length() {
@@ -62,14 +62,14 @@ test "there are 12 slabs of 27 cells" {
 
 ///|
 test "every cell lies in exactly 4 slabs, one per axis" {
-  let counts = @sudokudb.empty_digits()
+  let counts = @tesseract.empty_digits()
   let mut axis = 0
-  while axis < @sudokudb.DIM {
+  while axis < @tesseract.DIM {
     let mut v = 0
-    while v < @sudokudb.SIDE {
-      let anchor = @sudokudb.with_coord(@sudokudb.coords(0, 0, 0, 0), axis, v)
-      for cell in @sudokudb.slab_through(anchor, axis) {
-        counts[@sudokudb.index0(cell)] = counts[@sudokudb.index0(cell)] + 1
+    while v < @tesseract.SIDE {
+      let anchor = @tesseract.with_coord(@tesseract.coords(0, 0, 0, 0), axis, v)
+      for cell in @tesseract.slab_through(anchor, axis) {
+        counts[@tesseract.index0(cell)] = counts[@tesseract.index0(cell)] + 1
       }
       v = v + 1
     }
@@ -77,8 +77,8 @@ test "every cell lies in exactly 4 slabs, one per axis" {
   }
   let mut wrong = 0
   let mut k = 0
-  while k < @sudokudb.TOTAL {
-    if counts[k] != @sudokudb.DIM {
+  while k < @tesseract.TOTAL {
+    if counts[k] != @tesseract.DIM {
       wrong = wrong + 1
     }
     k = k + 1
@@ -88,7 +88,7 @@ test "every cell lies in exactly 4 slabs, one per axis" {
 
 ///|
 test "the 12 slabs are 12 distinct cell sets" {
-  let slabs = @sudokudb.all_slabs()
+  let slabs = @tesseract.all_slabs()
   let seen : Array[String] = []
   let mut duplicates = 0
   let mut i = 0
@@ -96,10 +96,10 @@ test "the 12 slabs are 12 distinct cell sets" {
     let parts : Array[String] = []
     let mut j = 0
     while j < slabs[i].length() {
-      parts.push(@sudokudb.format_coords(slabs[i][j]))
+      parts.push(@tesseract.format_coords(slabs[i][j]))
       j = j + 1
     }
-    let key = @sudokudb.join(parts, "|")
+    let key = @tesseract.join(parts, "|")
     if seen.contains(key) {
       duplicates = duplicates + 1
     } else {
@@ -113,14 +113,14 @@ test "the 12 slabs are 12 distinct cell sets" {
 
 ///|
 test "each cell has 8 peers, all sharing a line with it" {
-  assert_eq(@sudokudb.peer_count(), 8)
-  for c in @sudokudb.all_coords() {
-    let ps = @sudokudb.peers(c)
+  assert_eq(@tesseract.peer_count(), 8)
+  for c in @tesseract.all_coords() {
+    let ps = @tesseract.peers(c)
     assert_eq(ps.length(), 8)
     assert_false(ps.contains(c))
     let mut i = 0
     while i < ps.length() {
-      assert_true(@sudokudb.shares_line(c, ps[i]))
+      assert_true(@tesseract.shares_line(c, ps[i]))
       i = i + 1
     }
   }
@@ -129,7 +129,7 @@ test "each cell has 8 peers, all sharing a line with it" {
 ///|
 test "a plane fixes two axes and holds 9 cells" {
   let plane = match
-    @sudokudb.plane_through(@sudokudb.coords(1, 2, 0, 1), 0, 2) {
+    @tesseract.plane_through(@tesseract.coords(1, 2, 0, 1), 0, 2) {
     Ok(p) => p
     Err(message) => {
       assert_true(false)
@@ -151,21 +151,21 @@ test "a plane fixes two axes and holds 9 cells" {
 
 ///|
 test "a plane refuses the same axis twice instead of returning a slab" {
-  let c = @sudokudb.coords(1, 2, 0, 1)
+  let c = @tesseract.coords(1, 2, 0, 1)
   // Both constraints collapse onto one axis, so the 27-cell slab came back from
   // a call that asked about a 9-cell plane.
-  let same = match @sudokudb.plane_through(c, 2, 2) {
+  let same = match @tesseract.plane_through(c, 2, 2) {
     Ok(p) => p
     Err(_) => []
   }
   assert_eq(same.length(), 0)
-  let out_of_range = match @sudokudb.plane_through(c, 0, 9) {
+  let out_of_range = match @tesseract.plane_through(c, 0, 9) {
     Ok(p) => p
     Err(_) => []
   }
   assert_eq(out_of_range.length(), 0)
   // ...and a genuinely distinct pair still works.
-  let ok = match @sudokudb.plane_through(c, 0, 2) {
+  let ok = match @tesseract.plane_through(c, 0, 2) {
     Ok(p) => p
     Err(_) => []
   }
@@ -175,7 +175,7 @@ test "a plane refuses the same axis twice instead of returning a slab" {
 ///|
 test "free_axis_of recovers the axis a line varies along" {
   for axis in [0, 1, 2, 3] {
-    let line = @sudokudb.line_through(@sudokudb.coords(1, 1, 1, 1), axis)
-    assert_eq(@sudokudb.free_axis_of(line), axis)
+    let line = @tesseract.line_through(@tesseract.coords(1, 1, 1, 1), axis)
+    assert_eq(@tesseract.free_axis_of(line), axis)
   }
 }

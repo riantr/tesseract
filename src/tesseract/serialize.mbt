@@ -1,7 +1,7 @@
 ///|
 /// Import and export in the three formats the C# app could read and write.
 ///
-/// - `.sdb` — JSON, the native save format, kept field-for-field compatible
+/// - `.tsr` — JSON, the native save format, kept field-for-field compatible
 ///   with the C# exporter so old files load, extended with `coords` and `digit`;
 /// - `.md` — a Markdown table, human-readable and diffable;
 /// - `.sql` — a SQL dump that this package's own parser can re-import.
@@ -41,8 +41,8 @@ fn json_escape(s : String) -> String {
 }
 
 ///|
-/// The `.sdb` JSON document for the whole database.
-pub fn export_sdb(db : SudokuDB) -> String {
+/// The `.tsr` JSON document for the whole database.
+pub fn export_tsr(db : Tesseract) -> String {
   let b = StringBuilder::StringBuilder()
   b.write_string("{\n")
   b.write_string("  \"dbName\": \"")
@@ -52,7 +52,7 @@ pub fn export_sdb(db : SudokuDB) -> String {
   b.write_string("  \"side\": 3,\n")
   b.write_string("  \"total_cells\": 81,\n")
   b.write_string("  \"records\": [\n")
-  let all = SudokuDB::select(db, "", "", None, no_filter(), None)
+  let all = Tesseract::select(db, "", "", None, no_filter(), None)
   let mut first = true
   let mut i = 0
   while i < all.data.length() {
@@ -108,11 +108,11 @@ fn json_int(v : Json, key : String, fallback : Int) -> Int {
 }
 
 ///|
-/// Loads a `.sdb` document, returning how many records were restored.
+/// Loads a `.tsr` document, returning how many records were restored.
 ///
 /// The database is cleared first, so a failed load leaves an empty database
 /// rather than a half-overwritten one mixed with whatever was there before.
-pub fn import_sdb(db : SudokuDB, text : String) -> Result[Int, String] {
+pub fn import_tsr(db : Tesseract, text : String) -> Result[Int, String] {
   if !@json.valid(text) {
     return Err("Not valid JSON")
   }
@@ -127,7 +127,7 @@ pub fn import_sdb(db : SudokuDB, text : String) -> Result[Int, String] {
   // into whatever was already stored, so the count it returned described only
   // the records in the file and the lattice kept records the file never
   // mentioned.
-  ignore(SudokuDB::delete(db, "", None))
+  ignore(Tesseract::delete(db, "", None))
   while i < items.length() {
     let item = items[i]
     let key = json_str(item, "key")
@@ -158,7 +158,7 @@ pub fn import_sdb(db : SudokuDB, text : String) -> Result[Int, String] {
       // logger counter, which is what lets `export` after `import` reproduce
       // the source document byte for byte.
       let stamp = json_str(item, "timestamp")
-      let response = SudokuDB::insert_stamped(
+      let response = Tesseract::insert_stamped(
         db,
         key,
         value,
@@ -185,7 +185,7 @@ pub fn import_sdb(db : SudokuDB, text : String) -> Result[Int, String] {
 /// A `|` inside a value has to survive the round trip, so it is backslash
 /// escaped and the importer below splits on unescaped pipes only. Newlines
 /// become `<br>` for readability; a value containing the literal text `<br>`
-/// therefore comes back as a newline — the JSON `.sdb` format is the lossless
+/// therefore comes back as a newline — the JSON `.tsr` format is the lossless
 /// one.
 fn escape_markdown(s : String) -> String {
   let b = StringBuilder::StringBuilder(size_hint=s.length())
@@ -202,7 +202,7 @@ fn escape_markdown(s : String) -> String {
       // TAB and CR are escaped rather than reformatted. TAB used to be
       // written as four spaces and CR was dropped outright, so a value came
       // back as a different string - a silent, one-way corruption that only
-      // `.sdb` and `.sql` avoided.
+      // `.tsr` and `.sql` avoided.
       b.write_string("\\t")
     } else if c == 13 {
       b.write_string("\\r")
@@ -277,10 +277,10 @@ fn split_markdown_row(line : String) -> Array[String] {
 
 ///|
 /// The Markdown table for the whole database.
-pub fn export_markdown(db : SudokuDB) -> String {
+pub fn export_markdown(db : Tesseract) -> String {
   let b = StringBuilder::StringBuilder()
-  b.write_string("# SudokuDB 4D 数据导出\n\n")
-  let s = SudokuDB::status(db)
+  b.write_string("# Tesseract 4D 数据导出\n\n")
+  let s = Tesseract::status(db)
   b.write_string("维度: 3x3x3x3 (81 cells)  \n")
   b.write_string("总记录数: ")
   b.write_object(s.current_count)
@@ -290,7 +290,7 @@ pub fn export_markdown(db : SudokuDB) -> String {
   b.write_string("\n\n## 数据表格\n\n")
   b.write_string("| 位置 | 坐标 | Key | Value | 数 | 时间戳 |\n")
   b.write_string("|------|------|-----|-------|----|--------|\n")
-  let all = SudokuDB::select(db, "", "", None, no_filter(), None)
+  let all = Tesseract::select(db, "", "", None, no_filter(), None)
   let mut i = 0
   while i < all.data.length() {
     let r = all.data[i]
@@ -356,7 +356,7 @@ fn md_column(header : Array[String], name : String) -> Int {
 ///
 /// The C# header (`位置 | Key | Value | 时间戳`) is accepted too, as long as
 /// it carries at least a key and a value column.
-pub fn import_markdown(db : SudokuDB, text : String) -> Result[Int, String] {
+pub fn import_markdown(db : Tesseract, text : String) -> Result[Int, String] {
   let lines = split(text, "\n")
   let mut header : Array[String] = []
   let mut loaded = 0
@@ -427,7 +427,7 @@ pub fn import_markdown(db : SudokuDB, text : String) -> Result[Int, String] {
       } else {
         NO_DIGIT
       }
-      let response = SudokuDB::insert(db, key, value, Some(target), digit)
+      let response = Tesseract::insert(db, key, value, Some(target), digit)
       if response.success {
         loaded = loaded + 1
       }
@@ -471,19 +471,19 @@ fn escape_sql_literal(s : String) -> String {
 
 ///|
 /// A SQL dump that this package's parser reads back exactly.
-pub fn export_sql(db : SudokuDB) -> String {
+pub fn export_sql(db : Tesseract) -> String {
   let b = StringBuilder::StringBuilder()
-  b.write_string("-- SudokuDB 4D export\n")
+  b.write_string("-- Tesseract 4D export\n")
   b.write_string("-- lattice: 3x3x3x3, 81 cells\n")
-  let s = SudokuDB::status(db)
+  let s = Tesseract::status(db)
   b.write_string("-- records: ")
   b.write_object(s.current_count)
-  b.write_string("\n\nCREATE DATABASE sudokuDB;\n\n")
-  let all = SudokuDB::select(db, "", "", None, no_filter(), None)
+  b.write_string("\n\nCREATE DATABASE tesseract;\n\n")
+  let all = Tesseract::select(db, "", "", None, no_filter(), None)
   let mut i = 0
   while i < all.data.length() {
     let r = all.data[i]
-    b.write_string("INSERT INTO sudokuDB (key, value, digit) VALUES ('")
+    b.write_string("INSERT INTO tesseract (key, value, digit) VALUES ('")
     b.write_string(escape_sql_literal(r.key))
     b.write_string("', '")
     b.write_string(escape_sql_literal(r.value))
@@ -587,7 +587,7 @@ fn strip_sql_comments(text : String) -> String {
 
 ///|
 /// Runs a SQL script, returning how many statements succeeded.
-pub fn import_sql(db : SudokuDB, text : String) -> Result[Int, String] {
+pub fn import_sql(db : Tesseract, text : String) -> Result[Int, String] {
   let statements = split_statements(text)
   if statements.length() == 0 {
     return Err("No statements found")
@@ -627,7 +627,7 @@ pub fn import_sql(db : SudokuDB, text : String) -> Result[Int, String] {
 
 ///|
 /// One cell rendered for the lattice view.
-fn lattice_cell(db : SudokuDB, position : Int, cursor : Int) -> String {
+fn lattice_cell(db : Tesseract, position : Int, cursor : Int) -> String {
   let cell = db.cells[position - 1]
   let marker = if position == cursor { ">" } else { " " }
   let label = if cell_is_empty(cell) {
@@ -657,7 +657,7 @@ fn lattice_cell(db : SudokuDB, position : Int, cursor : Int) -> String {
 /// With only 3 cells per axis there is no single "right" way to flatten four
 /// dimensions onto a terminal, so this fixes the two slowest axes and lays the
 /// remaining 3x3 out as a grid — the same reading a 2D sudoku grid gets.
-pub fn render_lattice(db : SudokuDB, cursor : Int) -> String {
+pub fn render_lattice(db : Tesseract, cursor : Int) -> String {
   let b = StringBuilder::StringBuilder()
   let mut x = 0
   while x < SIDE {

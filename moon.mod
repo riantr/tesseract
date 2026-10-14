@@ -1,7 +1,7 @@
-// SudokuDB, migrated to MoonBit at 4 dimensions.
+// Tesseract, migrated to MoonBit at 4 dimensions.
 //
 // The core library in this toolchain carries no clock, no file I/O and no stdin
-// reader, so `src/sudokudb` and `cmd/main` implement everything they need
+// reader, so `src/tesseract` and `cmd/main` implement everything they need
 // rather than pulling it in, and stay dependency-free. The GUI in `cmd/gui`
 // is the one exception: it needs a window, so it depends on proton. See
 // README.mbt.md for what that means for the CLI.

@@ -9,8 +9,8 @@
 /// find.
 
 ///|
-fn fresh() -> @sudokudb.SudokuDB {
-  @sudokudb.new_db("sudokuDB", @sudokudb.new_logger("test"))
+fn fresh() -> @tesseract.Tesseract {
+  @tesseract.new_db("tesseract", @tesseract.new_logger("test"))
 }
 
 ///|
@@ -18,11 +18,11 @@ fn fresh() -> @sudokudb.SudokuDB {
 /// two. `None` from `read_back` means a row was missing or undecodable, which
 /// the callers assert on separately from a wrong value.
 fn round_trip(
-  data : @sudokudb_dgp.Dataset,
-) -> Array[@sudokudb_dgp.Observation]? {
+  data : @tesseract_dgp.Dataset,
+) -> Array[@tesseract_dgp.Observation]? {
   let db = fresh()
-  ignore(@sudokudb_dgp.record(db, data))
-  @sudokudb_dgp.read_back(db, data)
+  ignore(@tesseract_dgp.record(db, data))
+  @tesseract_dgp.read_back(db, data)
 }
 
 ///|
@@ -33,8 +33,8 @@ fn round_trip(
 /// calls: a loop that fails on row 3 of 81 says only "some assertion failed",
 /// and the point of these tests is to say *which number*.
 fn assert_identical(
-  want : Array[@sudokudb_dgp.Observation],
-  got : Array[@sudokudb_dgp.Observation],
+  want : Array[@tesseract_dgp.Observation],
+  got : Array[@tesseract_dgp.Observation],
 ) -> Unit raise {
   assert_eq(got.length(), want.length())
   for i = 0; i < want.length(); i = i + 1 {
@@ -54,7 +54,7 @@ fn assert_identical(
 
 ///|
 test "the IRM DGP gives a lattice-shaped dataset, not a degenerate one" {
-  let data = @sudokudb_dgp.irm_dataset(81, 4, 0.5, 42)
+  let data = @tesseract_dgp.irm_dataset(81, 4, 0.5, 42)
   assert_eq(data.source, "make_irm_data")
   assert_eq(data.dim_x, 4)
   assert_eq(data.observations.length(), 81)
@@ -79,7 +79,7 @@ test "the IRM DGP gives a lattice-shaped dataset, not a degenerate one" {
 
 ///|
 test "every IRM value survives the lattice unchanged" {
-  let data = @sudokudb_dgp.irm_dataset(81, 4, 0.5, 42)
+  let data = @tesseract_dgp.irm_dataset(81, 4, 0.5, 42)
   match round_trip(data) {
     None => assert_true(false)
     Some(back) => assert_identical(data.observations, back)
@@ -93,7 +93,7 @@ test "every confounded PLR value survives the lattice unchanged" {
   // confounded, so every entry is an arbitrary double. A store that quietly
   // rounded or reformatted numbers would still pass the IRM test and fail
   // here, which is exactly why both exist.
-  let data = @sudokudb_dgp.plr_dataset(81, 4, 0.5, 7)
+  let data = @tesseract_dgp.plr_dataset(81, 4, 0.5, 7)
   assert_eq(data.observations.length(), 81)
   let mut non_binary = 0
   for obs in data.observations {
@@ -114,23 +114,23 @@ test "the lattice holds the encoded text verbatim" {
   // numbers came back does not prove the lattice kept the bytes: a store that
   // rewrote the text into an equivalent form would pass the decode test and
   // fail this one.
-  let data = @sudokudb_dgp.plr_dataset(12, 4, 0.5, 7)
+  let data = @tesseract_dgp.plr_dataset(12, 4, 0.5, 7)
   let db = fresh()
-  let report = @sudokudb_dgp.record(db, data)
+  let report = @tesseract_dgp.record(db, data)
   assert_eq(report.recorded, 12)
   assert_eq(report.rejected, 0)
-  let rows = @sudokudb_dgp.recorded(db)
+  let rows = @tesseract_dgp.recorded(db)
   assert_eq(rows.length(), 12)
   for i = 0; i < 12; i = i + 1 {
     // `encode` is total for a finite observation, so the None arm is a bug in
     // the data rather than a condition to tolerate.
-    let want = match @sudokudb_dgp.encode(data.observations[i]) {
+    let want = match @tesseract_dgp.encode(data.observations[i]) {
       Some(t) => t
       None => abort("encode refused a finite observation")
     }
     assert_eq(rows[i].value, want)
     assert_eq(rows[i].position, i + 1)
-    assert_eq(rows[i].key, @sudokudb_dgp.observation_key(i))
+    assert_eq(rows[i].key, @tesseract_dgp.observation_key(i))
   }
 }
 
@@ -158,14 +158,14 @@ test "encoding is exact for the doubles that are hard to print" {
     3.141592653589793,
   ]
   for v in hard {
-    let obs = @sudokudb_dgp.Observation::new(0, v, v, [v])
+    let obs = @tesseract_dgp.Observation::new(0, v, v, [v])
     // Both refusals are bugs rather than conditions: every value here is
     // finite, and every one of them is representable as text by construction.
-    let text = match @sudokudb_dgp.encode(obs) {
+    let text = match @tesseract_dgp.encode(obs) {
       Some(t) => t
       None => abort("encode refused a finite double")
     }
-    match @sudokudb_dgp.decode(text) {
+    match @tesseract_dgp.decode(text) {
       Some(back) => {
         // `==`, not a tolerance: a one-ulp difference is already a failure to
         // record what was given.
@@ -182,18 +182,18 @@ test "encoding is exact for the doubles that are hard to print" {
 test "a dataset larger than the lattice is refused, not wrapped" {
   // 93 rows, 81 cells. Wrapping would overwrite rows 1..12 and then report
   // "recorded 93", which is a lie about what is in the store.
-  let data = @sudokudb_dgp.irm_dataset(93, 4, 0.5, 42)
+  let data = @tesseract_dgp.irm_dataset(93, 4, 0.5, 42)
   let db = fresh()
-  let report = @sudokudb_dgp.record(db, data)
+  let report = @tesseract_dgp.record(db, data)
   assert_eq(report.offered, 93)
   assert_eq(report.recorded, 81)
   assert_eq(report.rejected, 12)
   assert_eq(report.stopped_at, 82)
-  assert_eq(@sudokudb.SudokuDB::occupancy(db), 81)
+  assert_eq(@tesseract.Tesseract::occupancy(db), 81)
   // The first 81 are the first 81 - the overflow must not have clobbered them.
-  let rows = @sudokudb_dgp.recorded(db)
-  assert_eq(rows[0].key, @sudokudb_dgp.observation_key(0))
-  assert_eq(rows[80].key, @sudokudb_dgp.observation_key(80))
+  let rows = @tesseract_dgp.recorded(db)
+  assert_eq(rows[0].key, @tesseract_dgp.observation_key(0))
+  assert_eq(rows[80].key, @tesseract_dgp.observation_key(80))
 }
 
 ///|
@@ -205,31 +205,31 @@ test "a non-finite value is refused rather than stored as unreadable text" {
   // Encoding must decline, so no lattice ever holds `NaN` or `Infinity` -
   // neither is a JSON number, and such a row would be stored but unreadable.
   assert_eq(
-    @sudokudb_dgp.encode(@sudokudb_dgp.Observation::new(0, nan, 1.0, [1.0])),
+    @tesseract_dgp.encode(@tesseract_dgp.Observation::new(0, nan, 1.0, [1.0])),
     None,
   )
   assert_eq(
-    @sudokudb_dgp.encode(@sudokudb_dgp.Observation::new(0, 1.0, inf, [1.0])),
+    @tesseract_dgp.encode(@tesseract_dgp.Observation::new(0, 1.0, inf, [1.0])),
     None,
   )
   assert_eq(
-    @sudokudb_dgp.encode(@sudokudb_dgp.Observation::new(0, 1.0, 1.0, [nan])),
+    @tesseract_dgp.encode(@tesseract_dgp.Observation::new(0, 1.0, 1.0, [nan])),
     None,
   )
   let db = fresh()
-  let bad = @sudokudb_dgp.Dataset::new("hand-built", 0.0, 1, [
-    @sudokudb_dgp.Observation::new(0, 1.0, 1.0, [1.0]),
-    @sudokudb_dgp.Observation::new(1, nan, 1.0, [1.0]),
-    @sudokudb_dgp.Observation::new(2, 2.0, 2.0, [2.0]),
+  let bad = @tesseract_dgp.Dataset::new("hand-built", 0.0, 1, [
+    @tesseract_dgp.Observation::new(0, 1.0, 1.0, [1.0]),
+    @tesseract_dgp.Observation::new(1, nan, 1.0, [1.0]),
+    @tesseract_dgp.Observation::new(2, 2.0, 2.0, [2.0]),
   ])
-  let report = @sudokudb_dgp.record(db, bad)
+  let report = @tesseract_dgp.record(db, bad)
   assert_eq(report.offered, 3)
   assert_eq(report.recorded, 2)
   assert_eq(report.rejected, 1)
   // The rows either side of the refused one still recorded, at their own cells.
-  let rows = @sudokudb_dgp.recorded(db)
-  assert_eq(rows[0].key, @sudokudb_dgp.observation_key(0))
-  assert_eq(rows[1].key, @sudokudb_dgp.observation_key(2))
+  let rows = @tesseract_dgp.recorded(db)
+  assert_eq(rows[0].key, @tesseract_dgp.observation_key(0))
+  assert_eq(rows[1].key, @tesseract_dgp.observation_key(2))
 }
 
 ///|
@@ -237,20 +237,20 @@ test "the dataset also reaches the store through SQL" {
   // The path a person actually uses: `to_sql` hands the rows to the project's
   // own parser, which is what `cmd/main` and `cmd/persist` run. If the encoder
   // and the parser disagree anywhere, this is where it shows.
-  let data = @sudokudb_dgp.plr_dataset(12, 4, 0.5, 7)
-  let script = @sudokudb_dgp.to_sql(data)
+  let data = @tesseract_dgp.plr_dataset(12, 4, 0.5, 7)
+  let script = @tesseract_dgp.to_sql(data)
   let db = fresh()
-  match @sudokudb.import_sql(db, script) {
+  match @tesseract.import_sql(db, script) {
     Ok(n) => assert_eq(n, 12)
     Err(e) => abort("import_sql rejected the generated script: " + e)
   }
-  assert_eq(@sudokudb.SudokuDB::occupancy(db), 12)
-  let rows = @sudokudb_dgp.recorded(db)
+  assert_eq(@tesseract.Tesseract::occupancy(db), 12)
+  let rows = @tesseract_dgp.recorded(db)
   assert_eq(rows.length(), 12)
   for i = 0; i < 12; i = i + 1 {
-    assert_eq(rows[i].key, @sudokudb_dgp.observation_key(i))
+    assert_eq(rows[i].key, @tesseract_dgp.observation_key(i))
     assert_eq(rows[i].position, i + 1)
-    match @sudokudb_dgp.decode(rows[i].value) {
+    match @tesseract_dgp.decode(rows[i].value) {
       Some(back) => {
         assert_true(back.d == data.observations[i].d)
         assert_true(back.y == data.observations[i].y)
@@ -267,7 +267,7 @@ test "the dataset also reaches the store through SQL" {
 test "a DGP is a function of its seed" {
   // Two runs, same seed: identical data. This is what lets the other tests be
   // statements about fixed numbers instead of about one lucky run.
-  let a = @sudokudb_dgp.plr_dataset(81, 4, 0.5, 7)
-  let b = @sudokudb_dgp.plr_dataset(81, 4, 0.5, 7)
+  let a = @tesseract_dgp.plr_dataset(81, 4, 0.5, 7)
+  let b = @tesseract_dgp.plr_dataset(81, 4, 0.5, 7)
   assert_identical(a.observations, b.observations)
 }

@@ -45,13 +45,13 @@
 /// The last position of `needle` in `haystack`, or `None`.
 ///
 /// The analyzer appends `(family)` and `[lenses]` at the *end* of a finding
-/// line, so those two have to be taken from the right. `sudokudb` exposes
+/// line, so those two have to be taken from the right. `tesseract` exposes
 /// `index_of_ci`, which finds the first and is case-insensitive; neither is
 /// what this needs.
 fn last_index_of(haystack : String, needle : String) -> Int? {
   let mut i = haystack.length() - needle.length()
   while i >= 0 {
-    if @sudokudb.slice(haystack, i, i + needle.length()) == needle {
+    if @tesseract.slice(haystack, i, i + needle.length()) == needle {
       return Some(i)
     }
     i = i - 1
@@ -65,10 +65,10 @@ fn between_last(s : String, open : String, close : String) -> String? {
   match last_index_of(s, close) {
     None => None
     Some(close_at) =>
-      match last_index_of(@sudokudb.slice(s, 0, close_at), open) {
+      match last_index_of(@tesseract.slice(s, 0, close_at), open) {
         None => None
         Some(open_at) =>
-          Some(@sudokudb.slice(s, open_at + open.length(), close_at))
+          Some(@tesseract.slice(s, open_at + open.length(), close_at))
       }
   }
 }
@@ -76,31 +76,31 @@ fn between_last(s : String, open : String, close : String) -> String? {
 ///|
 /// One `L:C - sev: message (family) [lenses]` line.
 fn parse_finding(line : String, path : String) -> Finding? {
-  let dash = match @sudokudb.index_of_ci(line, " - ") {
+  let dash = match @tesseract.index_of_ci(line, " - ") {
     None => return None
     Some(i) => i
   }
-  let head = @sudokudb.slice(line, 0, dash)
-  let tail = @sudokudb.slice(line, dash + 3, line.length())
-  let colon = match @sudokudb.index_of_ci(head, ":") {
+  let head = @tesseract.slice(line, 0, dash)
+  let tail = @tesseract.slice(line, dash + 3, line.length())
+  let colon = match @tesseract.index_of_ci(head, ":") {
     None => return None
     Some(i) => i
   }
-  let line_no = match @sudokudb.parse_int(@sudokudb.slice(head, 0, colon)) {
+  let line_no = match @tesseract.parse_int(@tesseract.slice(head, 0, colon)) {
     None => return None
     Some(v) => v
   }
   let col_no = match
-    @sudokudb.parse_int(@sudokudb.slice(head, colon + 1, head.length())) {
+    @tesseract.parse_int(@tesseract.slice(head, colon + 1, head.length())) {
     None => return None
     Some(v) => v
   }
-  let sev_colon = match @sudokudb.index_of_ci(tail, ":") {
+  let sev_colon = match @tesseract.index_of_ci(tail, ":") {
     None => return None
     Some(i) => i
   }
-  let severity = @sudokudb.slice(tail, 0, sev_colon)
-  let body = @sudokudb.slice(tail, sev_colon + 1, tail.length())
+  let severity = @tesseract.slice(tail, 0, sev_colon)
+  let body = @tesseract.slice(tail, sev_colon + 1, tail.length())
   let family = match between_last(body, "(", ")") {
     None => return None
     Some(f) => f
@@ -117,11 +117,11 @@ fn parse_finding(line : String, path : String) -> Finding? {
     Some(i) => i
   }
   let open_paren = match
-    last_index_of(@sudokudb.slice(body, 0, close_paren), "(") {
+    last_index_of(@tesseract.slice(body, 0, close_paren), "(") {
     None => return None
     Some(i) => i
   }
-  let message = @sudokudb.trim_ws(@sudokudb.slice(body, 0, open_paren))
+  let message = @tesseract.trim_ws(@tesseract.slice(body, 0, open_paren))
   Some({
     path,
     line: line_no,
@@ -137,9 +137,9 @@ fn parse_finding(line : String, path : String) -> Finding? {
 /// The `key=value` pairs of a `SUMMARY` or `BYKIND` line.
 fn field_value(fields : Array[String], key : String) -> Int? {
   for f in fields {
-    if @sudokudb.starts_with(f, key + "=") {
-      return @sudokudb.parse_int(
-        @sudokudb.slice(f, key.length() + 1, f.length()),
+    if @tesseract.starts_with(f, key + "=") {
+      return @tesseract.parse_int(
+        @tesseract.slice(f, key.length() + 1, f.length()),
       )
     }
   }
@@ -171,7 +171,7 @@ fn leading_count(s : String) -> Int {
   for c in digits {
     buf.write_char(c)
   }
-  @sudokudb.parse_int(buf.to_string()).unwrap_or(0)
+  @tesseract.parse_int(buf.to_string()).unwrap_or(0)
 }
 
 ///|
@@ -186,29 +186,29 @@ fn is_reason_line(line : String) -> Bool {
   if line.at(0) < '0' || line.at(0) > '9' {
     return false
   }
-  @sudokudb.index_of_ci(line, "x  ") is Some(_)
+  @tesseract.index_of_ci(line, "x  ") is Some(_)
 }
 
 ///|
 /// How far a `PARTIAL` file was read: `read up to line 63, 80 after it not
 /// shown`. Returns `(0, 0)` for any other shape.
 fn partial_extent(field : String) -> (Int, Int) {
-  let parts = @sudokudb.split(field, ",")
+  let parts = @tesseract.split(field, ",")
   if parts.length() < 2 {
     return (0, 0)
   }
-  let first = @sudokudb.trim_ws(parts[0])
-  let second = @sudokudb.trim_ws(parts[1])
-  if !@sudokudb.starts_with(first, "read up to line") {
+  let first = @tesseract.trim_ws(parts[0])
+  let second = @tesseract.trim_ws(parts[1])
+  if !@tesseract.starts_with(first, "read up to line") {
     return (0, 0)
   }
-  let rest = @sudokudb.trim_ws(@sudokudb.slice(first, 15, first.length()))
-  let words = @sudokudb.split(rest, " ")
+  let rest = @tesseract.trim_ws(@tesseract.slice(first, 15, first.length()))
+  let words = @tesseract.split(rest, " ")
   let up_to = match words.length() > 0 {
     true => leading_count(words[0])
     false => 0
   }
-  let after = if @sudokudb.starts_with(second, "after it not shown") {
+  let after = if @tesseract.starts_with(second, "after it not shown") {
     0
   } else {
     leading_count(second)
@@ -239,11 +239,11 @@ fn parse_file_header(
   let mut i = 1
   while i + 1 < fields.length() {
     let f = fields[i]
-    if @sudokudb.starts_with(f, "defects=") {
-      defects = leading_count(@sudokudb.slice(f, 8, f.length()))
-    } else if @sudokudb.starts_with(f, "notices=") {
-      notices = leading_count(@sudokudb.slice(f, 8, f.length()))
-    } else if @sudokudb.starts_with(f, "read up to line") {
+    if @tesseract.starts_with(f, "defects=") {
+      defects = leading_count(@tesseract.slice(f, 8, f.length()))
+    } else if @tesseract.starts_with(f, "notices=") {
+      notices = leading_count(@tesseract.slice(f, 8, f.length()))
+    } else if @tesseract.starts_with(f, "read up to line") {
       let pair = partial_extent(f)
       read_up_to = pair.0
       not_shown = pair.1
@@ -274,12 +274,12 @@ fn parse_file_header(
 pub fn parse(output : String) -> Result[ScanReport, String] {
   // `Out-File -Encoding utf8` in Windows PowerShell prefixes a BOM, and a
   // BOM left on line one would make the first tag read as `<BOM>TARGET`.
-  let text = if @sudokudb.starts_with(output, "\u{FEFF}") {
-    @sudokudb.slice(output, 1, output.length())
+  let text = if @tesseract.starts_with(output, "\u{FEFF}") {
+    @tesseract.slice(output, 1, output.length())
   } else {
     output
   }
-  let lines = @sudokudb.split(text, "\n")
+  let lines = @tesseract.split(text, "\n")
   let mut target = ""
   let mut root = ""
   let mut scanned = 0
@@ -299,19 +299,19 @@ pub fn parse(output : String) -> Result[ScanReport, String] {
   // The file a bare finding line belongs to: the most recent file header.
   let mut current = ""
   for raw in lines {
-    let line = @sudokudb.trim_ws(raw)
+    let line = @tesseract.trim_ws(raw)
     if line == "" {
       continue
     }
-    if @sudokudb.starts_with(line, "ERROR\t") {
-      return Err(@sudokudb.slice(line, 6, line.length()))
+    if @tesseract.starts_with(line, "ERROR\t") {
+      return Err(@tesseract.slice(line, 6, line.length()))
     }
-    if @sudokudb.starts_with(line, "TARGET\t") {
+    if @tesseract.starts_with(line, "TARGET\t") {
       // Two tab-separated fields. A comma here would be a plausible guess and
       // a wrong one: splitting on it yields a single element, `target` keeps
       // both paths joined by a tab, and `root` comes back empty - which reads
       // as "the scan had no root" rather than as a parse bug.
-      let parts = @sudokudb.split(@sudokudb.slice(line, 7, line.length()), "\t")
+      let parts = @tesseract.split(@tesseract.slice(line, 7, line.length()), "\t")
       if parts.length() > 0 {
         target = parts[0]
       }
@@ -320,12 +320,12 @@ pub fn parse(output : String) -> Result[ScanReport, String] {
       }
       continue
     }
-    if @sudokudb.starts_with(line, "SCANNED\t") {
-      scanned = leading_count(@sudokudb.slice(line, 8, line.length()))
+    if @tesseract.starts_with(line, "SCANNED\t") {
+      scanned = leading_count(@tesseract.slice(line, 8, line.length()))
       continue
     }
-    if @sudokudb.starts_with(line, "BYKIND\t") {
-      let f = @sudokudb.split(@sudokudb.slice(line, 7, line.length()), "\t")
+    if @tesseract.starts_with(line, "BYKIND\t") {
+      let f = @tesseract.split(@tesseract.slice(line, 7, line.length()), "\t")
       by_kind.push({
         kind: if f.length() > 0 {
           f[0]
@@ -339,14 +339,14 @@ pub fn parse(output : String) -> Result[ScanReport, String] {
       })
       continue
     }
-    if @sudokudb.starts_with(line, "CLEAN\t") ||
-      @sudokudb.starts_with(line, "FOUND\t") ||
-      @sudokudb.starts_with(line, "PARTIAL\t") {
-      let at = match @sudokudb.index_of_ci(line, "\t") {
+    if @tesseract.starts_with(line, "CLEAN\t") ||
+      @tesseract.starts_with(line, "FOUND\t") ||
+      @tesseract.starts_with(line, "PARTIAL\t") {
+      let at = match @tesseract.index_of_ci(line, "\t") {
         None => continue
         Some(i) => i
       }
-      let tag = @sudokudb.slice(line, 0, at)
+      let tag = @tesseract.slice(line, 0, at)
       let outcome = if tag == "CLEAN" {
         Clean
       } else if tag == "PARTIAL" {
@@ -354,8 +354,8 @@ pub fn parse(output : String) -> Result[ScanReport, String] {
       } else {
         Found
       }
-      let fields = @sudokudb.split(
-        @sudokudb.slice(line, at + 1, line.length()),
+      let fields = @tesseract.split(
+        @tesseract.slice(line, at + 1, line.length()),
         "\t",
       )
       match parse_file_header(fields, outcome) {
@@ -367,13 +367,13 @@ pub fn parse(output : String) -> Result[ScanReport, String] {
       }
       continue
     }
-    if @sudokudb.starts_with(line, "PARSED\t") {
-      let parts = @sudokudb.split(
-        @sudokudb.slice(line, 7, line.length()),
+    if @tesseract.starts_with(line, "PARSED\t") {
+      let parts = @tesseract.split(
+        @tesseract.slice(line, 7, line.length()),
         " files understood (",
       )
       if parts.length() > 0 {
-        let nums = @sudokudb.split(parts[0], "/")
+        let nums = @tesseract.split(parts[0], "/")
         if nums.length() > 0 {
           parsed = leading_count(nums[0])
         }
@@ -386,31 +386,31 @@ pub fn parse(output : String) -> Result[ScanReport, String] {
         // `%` (0.4.0) or a whole `%)` (0.3.5) in the stored string. Neither is
         // a number anybody would notice is wrong.
         let rest = parts[1]
-        let close = @sudokudb.index_of_ci(rest, ")")
+        let close = @tesseract.index_of_ci(rest, ")")
         let inner = match close {
-          Some(i) => @sudokudb.slice(rest, 0, i)
+          Some(i) => @tesseract.slice(rest, 0, i)
           None => rest
         }
-        let num = @sudokudb.split(inner, "%")
-        pct = @sudokudb.trim_ws(num[0])
+        let num = @tesseract.split(inner, "%")
+        pct = @tesseract.trim_ws(num[0])
         // The partial-file count only exists from 0.4.0 on.
-        match @sudokudb.index_of_ci(rest, ";") {
+        match @tesseract.index_of_ci(rest, ";") {
           Some(i) =>
             // `leading_count` stops at the first non-digit, so the space after
             // the semicolon has to go first — left in, it yields 0, which is
             // indistinguishable from a run that really read no partial files.
             partial_files = leading_count(
-              @sudokudb.trim_ws(@sudokudb.slice(rest, i + 1, rest.length())),
+              @tesseract.trim_ws(@tesseract.slice(rest, i + 1, rest.length())),
             )
           None => ()
         }
       }
       continue
     }
-    if @sudokudb.starts_with(line, "SUMMARY\t") {
+    if @tesseract.starts_with(line, "SUMMARY\t") {
       seen_summary = true
-      let fields = @sudokudb.split(
-        @sudokudb.slice(line, 8, line.length()),
+      let fields = @tesseract.split(
+        @tesseract.slice(line, 8, line.length()),
         "\t",
       )
       scanned = field_value(fields, "files").unwrap_or(scanned)
@@ -428,29 +428,29 @@ pub fn parse(output : String) -> Result[ScanReport, String] {
     // would go missing - which reads as "nothing was unparsed" rather than as
     // a parse failure.
     if is_reason_line(line) {
-      let at = match @sudokudb.index_of_ci(line, "x  ") {
+      let at = match @tesseract.index_of_ci(line, "x  ") {
         None => continue
         Some(i) => i
       }
-      let count = leading_count(@sudokudb.slice(line, 0, at))
-      let reason = @sudokudb.trim_ws(
-        @sudokudb.slice(line, at + 3, line.length()),
+      let count = leading_count(@tesseract.slice(line, 0, at))
+      let reason = @tesseract.trim_ws(
+        @tesseract.slice(line, at + 3, line.length()),
       )
       unparsed.push({ reason, count, examples: [], })
       continue
     }
-    if @sudokudb.starts_with(line, "e.g. ") {
+    if @tesseract.starts_with(line, "e.g. ") {
       if unparsed.length() > 0 {
         let last = unparsed.length() - 1
-        unparsed[last].examples.push(@sudokudb.slice(line, 5, line.length()))
+        unparsed[last].examples.push(@tesseract.slice(line, 5, line.length()))
       }
       continue
     }
-    if @sudokudb.starts_with(line, "... ") {
+    if @tesseract.starts_with(line, "... ") {
       // `...  <k> more in this file` - the tool truncated this file's list.
       continue
     }
-    if @sudokudb.starts_with(line, "in ") {
+    if @tesseract.starts_with(line, "in ") {
       // A virtual-stack frame under a finding: `  in main() at main.mbt:87`.
       //
       // Redundant with `parse_finding`'s own requirement of a ` - ` followed by

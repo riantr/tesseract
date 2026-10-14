@@ -2,7 +2,7 @@
 /// The 4D store: 81 cells in a lattice, addressed by position or by
 /// coordinate.
 ///
-/// Behaviour is carried over from the C# `SudokuDB` model — cyclic insert
+/// Behaviour is carried over from the C# `Tesseract` model — cyclic insert
 /// cursor, key/pattern/position selects, key-or-position delete, the
 /// `TRUNCATE`-style clear — with three deliberate changes:
 ///
@@ -54,19 +54,19 @@ pub fn filter_matches(f : CoordFilter, c : Coords) -> Bool {
 }
 
 ///|
-/// The 4D SudokuDB.
-pub struct SudokuDB {
+/// The 4D Tesseract.
+pub struct Tesseract {
   db_name : String
   cells : Array[GridCell]
   mut current_position : Int
-  logger : SudokuDBLogger
+  logger : TesseractLogger
 }
 
 ///|
 /// An empty 81-cell database.
 ///
 /// The cursor starts at position 1, matching the C# constructor.
-pub fn new_db(name : String, logger : SudokuDBLogger) -> SudokuDB {
+pub fn new_db(name : String, logger : TesseractLogger) -> Tesseract {
   let cells : Array[GridCell] = []
   let mut i = FIRST_POSITION
   while i <= LAST_POSITION {
@@ -78,13 +78,13 @@ pub fn new_db(name : String, logger : SudokuDBLogger) -> SudokuDB {
 
 ///|
 /// The database's logger, for callers that want to read it back.
-pub fn SudokuDB::get_logger(db : SudokuDB) -> SudokuDBLogger {
+pub fn Tesseract::get_logger(db : Tesseract) -> TesseractLogger {
   db.logger
 }
 
 ///|
 /// The cell at 1-based `position`, or `None` when out of range.
-pub fn SudokuDB::cell_at(db : SudokuDB, position : Int) -> GridCell? {
+pub fn Tesseract::cell_at(db : Tesseract, position : Int) -> GridCell? {
   if !position_in_bounds(position) {
     return None
   }
@@ -93,7 +93,7 @@ pub fn SudokuDB::cell_at(db : SudokuDB, position : Int) -> GridCell? {
 
 ///|
 /// Number of cells holding a record.
-pub fn SudokuDB::occupancy(db : SudokuDB) -> Int {
+pub fn Tesseract::occupancy(db : Tesseract) -> Int {
   let mut n = 0
   let mut i = 0
   while i < db.cells.length() {
@@ -107,7 +107,7 @@ pub fn SudokuDB::occupancy(db : SudokuDB) -> Int {
 
 ///|
 /// Number of cells carrying a sudoku digit.
-pub fn SudokuDB::digit_count(db : SudokuDB) -> Int {
+pub fn Tesseract::digit_count(db : Tesseract) -> Int {
   let mut n = 0
   let mut i = 0
   while i < db.cells.length() {
@@ -125,8 +125,8 @@ pub fn SudokuDB::digit_count(db : SudokuDB) -> Int {
 /// The line rule is what a 3^4 sudoku can actually enforce: digits live in
 /// `1..3` and each axis-parallel line of 3 cells must hold all three. Two cells
 /// share such a line exactly when they agree on three of four coordinates.
-pub fn SudokuDB::digit_conflict(
-  db : SudokuDB,
+pub fn Tesseract::digit_conflict(
+  db : Tesseract,
   position : Int,
   digit : Int,
 ) -> GridCell? {
@@ -146,7 +146,7 @@ pub fn SudokuDB::digit_conflict(
 
 ///|
 /// Moves the insert cursor. Out-of-range positions are ignored, as in C#.
-pub fn SudokuDB::set_position(db : SudokuDB, position : Int) -> Unit {
+pub fn Tesseract::set_position(db : Tesseract, position : Int) -> Unit {
   if position_in_bounds(position) {
     db.current_position = position
     db.logger.log_info("Position set to: " + position.to_string(), Map([]))
@@ -155,20 +155,20 @@ pub fn SudokuDB::set_position(db : SudokuDB, position : Int) -> Unit {
 
 ///|
 /// Occupancy snapshot.
-pub fn SudokuDB::status(db : SudokuDB) -> DBStatus {
+pub fn Tesseract::status(db : Tesseract) -> DBStatus {
   {
     db_name: db.db_name,
     total_cells: TOTAL,
-    current_count: SudokuDB::occupancy(db),
+    current_count: Tesseract::occupancy(db),
     current_position: db.current_position,
-    digit_count: SudokuDB::digit_count(db),
+    digit_count: Tesseract::digit_count(db),
   }
 }
 
 ///|
 /// Records that a stored value was replaced in place.
-fn SudokuDB::log_operation(
-  db : SudokuDB,
+fn Tesseract::log_operation(
+  db : Tesseract,
   operation : String,
   success : Bool,
   key : String,
@@ -186,14 +186,14 @@ fn SudokuDB::log_operation(
 /// `target` addresses an explicit cell; `None` writes at the insert cursor and
 /// then advances it, which is the C# cyclic behaviour. `digit` is 0 for "no
 /// sudoku digit", or 1..3 to place one.
-pub fn SudokuDB::insert(
-  db : SudokuDB,
+pub fn Tesseract::insert(
+  db : Tesseract,
   key : String,
   value : String,
   target : Int?,
   digit : Int,
 ) -> DBResponse {
-  SudokuDB::insert_stamped(db, key, value, target, digit, None)
+  Tesseract::insert_stamped(db, key, value, target, digit, None)
 }
 
 ///|
@@ -201,15 +201,15 @@ pub fn SudokuDB::insert(
 ///
 /// `None` is the ordinary path, where the timestamp comes from the logger's
 /// sequence counter. The importers pass the value the file carried, which is
-/// what makes a `.sdb` round trip byte-identical instead of only structurally
+/// what makes a `.tsr` round trip byte-identical instead of only structurally
 /// similar - without it the stamps depend on how many log lines happened to be
 /// written before the load.
 ///
-/// Public so that `src/sudokudb_sqlite` can do the same for a `.db`. It was
+/// Public so that `src/tesseract_sqlite` can do the same for a `.db`. It was
 /// private while that was the only caller, which left `.db` the one import
 /// format that could not restore what it stored.
-pub fn SudokuDB::insert_stamped(
-  db : SudokuDB,
+pub fn Tesseract::insert_stamped(
+  db : Tesseract,
   key : String,
   value : String,
   target : Int?,
@@ -234,7 +234,7 @@ pub fn SudokuDB::insert_stamped(
     return err_response("INVALID_POSITION", msg)
   }
   if digit != NO_DIGIT {
-    match SudokuDB::digit_conflict(db, position, digit) {
+    match Tesseract::digit_conflict(db, position, digit) {
       Some(other) => {
         let msg = digit_conflict_message(digit, other.position)
         db.logger.log_error("INSERT: " + msg, Map([]))
@@ -260,7 +260,7 @@ pub fn SudokuDB::insert_stamped(
     },
     digit,
   }
-  SudokuDB::log_operation(db, "INSERT", true, key, position)
+  Tesseract::log_operation(db, "INSERT", true, key, position)
   let mut response = ok_response("INSERT")
   response = {
     success: response.success,
@@ -325,8 +325,8 @@ pub fn like_matches(value : String, pattern : String) -> Bool {
 /// `pattern` is a LIKE pattern, not a bare substring: `%x%` is a contains test
 /// and anything else is equality, matching what `value LIKE '...'` means in SQL.
 /// An empty `pattern` is "no predicate".
-pub fn SudokuDB::select(
-  db : SudokuDB,
+pub fn Tesseract::select(
+  db : Tesseract,
   key : String,
   pattern : String,
   position_filter : Int?,
@@ -363,7 +363,7 @@ pub fn SudokuDB::select(
     }
     i = i + 1
   }
-  SudokuDB::log_operation(db, "SELECT", true, key, 0)
+  Tesseract::log_operation(db, "SELECT", true, key, 0)
   let base = ok_response("SELECT")
   {
     success: base.success,
@@ -384,8 +384,8 @@ pub fn SudokuDB::select(
 /// With `position_filter` the named cell must be occupied; without it, the
 /// first occupied cell carrying `key` is used. Out-of-range positions get a
 /// clean `POSITION_OUT_OF_RANGE` rather than the C# `KeyNotFoundException`.
-pub fn SudokuDB::update(
-  db : SudokuDB,
+pub fn Tesseract::update(
+  db : Tesseract,
   key : String,
   value : String,
   position_filter : Int?,
@@ -443,7 +443,7 @@ pub fn SudokuDB::update(
     None => cell.digit
   }
   if new_digit != NO_DIGIT && new_digit != cell.digit {
-    match SudokuDB::digit_conflict(db, position, new_digit) {
+    match Tesseract::digit_conflict(db, position, new_digit) {
       Some(other) => {
         let msg = digit_conflict_message(new_digit, other.position)
         db.logger.log_error("UPDATE: " + msg, Map([]))
@@ -459,7 +459,7 @@ pub fn SudokuDB::update(
     timestamp: db.logger.seq.to_string(),
     digit: new_digit,
   }
-  SudokuDB::log_operation(db, "UPDATE", true, cell.key, position)
+  Tesseract::log_operation(db, "UPDATE", true, cell.key, position)
   let base = ok_response("UPDATE")
   {
     success: base.success,
@@ -487,7 +487,7 @@ fn digit_conflict_message(digit : Int, position : Int) -> String {
 
 ///|
 /// First occupied position carrying `key`, scanning in position order.
-pub fn find_by_key(db : SudokuDB, key : String) -> Int? {
+pub fn find_by_key(db : Tesseract, key : String) -> Int? {
   if key == "" {
     return None
   }
@@ -507,7 +507,7 @@ pub fn find_by_key(db : SudokuDB, key : String) -> Int? {
 /// Descending matches the C# comment about deleting high positions first; with
 /// a fixed lattice it is only about reporting order, but keeping it costs
 /// nothing and keeps the exported SQL stable.
-pub fn find_all_by_key(db : SudokuDB, key : String) -> Array[Int] {
+pub fn find_all_by_key(db : Tesseract, key : String) -> Array[Int] {
   let out : Array[Int] = []
   if key == "" {
     return out
@@ -528,8 +528,8 @@ pub fn find_all_by_key(db : SudokuDB, key : String) -> Array[Int] {
 /// A `key` plus `position` removes that one cell; a bare `key` removes every
 /// cell carrying it; a bare `position` clears that cell; and no arguments at
 /// all empties the lattice and rewinds the cursor to 1.
-pub fn SudokuDB::delete(
-  db : SudokuDB,
+pub fn Tesseract::delete(
+  db : Tesseract,
   key : String,
   position_filter : Int?,
 ) -> DBResponse {
@@ -564,7 +564,7 @@ pub fn SudokuDB::delete(
         first_position = p
       }
       db.cells[p - 1] = empty_cell(p)
-      SudokuDB::log_operation(db, "DELETE", true, key, p)
+      Tesseract::log_operation(db, "DELETE", true, key, p)
       affected = affected + 1
       i = i + 1
     }
@@ -580,7 +580,7 @@ pub fn SudokuDB::delete(
       return err_response("POSITION_EMPTY", "No data at specified position")
     }
     first_position = p
-    SudokuDB::log_operation(db, "DELETE", true, db.cells[p - 1].key, p)
+    Tesseract::log_operation(db, "DELETE", true, db.cells[p - 1].key, p)
     db.cells[p - 1] = empty_cell(p)
     affected = 1
   } else {
@@ -590,7 +590,7 @@ pub fn SudokuDB::delete(
       i = i + 1
     }
     db.current_position = FIRST_POSITION
-    SudokuDB::log_operation(db, "DELETE", true, "", 0)
+    Tesseract::log_operation(db, "DELETE", true, "", 0)
   }
   let base = ok_response("DELETE")
   {
@@ -608,8 +608,8 @@ pub fn SudokuDB::delete(
 
 ///|
 /// Occupied cells on the axis-parallel line through `position` along `axis`.
-pub fn SudokuDB::line_query(
-  db : SudokuDB,
+pub fn Tesseract::line_query(
+  db : Tesseract,
   position : Int,
   axis : Int,
 ) -> DBResponse {
@@ -644,8 +644,8 @@ pub fn SudokuDB::line_query(
 
 ///|
 /// Occupied cells in the 27-cell slab sharing `position`'s `axis` coordinate.
-pub fn SudokuDB::slab_query(
-  db : SudokuDB,
+pub fn Tesseract::slab_query(
+  db : Tesseract,
   position : Int,
   axis : Int,
 ) -> DBResponse {
@@ -680,7 +680,7 @@ pub fn SudokuDB::slab_query(
 
 ///|
 /// Occupied cells among the 8 that share a line with `position`.
-pub fn SudokuDB::peer_query(db : SudokuDB, position : Int) -> DBResponse {
+pub fn Tesseract::peer_query(db : Tesseract, position : Int) -> DBResponse {
   let rows : Array[Record] = []
   match coords_of(position) {
     Some(c) =>

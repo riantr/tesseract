@@ -1,5 +1,5 @@
 ///|
-/// The SudokuDB window.
+/// The Tesseract window.
 ///
 /// The page is shipped as an asset under `cmd/gui/web/`, resolved against the
 /// application resource directory: the repository root when `proton_cli dev`
@@ -18,12 +18,12 @@ const PAGE : String = "cmd/gui/web/index.html"
 /// not, because debug mode is off by default. Setting this makes a packaged
 /// build behave the same way, which is what lets the packaged path be checked
 /// with the same tooling as the dev path.
-const DEBUG_ENV : String = "SUDOKUDB_DEBUG"
+const DEBUG_ENV : String = "TESSERACT_DEBUG"
 
 ///|
 async fn main {
   let debug = @env.get_env_var(DEBUG_ENV) is Some(_)
-  @proton.asset("SudokuDB", PAGE, width=1240, height=1000, resizable=true)
+  @proton.asset("Tesseract", PAGE, width=1240, height=1000, resizable=true)
   .load_config()
   .debug(enabled=debug)
   .commands(fn(registrar) raise { register(registrar) })

@@ -7,19 +7,19 @@
 /// closed form, because a single known-good fixture cannot distinguish
 /// "balance follows from the rule" from "this one fixture happens to balance".
 test "the closed-form solution satisfies both line and slab constraints" {
-  let d = @sudokudb.canonical_digits()
-  assert_eq(@sudokudb.line_violations(d).length(), 0)
-  assert_eq(@sudokudb.slab_violations(d).length(), 0)
-  assert_true(@sudokudb.is_solution(d))
+  let d = @tesseract.canonical_digits()
+  assert_eq(@tesseract.line_violations(d).length(), 0)
+  assert_eq(@tesseract.slab_violations(d).length(), 0)
+  assert_true(@tesseract.is_solution(d))
 }
 
 ///|
 test "canonical digits are never 0 and stay in 1..3" {
-  let d = @sudokudb.canonical_digits()
+  let d = @tesseract.canonical_digits()
   let mut bad = 0
   let mut i = 0
-  while i < @sudokudb.TOTAL {
-    if d[i] < 1 || d[i] > @sudokudb.MAX_DIGIT {
+  while i < @tesseract.TOTAL {
+    if d[i] < 1 || d[i] > @tesseract.MAX_DIGIT {
       bad = bad + 1
     }
     i = i + 1
@@ -29,25 +29,25 @@ test "canonical digits are never 0 and stay in 1..3" {
 
 ///|
 test "backtracking finds independent solutions, each line-valid" {
-  let solutions = @sudokudb.solve_lattice(3)
+  let solutions = @tesseract.solve_lattice(3)
   assert_eq(solutions.length(), 3)
   let mut i = 0
   while i < solutions.length() {
-    assert_eq(@sudokudb.line_violations(solutions[i]).length(), 0)
+    assert_eq(@tesseract.line_violations(solutions[i]).length(), 0)
     i = i + 1
   }
 }
 
 ///|
 test "backtracking solutions are not all the closed form" {
-  let solutions = @sudokudb.solve_lattice(3)
-  let canonical = @sudokudb.canonical_digits()
+  let solutions = @tesseract.solve_lattice(3)
+  let canonical = @tesseract.canonical_digits()
   let mut identical = 0
   let mut i = 0
   while i < solutions.length() {
     let mut same = true
     let mut k = 0
-    while k < @sudokudb.TOTAL {
+    while k < @tesseract.TOTAL {
       if solutions[i][k] != canonical[k] {
         same = false
       }
@@ -63,64 +63,60 @@ test "backtracking solutions are not all the closed form" {
 
 ///|
 test "slab balance follows from the line rule on independent solutions" {
-  let solutions = @sudokudb.solve_lattice(5)
+  let solutions = @tesseract.solve_lattice(5)
   assert_eq(solutions.length(), 5)
   let mut i = 0
   while i < solutions.length() {
-    assert_eq(@sudokudb.line_violations(solutions[i]).length(), 0)
-    assert_eq(@sudokudb.slab_violations(solutions[i]).length(), 0)
+    assert_eq(@tesseract.line_violations(solutions[i]).length(), 0)
+    assert_eq(@tesseract.slab_violations(solutions[i]).length(), 0)
     i = i + 1
   }
 }
 
 ///|
 test "the checker actually catches a broken line" {
-  let d = @sudokudb.canonical_digits()
-  assert_eq(@sudokudb.line_violations(d).length(), 0)
-  @sudokudb.set_digit(d, 2, @sudokudb.digit_at(d, 1))
-  assert_true(@sudokudb.line_violations(d).length() > 0)
-  assert_false(@sudokudb.is_solution(d))
+  let d = @tesseract.canonical_digits()
+  assert_eq(@tesseract.line_violations(d).length(), 0)
+  @tesseract.set_digit(d, 2, @tesseract.digit_at(d, 1))
+  assert_true(@tesseract.line_violations(d).length() > 0)
+  assert_false(@tesseract.is_solution(d))
 }
 
 ///|
 test "a line of identical digits is reported once per line, not per cell" {
-  let d = @sudokudb.empty_digits()
-  @sudokudb.set_digit(d, 1, 2)
-  @sudokudb.set_digit(d, 2, 2)
-  @sudokudb.set_digit(d, 3, 2)
-  assert_eq(@sudokudb.line_violations(d).length(), 1)
+  let d = @tesseract.empty_digits()
+  @tesseract.set_digit(d, 1, 2)
+  @tesseract.set_digit(d, 2, 2)
+  @tesseract.set_digit(d, 3, 2)
+  assert_eq(@tesseract.line_violations(d).length(), 1)
 }
 
 ///|
 test "an empty lattice has no violations" {
-  let d = @sudokudb.empty_digits()
-  assert_eq(@sudokudb.line_violations(d).length(), 0)
-  assert_eq(@sudokudb.slab_violations(d).length(), 0)
+  let d = @tesseract.empty_digits()
+  assert_eq(@tesseract.line_violations(d).length(), 0)
+  assert_eq(@tesseract.slab_violations(d).length(), 0)
 }
 
 ///|
 test "digit_at ignores out-of-range positions instead of trapping" {
-  let d = @sudokudb.canonical_digits()
-  assert_eq(@sudokudb.digit_at(d, 0), @sudokudb.NO_DIGIT)
-  assert_eq(@sudokudb.digit_at(d, 82), @sudokudb.NO_DIGIT)
-  assert_true(@sudokudb.digit_at(d, 1) >= 1)
+  let d = @tesseract.canonical_digits()
+  assert_eq(@tesseract.digit_at(d, 0), @tesseract.NO_DIGIT)
+  assert_eq(@tesseract.digit_at(d, 82), @tesseract.NO_DIGIT)
+  assert_true(@tesseract.digit_at(d, 1) >= 1)
 }
 
 ///|
 test "the canonical solution shifts by one along every axis" {
-  let d = @sudokudb.canonical_digits()
+  let d = @tesseract.canonical_digits()
   let mut axis = 0
-  while axis < @sudokudb.DIM {
-    for c in @sudokudb.all_coords() {
-      if @sudokudb.coord_at(c, axis) < @sudokudb.SIDE - 1 {
-        let next = @sudokudb.with_coord(
-          c,
-          axis,
-          @sudokudb.coord_at(c, axis) + 1,
-        )
-        let here = @sudokudb.digit_at(d, @sudokudb.position_of(c))
-        let there = @sudokudb.digit_at(d, @sudokudb.position_of(next))
-        assert_eq(there, here % @sudokudb.SIDE + 1)
+  while axis < @tesseract.DIM {
+    for c in @tesseract.all_coords() {
+      if @tesseract.coord_at(c, axis) < @tesseract.SIDE - 1 {
+        let next = @tesseract.with_coord(c, axis, @tesseract.coord_at(c, axis) + 1)
+        let here = @tesseract.digit_at(d, @tesseract.position_of(c))
+        let there = @tesseract.digit_at(d, @tesseract.position_of(next))
+        assert_eq(there, here % @tesseract.SIDE + 1)
       }
     }
     axis = axis + 1
@@ -129,13 +125,13 @@ test "the canonical solution shifts by one along every axis" {
 
 ///|
 test "every line of the canonical solution holds all three digits" {
-  let d = @sudokudb.canonical_digits()
+  let d = @tesseract.canonical_digits()
   let mut incomplete = 0
-  for line in @sudokudb.all_lines() {
-    let seen : Array[Int] = []
+  for line in @tesseract.all_lines() {
+    let seen : Array[Int32] = []
     let mut i = 0
     while i < line.length() {
-      let digit = d[@sudokudb.index0(line[i])]
+      let digit = d[@tesseract.index0(line[i])]
       if !seen.contains(digit) {
         seen.push(digit)
       }
@@ -157,15 +153,15 @@ test "every line of the canonical solution holds all three digits" {
 /// wrong with that lattice - the line check skips empty cells, and 20 is not a
 /// multiple of 3, so no count distribution could be "balanced" for it.
 test "a partially filled slab is not reported as imbalanced" {
-  let d = @sudokudb.canonical_digits()
-  let slab = @sudokudb.slab_through(@sudokudb.coords(0, 0, 0, 0), 0)
+  let d = @tesseract.canonical_digits()
+  let slab = @tesseract.slab_through(@tesseract.coords(0, 0, 0, 0), 0)
   assert_eq(slab.length(), 27)
   let mut i = 0
   while i < 7 {
-    @sudokudb.set_digit(d, @sudokudb.position_of(slab[i]), @sudokudb.NO_DIGIT)
+    @tesseract.set_digit(d, @tesseract.position_of(slab[i]), @tesseract.NO_DIGIT)
     i = i + 1
   }
-  assert_eq(@sudokudb.line_violations(d).length(), 0)
-  assert_eq(@sudokudb.slab_violations(d).length(), 0)
-  assert_true(@sudokudb.is_solution(d))
+  assert_eq(@tesseract.line_violations(d).length(), 0)
+  assert_eq(@tesseract.slab_violations(d).length(), 0)
+  assert_true(@tesseract.is_solution(d))
 }

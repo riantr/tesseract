@@ -1,5 +1,5 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "riantr/tesseract/src/sudokudb_sa"
+package "riantr/tesseract/src/tesseract_sa"
 
 import {
   "moonbit-community/sqlite3",

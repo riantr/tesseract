@@ -1,5 +1,5 @@
-﻿$ErrorActionPreference = 'Stop'
-$root = 'D:/src/MiniMax/Projects/tesseract/sudokudb-mbt'
+$ErrorActionPreference = 'Stop'
+$root = Split-Path $PSScriptRoot -Parent
 
 function Invoke-Sa([string[]]$saArgs) {
   $psi = New-Object System.Diagnostics.ProcessStartInfo
@@ -18,7 +18,7 @@ function Invoke-Sa([string[]]$saArgs) {
   $p.WaitForExit()
   Write-Output ("moon " + $psi.Arguments + "   [exit " + $p.ExitCode + "]")
   Write-Output $stdout.TrimEnd()
-  $e = ($stderr -split "`n" | Where-Object { $_ -notmatch 'SudokuDB - static analysis store' -and $_.Trim().Length -gt 0 })
+  $e = ($stderr -split "`n" | Where-Object { $_ -notmatch 'Tesseract - static analysis store' -and $_.Trim().Length -gt 0 })
   if ($e) { Write-Output ("  stderr: " + ($e -join ' | ')) }
   Write-Output ""
 }

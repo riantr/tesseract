@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>SudokuDB · 4D</title>
+    <title>Tesseract · 4D</title>
     <style>
       :root {
         color-scheme: dark;
@@ -476,7 +476,7 @@
 
   <body>
     <header>
-      <h1>SudokuDB<small>3×3×3×3 · 81 格 · 108 线</small></h1>
+      <h1>Tesseract<small>3×3×3×3 · 81 格 · 108 线</small></h1>
       <div class="chips" id="chips"></div>
     </header>
 
@@ -588,18 +588,18 @@
           </div>
           <div class="hint">
             两个红色按钮都会先清空整个点阵。「示例数据巡演」的第一条语句就是
-            <code>DELETE FROM sudokuDB;</code>，所以它无法保留现有数据。
+            <code>DELETE FROM tesseract;</code>，所以它无法保留现有数据。
           </div>
         </section>
 
         <section>
           <h2>SQL 控制台</h2>
-          <textarea id="sql" rows="3">SELECT * FROM sudokuDB;</textarea>
+          <textarea id="sql" rows="3">SELECT * FROM tesseract;</textarea>
           <div class="btns" style="margin-top: 8px">
             <button class="primary" id="btnSql">执行</button>
-            <button data-sql="SELECT * FROM sudokuDB;">全表 SELECT</button>
-            <button data-sql="SELECT * FROM sudokuDB WHERE digit = 1;">有数位 1 的格</button>
-            <button data-sql="SELECT * FROM sudokuDB AT (0,0,0,*);">切片 AT (0,0,0,*)</button>
+            <button data-sql="SELECT * FROM tesseract;">全表 SELECT</button>
+            <button data-sql="SELECT * FROM tesseract WHERE digit = 1;">有数位 1 的格</button>
+            <button data-sql="SELECT * FROM tesseract AT (0,0,0,*);">切片 AT (0,0,0,*)</button>
           </div>
         </section>
       </div>
@@ -621,7 +621,7 @@
             <div style="flex: 0 0 130px">
               <label>格式</label>
               <select id="ioFormat">
-                <option value="sdb">.sdb (JSON)</option>
+                <option value="tsr">.tsr (JSON)</option>
                 <option value="md">Markdown 表</option>
                 <option value="sql">SQL dump</option>
                 <option value="lattice">ASCII 点阵</option>

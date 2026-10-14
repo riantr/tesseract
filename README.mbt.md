@@ -1,9 +1,9 @@
-# SudokuDB — 4D (3x3x3x3)
+# Tesseract — 4D (3x3x3x3)
 
 A tiny multi-key JSON value database stored over a **3x3x3x3 sudoku lattice**,
 with a SQL surface and sudoku digit constraints.
 
-This is the MoonBit port of the C#/Avalonia `sudokuDB` project, and the C#
+This is the MoonBit port of the C#/Avalonia `tesseract` project, and the C#
 project itself has been lifted to the same 4D lattice. The two implementations
 were run against the same 26-statement sequence and produce **identical** output —
 same success flags, error codes, positions, coordinates and digits.
@@ -21,7 +21,7 @@ Two numbering schemes coexist deliberately:
 
 - **coordinates** `(x, y, z, w)` are 0-based, matching array indexing;
 - **positions** `1..81` are 1-based, matching the C# `grid_position` column, so
-  stored SQL and `.sdb` files keep the same shape.
+  stored SQL and `.tsr` files keep the same shape.
 
 ```
 position = 1 + x*27 + y*9 + z*3 + w      (row-major, x slowest)
@@ -62,7 +62,7 @@ through all three digits.
 ## Layout
 
 ```
-src/sudokudb/
+src/tesseract/
   text.mbt       ASCII helpers: trim, case folding, integer parse, split/join
   coords.mbt     the lattice: coordinates, positions, neighbours, shares_line
   lattice.mbt    lines, slabs, planes, peers
@@ -71,7 +71,7 @@ src/sudokudb/
   logger.mbt     bounded log ring (100 entries, matching the C# logger)
   db.mbt         the 81-cell store
   sql.mbt        the SQL surface
-  serialize.mbt  .sdb JSON, .md table, .sql dump, lattice rendering
+  serialize.mbt  .tsr JSON, .md table, .sql dump, lattice rendering
 cmd/main/        command line front end
 cmd/gui/         the proton desktop window
   main.mbt       the App: entry point, page asset, command registration
@@ -103,11 +103,11 @@ back, so the store's rules still decide everything:
 | `app:write` | `insert` / `update` / `delete` / `clear` / `cursor`, plus `solve` and `demo` |
 | `app:query` | one SQL statement, returning rows and a repaint |
 | `app:geometry` | line / slab / peers around a cell, with the covered positions |
-| `app:export` | `.sdb`, `.md`, `.sql`, or the ASCII lattice |
-| `app:import` | load a `.sdb`, `.md` or `.sql` dump back in |
+| `app:export` | `.tsr`, `.md`, `.sql`, or the ASCII lattice |
+| `app:import` | load a `.tsr`, `.md` or `.sql` dump back in |
 
 A digit collision in the window returns the same `SUDOKU_CONFLICT` and the same
-message the CLI prints, because it is the same `SudokuDB::insert` call. `solve`
+message the CLI prints, because it is the same `Tesseract::insert` call. `solve`
 and `demo` run the CLI's `.solve` and `.demo` statement for statement, and the
 smoke test pins the end state: after `demo` the store holds 2 records and 1
 digit, with `user_002` still at `{"age": 30}` — the same numbers
@@ -137,13 +137,13 @@ nothing but the string `0`. And 「无」 in the digit select is sent as an expl
 would have kept the old one, so the select and the digit row disagreed about
 the same intent.
 
-示例数据巡演 starts with `DELETE FROM sudokuDB;`, so it is marked as destructive
+示例数据巡演 starts with `DELETE FROM tesseract;`, so it is marked as destructive
 and its button says 「先清空」: it cannot preserve what is already stored.
 
 The page picks one of the nine `(x, y)` planes and shows it as a 3x3 grid over
 `(z, w)` — one classic sudoku box, addressed exactly as the library does.
 
-![The SudokuDB window, filled from the closed-form solution](docs-window.png)
+![The Tesseract window, filled from the closed-form solution](docs-window.png)
 
 Two things about that bridge are worth writing down, because both cost a debugging
 round:
@@ -168,40 +168,40 @@ SUDOKU_CONFLICT (Digit 1 already used at position 55)`.
 The C# statement shapes and error codes still work, so existing dumps load:
 
 ```sql
-CREATE DATABASE sudokuDB;
-INSERT INTO sudokuDB (key, value) VALUES ('user_001', '{"age": 25}');
-SELECT * FROM sudokuDB WHERE key = 'user_001';
-SELECT * FROM sudokuDB WHERE value LIKE '%age%';
-UPDATE sudokuDB SET value = '{"age": 26}' WHERE key = 'user_001';
-DELETE FROM sudokuDB WHERE key = 'user_001';
+CREATE DATABASE tesseract;
+INSERT INTO tesseract (key, value) VALUES ('user_001', '{"age": 25}');
+SELECT * FROM tesseract WHERE key = 'user_001';
+SELECT * FROM tesseract WHERE value LIKE '%age%';
+UPDATE tesseract SET value = '{"age": 26}' WHERE key = 'user_001';
+DELETE FROM tesseract WHERE key = 'user_001';
 ```
 
 The 4D additions:
 
 ```sql
 -- explicit address, as a position or as coordinates
-INSERT INTO sudokuDB (key, value) VALUES ('k', 'v') AT 42;
-INSERT INTO sudokuDB (key, value) VALUES ('k', 'v') AT (1,2,0,2);
+INSERT INTO tesseract (key, value) VALUES ('k', 'v') AT 42;
+INSERT INTO tesseract (key, value) VALUES ('k', 'v') AT (1,2,0,2);
 
 -- sudoku digits, enforced against the lines through the cell
-INSERT INTO sudokuDB (key, value, digit) VALUES ('k', 'v', 2);
-UPDATE sudokuDB SET value = 'v', digit = 3 WHERE grid_position = 42;
+INSERT INTO tesseract (key, value, digit) VALUES ('k', 'v', 2);
+UPDATE tesseract SET value = 'v', digit = 3 WHERE grid_position = 42;
 
 -- coordinate predicates
-SELECT * FROM sudokuDB WHERE x = 1 AND y = 2;
-SELECT * FROM sudokuDB WHERE digit = 1;
+SELECT * FROM tesseract WHERE x = 1 AND y = 2;
+SELECT * FROM tesseract WHERE digit = 1;
 
 -- geometry
-SELECT * FROM sudokuDB WHERE line(42, 0);   -- the 3-cell axis-parallel line
-SELECT * FROM sudokuDB WHERE slab(42, 1);   -- the 27-cell slab
-SELECT * FROM sudokuDB WHERE peers(42);     -- the 8 cells sharing a line
+SELECT * FROM tesseract WHERE line(42, 0);   -- the 3-cell axis-parallel line
+SELECT * FROM tesseract WHERE slab(42, 1);   -- the 27-cell slab
+SELECT * FROM tesseract WHERE peers(42);     -- the 8 cells sharing a line
 ```
 
 Every condition in a `WHERE` applies, including alongside a geometry predicate —
 `line(42, 0) AND digit = 2` is the digit-2 cell of that line, not the whole line:
 
 ```sql
-SELECT * FROM sudokuDB WHERE peers(42) AND key = 'user_001';
+SELECT * FROM tesseract WHERE peers(42) AND key = 'user_001';
 ```
 
 `LIKE` follows the SQL spelling rather than being a substring test: `%x%` is a
@@ -237,8 +237,8 @@ moon run cmd/main -- .help
 moon run cmd/main -- .status
 moon run cmd/main -- .demo
 moon run cmd/main -- .solve .verify
-moon run cmd/main -- "INSERT INTO sudokuDB (key,value) VALUES ('a','1') AT 5;" "SELECT * FROM sudokuDB;"
-moon run cmd/main -- .export sdb > dump.sdb
+moon run cmd/main -- "INSERT INTO tesseract (key,value) VALUES ('a','1') AT 5;" "SELECT * FROM tesseract;"
+moon run cmd/main -- .export tsr > dump.tsr
 ```
 
 ### Persistence
@@ -247,15 +247,15 @@ moon run cmd/main -- .export sdb > dump.sdb
 it. It is a **separate binary**, not a flag on `cmd/main`, because
 [`moonbit-community/sqlite3`](https://mooncakes.io/docs/moonbit-community/sqlite3@0.2.3)
 builds for `native` and `wasm` only — adding it to `cmd/main` or to
-`src/sudokudb` would drop those packages from `js` and `wasm-gc` and break the
+`src/tesseract` would drop those packages from `js` and `wasm-gc` and break the
 zero-dependency core. `cmd/main` is untouched, and so is every behaviour in
-`src/sudokudb`; the one change to the library is that `SudokuDB::insert_stamped`
+`src/tesseract`; the one change to the library is that `Tesseract::insert_stamped`
 is now `pub` rather than private, so this adapter can restore timestamps the way
-`import_sdb` already did.
+`import_tsr` already did.
 
 ```sh
 moon run cmd/persist --target native -- .open sudoku.db \
-  "INSERT INTO sudokuDB (key,value,digit) VALUES ('user_001','{\"age\": 25}',1) AT 1;" \
+  "INSERT INTO tesseract (key,value,digit) VALUES ('user_001','{\"age\": 25}',1) AT 1;" \
   .save .status .verify
 
 # a second process reads the same file back
@@ -279,13 +279,13 @@ Three things to know before relying on it:
   and `.save`; nothing is written back on exit. A session that opens a file and
   never saves says so rather than losing the work quietly.
 - **Timestamps round trip.** Each cell is written with its timestamp and loaded
-  back through the public `SudokuDB::insert_stamped`, the same call `import_sdb`
+  back through the public `Tesseract::insert_stamped`, the same call `import_tsr`
   makes, so a reopened `.db` carries the stamps it was saved with instead of ones
   minted from this process's log counter. What does not carry over is the *log*:
   sequence numbers continue from where the new process started, so stamps made
-  after a load do not continue the saved file's numbering. **`.sdb` is the format
+  after a load do not continue the saved file's numbering. **`.tsr` is the format
   when that continuity matters** — `.db` restores what it stored.
-- **A load replaces, it does not merge**, the same way `import_sdb` clears first.
+- **A load replaces, it does not merge**, the same way `import_tsr` clears first.
   Rows the store refuses — a hand-edited file can hold two cells with the same
   digit on a shared line — are reported as rejected rather than dropped, because
   "loaded 3 of 4" and "loaded 4" are different answers.
@@ -298,7 +298,7 @@ a shell loop over the same commands:
 A command and its argument are **two arguments**, as a shell splits them —
 `.export md` is `.export` and `md`, and the two are rejoined before matching.
 `cli-smoke.mjs` covers that, because matching only the joined form is what once
-let `.export md` write an `.sdb` document under a `.md` name and `.open` fall
+let `.export md` write an `.tsr` document under a `.md` name and `.open` fall
 through to the SQL parser as `Unsupported SQL statement: .open`.
 
 ```sh
@@ -307,7 +307,7 @@ while read -r line; do moon run cmd/main -- "$line"; done
 
 ### Static analysis
 
-`src/sudokudb_sa` and `cmd/sa` run
+`src/tesseract_sa` and `cmd/sa` run
 [`riantr/moonbit_static_analysis`](https://mooncakes.io/) over this project and
 keep the result in a SQLite database, so a scan is queryable history rather than
 text that scrolled past.
@@ -370,7 +370,7 @@ total)`, and that identity does not hold. On this project `4 + 67 + 5122 +
 `withheld`. `sa_runs.total` stores what the tool printed rather than a
 recomputation.
 
-The counts quoted above come from `src/sudokudb_sa/testdata_scan.tsv`, a
+The counts quoted above come from `src/tesseract_sa/testdata_scan.tsv`, a
 captured run of the tool that is kept frozen so the parser has a fixed input to
 be tested against. Re-running the analyzer today gives slightly different
 numbers — the tree has changed — and that is expected; refresh the capture with
@@ -416,7 +416,7 @@ which lands the page exactly where `@proton.asset` looks for it:
 ```
 
 `proton_cli dev` opens a Chromium DevTools endpoint; a packaged build does not,
-because debug mode is off by default. Set `SUDOKUDB_DEBUG=1` to get the same
+because debug mode is off by default. Set `TESSERACT_DEBUG=1` to get the same
 endpoint out of a packaged build — that is how the packaged path is checked with
 the same tooling as the dev path.
 
@@ -433,7 +433,7 @@ node gui-smoke.mjs
 
 | format | role |
 |---|---|
-| `.sdb` | JSON, the native save format; round-trips key, value, position, digit and timestamp losslessly |
+| `.tsr` | JSON, the native save format; round-trips key, value, position, digit and timestamp losslessly |
 | `.md` | Markdown table, human-readable and diffable |
 | `.sql` | SQL dump this package's own parser re-imports |
 
@@ -471,17 +471,17 @@ Each of these is a behaviour change, so each is deliberate:
    you want a file that a SQL engine can read, `cmd/persist` below.
 
 Three format caveats: the Markdown table writes newlines as `<br>`, so a value
-containing that literal text comes back as a newline — `.sdb` is the lossless
+containing that literal text comes back as a newline — `.tsr` is the lossless
 format. The SQL dump escapes `\n`, `\r`, `\t`, `\'` and `\\`, matching what
 the parser reverses. And the Markdown table escapes TAB and CR as `\t` and
 `\r` rather than reformatting them, which is why all three formats round-trip
 these values.
 
-Timestamps are restored by `.sdb` and by the `.db` adapter below, both of which
-reinsert through `SudokuDB::insert_stamped`. The other two formats do not:
+Timestamps are restored by `.tsr` and by the `.db` adapter below, both of which
+reinsert through `Tesseract::insert_stamped`. The other two formats do not:
 `import_markdown` re-stamps from the log counter, and `import_sql` ignores the
 column — so `.md` exports carry a timestamp column that its own importer throws
-away, and `.sql` carries none. Use `.sdb` or `.db` when the stamps matter.
+away, and `.sql` carries none. Use `.tsr` or `.db` when the stamps matter.
 
 An import replaces the store rather than merging into it, so a failed load
 leaves an empty database instead of a half-overwritten one, and a record with

@@ -1,11 +1,11 @@
 {
-  "identifier": "dev.sudokudb.gui",
+  "identifier": "dev.tesseract.gui",
   "backend": {
     "path": ".",
     "package": "cmd/gui"
   },
   "package": {
-    "product_name": "SudokuDB",
+    "product_name": "Tesseract",
     "version": "0.1.0",
     "formats": [
       "app",

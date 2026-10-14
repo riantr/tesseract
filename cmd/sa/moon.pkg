@@ -1,5 +1,5 @@
 import {
-  "riantr/tesseract/src/sudokudb_sa",
+  "riantr/tesseract/src/tesseract_sa",
   "moonbit-community/sqlite3",
   "moonbitlang/core/env",
   "moonbitlang/x/fs" @xfs,

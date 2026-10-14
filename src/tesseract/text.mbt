@@ -4,11 +4,11 @@
 /// The bundled `String` API in this toolchain has no case folding and no
 /// integer parsing, and the SQL surface needs both. Rather than take a
 /// dependency for four functions they live here. ASCII-only on purpose: SQL
-/// keywords are ASCII, and SudokuDB values are opaque JSON blobs that must
+/// keywords are ASCII, and Tesseract values are opaque JSON blobs that must
 /// survive a round trip byte-for-byte.
 
 ///|
-/// True for the ASCII whitespace SudokuDB trims around SQL tokens.
+/// True for the ASCII whitespace Tesseract trims around SQL tokens.
 pub fn is_space(c : Int) -> Bool {
   c == 32 || c == 9 || c == 10 || c == 13
 }

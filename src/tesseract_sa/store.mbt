@@ -2,7 +2,7 @@
 /// Storing a `ScanReport` in SQLite.
 ///
 /// A scan gets its own tables rather than going through the lattice in
-/// `src/sudokudb_sqlite`. Two reasons, both about shape rather than taste:
+/// `src/tesseract_sqlite`. Two reasons, both about shape rather than taste:
 /// a project can have far more files than the lattice's 81 cells, and a
 /// finding is a `(file, line, column, family)` tuple, which is not a
 /// key/value record. Flattening either into the other loses the thing the
@@ -72,7 +72,7 @@ pub fn ensure_schema(conn : @sqlite3.Connection) -> Unit raise {
 /// Appends `report` to the database at `path` and returns its run id.
 ///
 /// One transaction, assembled from ordinary statements because the package
-/// ships no transaction helper - the same arrangement `src/sudokudb_sqlite`
+/// ships no transaction helper - the same arrangement `src/tesseract_sqlite`
 /// uses. A half-written run would be worse than none: a summary with no file
 /// rows reads as "the scan found nothing".
 pub fn save(path : String, report : ScanReport) -> Int raise {
@@ -387,7 +387,7 @@ fn read_unparsed(
     let examples : Array[String] = if text == "" {
       []
     } else {
-      @sudokudb.split(text, "\n")
+      @tesseract.split(text, "\n")
     }
     into.push({ reason: read_text(sel, 0), count: read_int(sel, 1), examples, })
   }

@@ -1,9 +1,9 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "riantr/tesseract/src/sudokudb_dgp"
+package "riantr/tesseract/src/tesseract_dgp"
 
 import {
   "moonbitlang/core/debug",
-  "riantr/tesseract/src/sudokudb",
+  "riantr/tesseract/src/tesseract",
 }
 
 // Values
@@ -19,11 +19,11 @@ pub fn observation_key(Int) -> String
 
 pub fn plr_dataset(Int, Int, Double, Int) -> Dataset
 
-pub fn read_back(@sudokudb.SudokuDB, Dataset) -> Array[Observation]?
+pub fn read_back(@tesseract.Tesseract, Dataset) -> Array[Observation]?
 
-pub fn record(@sudokudb.SudokuDB, Dataset) -> RecordReport
+pub fn record(@tesseract.Tesseract, Dataset) -> RecordReport
 
-pub fn recorded(@sudokudb.SudokuDB) -> Array[@sudokudb.Record]
+pub fn recorded(@tesseract.Tesseract) -> Array[@tesseract.Record]
 
 pub fn to_sql(Dataset) -> String
 

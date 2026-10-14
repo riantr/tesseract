@@ -11,12 +11,12 @@
 /// across two statements would fail for a reason that has nothing to do with
 /// what it is testing.
 fn scratch(name : String) -> String {
-  "sudokudb_test_" + name + ".db"
+  "tesseract_test_" + name + ".db"
 }
 
 ///|
-fn fresh() -> @sudokudb.SudokuDB {
-  @sudokudb.new_db("sudokuDB", @sudokudb.new_logger("test"))
+fn fresh() -> @tesseract.Tesseract {
+  @tesseract.new_db("tesseract", @tesseract.new_logger("test"))
 }
 
 ///|
@@ -29,22 +29,22 @@ fn remove(path : String) -> Unit {
 }
 
 ///|
-fn seeded() -> @sudokudb.SudokuDB {
+fn seeded() -> @tesseract.Tesseract {
   let db = fresh()
   ignore(
-    @sudokudb.SudokuDB::insert(db, "user_001", "{\"age\": 25}", Some(1), 1),
+    @tesseract.Tesseract::insert(db, "user_001", "{\"age\": 25}", Some(1), 1),
   )
   ignore(
-    @sudokudb.SudokuDB::insert(db, "user_002", "{\"age\": 30}", Some(37), 0),
+    @tesseract.Tesseract::insert(db, "user_002", "{\"age\": 30}", Some(37), 0),
   )
-  ignore(@sudokudb.SudokuDB::insert(db, "cell_48", "a | b", Some(48), 2))
-  @sudokudb.SudokuDB::set_position(db, 12)
+  ignore(@tesseract.Tesseract::insert(db, "cell_48", "a | b", Some(48), 2))
+  @tesseract.Tesseract::set_position(db, 12)
   db
 }
 
 ///|
-fn occupied(db : @sudokudb.SudokuDB) -> Array[@sudokudb.Record] {
-  @sudokudb.SudokuDB::select(db, "", "", None, @sudokudb.no_filter(), None).data
+fn occupied(db : @tesseract.Tesseract) -> Array[@tesseract.Record] {
+  @tesseract.Tesseract::select(db, "", "", None, @tesseract.no_filter(), None).data
 }
 
 ///|
@@ -52,8 +52,8 @@ fn occupied(db : @sudokudb.SudokuDB) -> Array[@sudokudb.Record] {
 ///
 /// `catch` without `noraise` re-raises once its handler is done, so the handler
 /// returns out of here rather than falling through.
-fn save_fails(path : String, db : @sudokudb.SudokuDB) -> Bool {
-  ignore(@sudokudb_sqlite.save(path, db)) catch {
+fn save_fails(path : String, db : @tesseract.Tesseract) -> Bool {
+  ignore(@tesseract_sqlite.save(path, db)) catch {
     _ => return true
   }
   false
@@ -116,7 +116,7 @@ fn set_stamp(path : String, position : Int, stamp : String) -> Unit raise {
 ///
 /// Searches by position instead of indexing, so these tests do not also depend
 /// on the order `select` happens to return rows in.
-fn stamp_at(db : @sudokudb.SudokuDB, position : Int) -> String {
+fn stamp_at(db : @tesseract.Tesseract, position : Int) -> String {
   for row in occupied(db) {
     if row.position == position {
       return row.timestamp
@@ -130,14 +130,14 @@ test "a lattice survives a save and a load" {
   let path = scratch("roundtrip")
   remove(path)
   let src = seeded()
-  assert_eq(@sudokudb_sqlite.save(path, src), 3)
+  assert_eq(@tesseract_sqlite.save(path, src), 3)
   let dst = fresh()
-  let report = @sudokudb_sqlite.load(path, dst)
+  let report = @tesseract_sqlite.load(path, dst)
   assert_eq(report.loaded, 3)
   assert_eq(report.rejected, 0)
   assert_eq(
-    @sudokudb.SudokuDB::occupancy(dst),
-    @sudokudb.SudokuDB::occupancy(src),
+    @tesseract.Tesseract::occupancy(dst),
+    @tesseract.Tesseract::occupancy(src),
   )
   // Every cell lands on the position it was saved from - the coordinate
   // arithmetic is not redone from the key.
@@ -157,13 +157,13 @@ test "a lattice survives a save and a load" {
 test "the cursor comes back with the lattice" {
   let path = scratch("cursor")
   remove(path)
-  ignore(@sudokudb_sqlite.save(path, seeded()))
+  ignore(@tesseract_sqlite.save(path, seeded()))
   let dst = fresh()
-  let report = @sudokudb_sqlite.load(path, dst)
+  let report = @tesseract_sqlite.load(path, dst)
   // Without the meta row the store would sit wherever `delete` left it, and a
   // reopen would silently move the insertion point.
   assert_eq(report.cursor, 12)
-  assert_eq(@sudokudb.SudokuDB::status(dst).current_position, 12)
+  assert_eq(@tesseract.Tesseract::status(dst).current_position, 12)
   remove(path)
 }
 
@@ -171,15 +171,15 @@ test "the cursor comes back with the lattice" {
 test "saving twice replaces rather than merges" {
   let path = scratch("replace")
   remove(path)
-  ignore(@sudokudb_sqlite.save(path, seeded()))
+  ignore(@tesseract_sqlite.save(path, seeded()))
   let smaller = fresh()
-  ignore(@sudokudb.SudokuDB::insert(smaller, "only", "one", Some(2), 0))
-  ignore(@sudokudb_sqlite.save(path, smaller))
+  ignore(@tesseract.Tesseract::insert(smaller, "only", "one", Some(2), 0))
+  ignore(@tesseract_sqlite.save(path, smaller))
   let dst = fresh()
-  let report = @sudokudb_sqlite.load(path, dst)
+  let report = @tesseract_sqlite.load(path, dst)
   // A merge would report 4 and leave user_001 present.
   assert_eq(report.loaded, 1)
-  assert_eq(@sudokudb.SudokuDB::occupancy(dst), 1)
+  assert_eq(@tesseract.Tesseract::occupancy(dst), 1)
   assert_eq(occupied(dst)[0].key, "only")
   remove(path)
 }
@@ -189,11 +189,11 @@ test "loading an empty file clears the store and reports nothing loaded" {
   let path = scratch("empty")
   remove(path)
   let dst = seeded()
-  let report = @sudokudb_sqlite.load(path, dst)
-  // `import_sdb` clears first for the same reason: a load that merges leaves
+  let report = @tesseract_sqlite.load(path, dst)
+  // `import_tsr` clears first for the same reason: a load that merges leaves
   // records the file never mentioned.
   assert_eq(report.loaded, 0)
-  assert_eq(@sudokudb.SudokuDB::occupancy(dst), 0)
+  assert_eq(@tesseract.Tesseract::occupancy(dst), 0)
   remove(path)
 }
 
@@ -201,14 +201,14 @@ test "loading an empty file clears the store and reports nothing loaded" {
 test "a file the store refuses is counted, not dropped" {
   let path = scratch("conflict")
   remove(path)
-  ignore(@sudokudb_sqlite.save(path, seeded()))
+  ignore(@tesseract_sqlite.save(path, seeded()))
   // Hand-edit the file into a state the sudoku rules reject. Positions 1 and 4
   // sit on the same z-axis line, so they may not both carry digit 1; no two
   // cells in the seed lattice share a line, which is why a row is added here
   // rather than edited.
   add_row(path, 4, "cell_4", "added", 1)
   let dst = fresh()
-  let report = @sudokudb_sqlite.load(path, dst)
+  let report = @tesseract_sqlite.load(path, dst)
   // "loaded 3 of 4" and "loaded 4" are different answers and only one of them
   // is what happened, so the rejected count has to exist.
   assert_eq(report.loaded + report.rejected, 4)
@@ -226,17 +226,17 @@ test "a whole generated dataset survives a .db round trip unchanged" {
   // hand-written records whose values are round numbers, which would pass even
   // through an encoder that lost a digit - so they cannot answer "does the
   // file backend record real data".
-  let data = @sudokudb_dgp.plr_dataset(81, 4, 0.5, 7)
+  let data = @tesseract_dgp.plr_dataset(81, 4, 0.5, 7)
   let src = fresh()
-  let written = @sudokudb_dgp.record(src, data)
+  let written = @tesseract_dgp.record(src, data)
   assert_eq(written.recorded, 81)
   assert_eq(written.rejected, 0)
-  assert_eq(@sudokudb_sqlite.save(path, src), 81)
+  assert_eq(@tesseract_sqlite.save(path, src), 81)
   let dst = fresh()
-  let loaded = @sudokudb_sqlite.load(path, dst)
+  let loaded = @tesseract_sqlite.load(path, dst)
   assert_eq(loaded.loaded, 81)
   assert_eq(loaded.rejected, 0)
-  match @sudokudb_dgp.read_back(dst, data) {
+  match @tesseract_dgp.read_back(dst, data) {
     None => assert_true(false)
     Some(back) => {
       assert_eq(back.length(), 81)
@@ -259,8 +259,8 @@ test "a save that fails part way leaves the previous contents in place" {
   let path = scratch("atomic")
   remove(path)
   let first = fresh()
-  ignore(@sudokudb.SudokuDB::insert(first, "keep", "me", Some(1), 0))
-  ignore(@sudokudb_sqlite.save(path, first))
+  ignore(@tesseract.Tesseract::insert(first, "keep", "me", Some(1), 0))
+  ignore(@tesseract_sqlite.save(path, first))
   // Make the INSERT abort without touching the rows already on disk. The save
   // gets as far as DELETE before it fails, which is the only point at which a
   // missing transaction becomes visible.
@@ -269,8 +269,8 @@ test "a save that fails part way leaves the previous contents in place" {
   // Without BEGIN/COMMIT the DELETE would already be committed and the file
   // would be empty; the transaction rolls it back.
   let dst = fresh()
-  ignore(@sudokudb_sqlite.load(path, dst))
-  assert_eq(@sudokudb.SudokuDB::occupancy(dst), 1)
+  ignore(@tesseract_sqlite.load(path, dst))
+  assert_eq(@tesseract.Tesseract::occupancy(dst), 1)
   assert_eq(occupied(dst)[0].key, "keep")
   remove(path)
 }
@@ -280,13 +280,13 @@ test "a cell comes back with the timestamp the file was saved with" {
   let path = scratch("stamps")
   remove(path)
   let src = seeded()
-  ignore(@sudokudb_sqlite.save(path, src))
+  ignore(@tesseract_sqlite.save(path, src))
   // A stamp no logger counter could mint. Without restoring the file's own
   // value, this cell would carry the *loading* process's `logger.seq` instead -
   // a small integer - so the assertion cannot pass by coincidence.
   set_stamp(path, 48, "18446744073709551615")
   let dst = fresh()
-  let report = @sudokudb_sqlite.load(path, dst)
+  let report = @tesseract_sqlite.load(path, dst)
   assert_eq(report.loaded, 3)
   assert_eq(stamp_at(dst, 48), "18446744073709551615")
   // The rows nobody touched keep what they were saved with as well, so a load
@@ -301,13 +301,13 @@ test "a cell comes back with the timestamp the file was saved with" {
 test "a row with no timestamp gets stamped, not stored blank" {
   let path = scratch("blankstamp")
   remove(path)
-  ignore(@sudokudb_sqlite.save(path, seeded()))
+  ignore(@tesseract_sqlite.save(path, seeded()))
   // Model a file written by something with no stamp to give. Keeping the empty
   // string would make `timestamp` a field that means two different things:
   // "written at seq 0" and "unknown".
   set_stamp(path, 1, "")
   let dst = fresh()
-  let report = @sudokudb_sqlite.load(path, dst)
+  let report = @tesseract_sqlite.load(path, dst)
   assert_eq(report.loaded, 3)
   assert_true(stamp_at(dst, 1) != "")
   remove(path)

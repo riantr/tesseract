@@ -5,27 +5,27 @@
 /// shapes and its error-code vocabulary so existing `.sql` dumps still load:
 ///
 /// ```sql
-/// CREATE DATABASE sudokuDB;
-/// INSERT INTO sudokuDB (key, value) VALUES ('k', 'v');
-/// SELECT * FROM sudokuDB WHERE key = 'k';
-/// SELECT * FROM sudokuDB WHERE grid_position = 42;
-/// SELECT * FROM sudokuDB WHERE x = 1 AND y = 2;
-/// SELECT * FROM sudokuDB WHERE value LIKE '%pat%';
-/// UPDATE sudokuDB SET value = 'v' WHERE key = 'k';
-/// DELETE FROM sudokuDB WHERE key = 'k';
+/// CREATE DATABASE tesseract;
+/// INSERT INTO tesseract (key, value) VALUES ('k', 'v');
+/// SELECT * FROM tesseract WHERE key = 'k';
+/// SELECT * FROM tesseract WHERE grid_position = 42;
+/// SELECT * FROM tesseract WHERE x = 1 AND y = 2;
+/// SELECT * FROM tesseract WHERE value LIKE '%pat%';
+/// UPDATE tesseract SET value = 'v' WHERE key = 'k';
+/// DELETE FROM tesseract WHERE key = 'k';
 /// ```
 ///
 /// The 4D additions are an optional target address, an optional digit, and
 /// geometric predicates:
 ///
 /// ```sql
-/// INSERT INTO sudokuDB (key, value) VALUES ('k', 'v') AT 42;
-/// INSERT INTO sudokuDB (key, value) VALUES ('k', 'v') AT (1,2,0,2);
-/// INSERT INTO sudokuDB (key, value, digit) VALUES ('k', 'v', 2);
-/// UPDATE sudokuDB SET value = 'v', digit = 3 WHERE grid_position = 42;
-/// SELECT * FROM sudokuDB WHERE line(42, 0);
-/// SELECT * FROM sudokuDB WHERE slab(42, 1);
-/// SELECT * FROM sudokuDB WHERE peers(42);
+/// INSERT INTO tesseract (key, value) VALUES ('k', 'v') AT 42;
+/// INSERT INTO tesseract (key, value) VALUES ('k', 'v') AT (1,2,0,2);
+/// INSERT INTO tesseract (key, value, digit) VALUES ('k', 'v', 2);
+/// UPDATE tesseract SET value = 'v', digit = 3 WHERE grid_position = 42;
+/// SELECT * FROM tesseract WHERE line(42, 0);
+/// SELECT * FROM tesseract WHERE slab(42, 1);
+/// SELECT * FROM tesseract WHERE peers(42);
 /// ```
 ///
 /// The parser is hand-written against the ASCII helpers in `text.mbt`; MoonBit
@@ -721,8 +721,8 @@ fn unquote_identifier(s : String) -> String {
 }
 
 ///|
-/// `INSERT INTO sudokuDB (cols) VALUES (...) [AT target]`.
-fn parse_insert(db : SudokuDB, sql : String) -> DBResponse {
+/// `INSERT INTO tesseract (cols) VALUES (...) [AT target]`.
+fn parse_insert(db : Tesseract, sql : String) -> DBResponse {
   let cols = match insert_columns(sql) {
     Some(c) => c
     None => return err_response("INVALID_SYNTAX", "Invalid INSERT syntax")
@@ -797,12 +797,12 @@ fn parse_insert(db : SudokuDB, sql : String) -> DBResponse {
       Err(e) => return e
     }
   }
-  SudokuDB::insert(db, key, value, target, digit)
+  Tesseract::insert(db, key, value, target, digit)
 }
 
 ///|
-/// `UPDATE sudokuDB SET col = val [, col = val] [WHERE ...]`.
-fn parse_update(db : SudokuDB, sql : String) -> DBResponse {
+/// `UPDATE tesseract SET col = val [, col = val] [WHERE ...]`.
+fn parse_update(db : Tesseract, sql : String) -> DBResponse {
   let set_at = match find_word(sql, "SET", 0) {
     Some(at) => at
     None => return err_response("INVALID_SYNTAX", "Invalid UPDATE syntax")
@@ -841,17 +841,17 @@ fn parse_update(db : SudokuDB, sql : String) -> DBResponse {
     return err_response("INVALID_SYNTAX", "UPDATE needs SET value = '...'")
   }
   match parse_where(body) {
-    Ok(w) => SudokuDB::update(db, w.key, value, w.position, digit)
+    Ok(w) => Tesseract::update(db, w.key, value, w.position, digit)
     Err(e) => e
   }
 }
 
 ///|
-/// `DELETE FROM sudokuDB [WHERE ...]`.
-fn parse_delete(db : SudokuDB, sql : String) -> DBResponse {
+/// `DELETE FROM tesseract [WHERE ...]`.
+fn parse_delete(db : Tesseract, sql : String) -> DBResponse {
   let body = where_body(sql)
   match parse_where(body) {
-    Ok(w) => SudokuDB::delete(db, w.key, w.position)
+    Ok(w) => Tesseract::delete(db, w.key, w.position)
     Err(e) => e
   }
 }
@@ -884,7 +884,7 @@ fn row_matches(w : Where, row : Record) -> Bool {
 /// parsed and then thrown away, so `WHERE line(1,3) AND digit = 2` answered a
 /// different question than the one asked and `peers(1) AND key='zzz'` came back
 /// with a row. Filtering the answer is what makes `AND` mean AND — the same
-/// rule the non-geometry path gets from `SudokuDB::select`.
+/// rule the non-geometry path gets from `Tesseract::select`.
 fn narrow_by_others(r : DBResponse, w : Where) -> DBResponse {
   let kept = r.data.filter(fn(row) { row_matches(w, row) })
   {
@@ -901,23 +901,23 @@ fn narrow_by_others(r : DBResponse, w : Where) -> DBResponse {
 }
 
 ///|
-/// `SELECT * FROM sudokuDB [WHERE ...]`.
-fn parse_select(db : SudokuDB, sql : String) -> DBResponse {
+/// `SELECT * FROM tesseract [WHERE ...]`.
+fn parse_select(db : Tesseract, sql : String) -> DBResponse {
   match find_word(sql, "FROM", 0) {
     Some(_) => ()
-    None => return err_response("INVALID_SYNTAX", "SELECT needs FROM sudokuDB")
+    None => return err_response("INVALID_SYNTAX", "SELECT needs FROM tesseract")
   }
   let body = where_body(sql)
   match parse_where(body) {
     Ok(w) =>
       match w.geometry {
         Geometry::None =>
-          SudokuDB::select(db, w.key, w.pattern, w.position, w.coords, w.digit)
+          Tesseract::select(db, w.key, w.pattern, w.position, w.coords, w.digit)
         Geometry::Line(p, axis) =>
-          narrow_by_others(SudokuDB::line_query(db, p, axis), w)
+          narrow_by_others(Tesseract::line_query(db, p, axis), w)
         Geometry::Slab(p, axis) =>
-          narrow_by_others(SudokuDB::slab_query(db, p, axis), w)
-        Geometry::Peers(p) => narrow_by_others(SudokuDB::peer_query(db, p), w)
+          narrow_by_others(Tesseract::slab_query(db, p, axis), w)
+        Geometry::Peers(p) => narrow_by_others(Tesseract::peer_query(db, p), w)
       }
     Err(e) => e
   }
@@ -928,7 +928,7 @@ fn parse_select(db : SudokuDB, sql : String) -> DBResponse {
 ///
 /// A trailing `;` is optional. Unknown statements come back as
 /// `UNSUPPORTED_SQL`, matching the C# parser.
-pub fn execute(db : SudokuDB, sql : String) -> DBResponse {
+pub fn execute(db : Tesseract, sql : String) -> DBResponse {
   let mut t = trim_ws(sql)
   while t.length() > 0 && t.at(t.length() - 1) == ';' {
     t = trim_ws(slice(t, 0, t.length() - 1))

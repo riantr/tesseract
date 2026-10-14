@@ -8,8 +8,8 @@
 # because "replace first match" would silently change what a later run tests.
 
 $ErrorActionPreference = 'Stop'
-$root = 'D:/src/MiniMax/Projects/tesseract/sudokudb-mbt'
-$target = "$root/src/sudokudb_sa/parse.mbt"
+$root = Split-Path $PSScriptRoot -Parent
+$target = "$root/src/tesseract_sa/parse.mbt"
 $backup = "$root/_verify/parse.mbt.orig"
 $enc = New-Object System.Text.UTF8Encoding($false)
 
@@ -27,14 +27,14 @@ $cases = @(
   @{
     name = 'pct_keeps_trailing_percent'
     why  = 'forget to drop the % before the closing paren, the exact bug fixed above'
-    old  = "        let num = @sudokudb.split(inner, `"%`")`n        pct = @sudokudb.trim_ws(num[0])"
-    new  = "        pct = @sudokudb.trim_ws(inner)"
+    old  = "        let num = @tesseract.split(inner, `"%`")`n        pct = @tesseract.trim_ws(num[0])"
+    new  = "        pct = @tesseract.trim_ws(inner)"
   },
   @{
     name = 'partial_files_without_trim'
     why  = 'drop the trim_ws after the semicolon; leading_count stops at the space and yields 0'
-    old  = "              @sudokudb.trim_ws(@sudokudb.slice(rest, i + 1, rest.length())),"
-    new  = "              @sudokudb.slice(rest, i + 1, rest.length()),"
+    old  = "              @tesseract.trim_ws(@tesseract.slice(rest, i + 1, rest.length())),"
+    new  = "              @tesseract.slice(rest, i + 1, rest.length()),"
   },
   @{
     name = 'reason_line_by_indent'
@@ -45,7 +45,7 @@ $cases = @(
   @{
     name = 'stack_lines_counted_as_findings'
     why  = 'stop skipping the "  in fn() at file:line" frames under a finding'
-    old  = "    if @sudokudb.starts_with(line, `"in `") {"
+    old  = "    if @tesseract.starts_with(line, `"in `") {"
     new  = "    if false {"
     expect = 'GREEN (equivalent mutant, see note)'
   }
@@ -62,7 +62,7 @@ foreach ($c in $cases) {
   }
   $text = $text.Replace($c.old, $c.new)
   [System.IO.File]::WriteAllText($target, $text, $enc)
-  $out = & moon test src/sudokudb_sa 2>&1 | Out-String
+  $out = & moon test src/tesseract_sa 2>&1 | Out-String
   $m = [regex]::Match($out, 'Total tests: (\d+), passed: (\d+), failed: (\d+)')
   if ($m.Success) {
     $p = [int]$m.Groups[2].Value; $f = [int]$m.Groups[3].Value

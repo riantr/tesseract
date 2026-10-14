@@ -8,10 +8,10 @@
 /// rebuilt per request.
 
 ///|
-/// The store the window drives. Reads `@sudokudb.SudokuDB` and mutates it.
-let db : @sudokudb.SudokuDB = @sudokudb.new_db(
-  "SudokuDB",
-  @sudokudb.new_logger("SudokuDB"),
+/// The store the window drives. Reads `@tesseract.Tesseract` and mutates it.
+let db : @tesseract.Tesseract = @tesseract.new_db(
+  "Tesseract",
+  @tesseract.new_logger("Tesseract"),
 )
 
 ///|
@@ -106,8 +106,8 @@ struct RecordView {
 ///|
 /// The view of one cell, empty or not.
 fn cell_view(position : Int) -> CellView {
-  let c = @sudokudb.coords_of(position).unwrap()
-  match @sudokudb.SudokuDB::cell_at(db, position) {
+  let c = @tesseract.coords_of(position).unwrap()
+  match @tesseract.Tesseract::cell_at(db, position) {
     Some(cell) =>
       CellView::{
         position,
@@ -119,7 +119,7 @@ fn cell_view(position : Int) -> CellView {
         value: cell.value,
         digit: cell.digit,
         timestamp: cell.timestamp,
-        occupied: !@sudokudb.cell_is_empty(cell),
+        occupied: !@tesseract.cell_is_empty(cell),
       }
     None =>
       CellView::{
@@ -146,9 +146,9 @@ fn cell_view(position : Int) -> CellView {
 fn plane_cells(x : Int, y : Int) -> Array[CellView] {
   let out : Array[CellView] = []
   let mut row = 0
-  while row < @sudokudb.SIDE {
+  while row < @tesseract.SIDE {
     let mut col = 0
-    while col < @sudokudb.SIDE {
+    while col < @tesseract.SIDE {
       out.push(cell_view(1 + x * 27 + y * 9 + row * 3 + col))
       col = col + 1
     }
@@ -160,7 +160,7 @@ fn plane_cells(x : Int, y : Int) -> Array[CellView] {
 ///|
 /// Occupancy, cursor and digit count.
 fn status_view() -> StatusView {
-  let s = @sudokudb.SudokuDB::status(db)
+  let s = @tesseract.Tesseract::status(db)
   StatusView::{
     db_name: s.db_name,
     total_cells: s.total_cells,
@@ -173,8 +173,8 @@ fn status_view() -> StatusView {
 ///|
 /// The last `LOG_TAIL` entries, oldest first.
 fn log_views() -> Array[LogView] {
-  let all = @sudokudb.SudokuDBLogger::entries(
-    @sudokudb.SudokuDB::get_logger(db),
+  let all = @tesseract.TesseractLogger::entries(
+    @tesseract.Tesseract::get_logger(db),
   )
   let out : Array[LogView] = []
   let start = if all.length() > LOG_TAIL { all.length() - LOG_TAIL } else { 0 }
@@ -184,7 +184,7 @@ fn log_views() -> Array[LogView] {
     out.push(LogView::{
       seq: e.seq,
       stamp: e.stamp,
-      level: @sudokudb.level_name(e.level),
+      level: @tesseract.level_name(e.level),
       message: e.message,
       details: e.details,
     })
@@ -199,14 +199,14 @@ fn log_views() -> Array[LogView] {
 /// The digits are read back out of the cells rather than kept beside them, so
 /// this cannot drift from what the store actually holds.
 fn puzzle_view() -> PuzzleView {
-  let d = @sudokudb.empty_digits()
+  let d = @tesseract.empty_digits()
   let mut placed = 0
-  let mut p = @sudokudb.FIRST_POSITION
-  while p <= @sudokudb.LAST_POSITION {
-    match @sudokudb.SudokuDB::cell_at(db, p) {
+  let mut p = @tesseract.FIRST_POSITION
+  while p <= @tesseract.LAST_POSITION {
+    match @tesseract.Tesseract::cell_at(db, p) {
       Some(cell) =>
-        if cell.digit != @sudokudb.NO_DIGIT {
-          @sudokudb.set_digit(d, p, cell.digit)
+        if cell.digit != @tesseract.NO_DIGIT {
+          @tesseract.set_digit(d, p, cell.digit)
           placed = placed + 1
         }
       None => ()
@@ -215,8 +215,8 @@ fn puzzle_view() -> PuzzleView {
   }
   PuzzleView::{
     placed,
-    violations: @sudokudb.line_violations(d),
-    complete: @sudokudb.is_solution(d),
+    violations: @tesseract.line_violations(d),
+    complete: @tesseract.is_solution(d),
   }
 }
 
@@ -241,7 +241,7 @@ fn state_resp(x : Int, y : Int) -> StateResp {
 /// still clamped rather than rejected, because a plane is a *view* choice and
 /// there is no cell it could write to the wrong place.
 fn clamp_axis(v : Int) -> Int {
-  if v < 0 || v >= @sudokudb.SIDE {
+  if v < 0 || v >= @tesseract.SIDE {
     0
   } else {
     v
@@ -250,7 +250,7 @@ fn clamp_axis(v : Int) -> Int {
 
 ///|
 /// A library response, rendered the way the C# view model rendered it.
-fn resp_view(r : @sudokudb.DBResponse) -> RespView {
+fn resp_view(r : @tesseract.DBResponse) -> RespView {
   RespView::{
     success: r.success,
     operation: r.operation,
@@ -260,18 +260,18 @@ fn resp_view(r : @sudokudb.DBResponse) -> RespView {
     affected_rows: r.affected_rows,
     position: r.position,
     total_records: r.total_records,
-    text: @sudokudb.format_response(r),
+    text: @tesseract.format_response(r),
   }
 }
 
 ///|
 /// One result row.
-fn record_view(r : @sudokudb.Record) -> RecordView {
+fn record_view(r : @tesseract.Record) -> RecordView {
   RecordView::{
     key: r.key,
     value: r.value,
     position: r.position,
-    coords: @sudokudb.format_coords(r.coords),
+    coords: @tesseract.format_coords(r.coords),
     timestamp: r.timestamp,
     digit: r.digit,
   }
@@ -279,6 +279,6 @@ fn record_view(r : @sudokudb.Record) -> RecordView {
 
 ///|
 /// Rows of a response, in order.
-fn record_views(r : @sudokudb.DBResponse) -> Array[RecordView] {
+fn record_views(r : @tesseract.DBResponse) -> Array[RecordView] {
   r.data.map(fn(row) { record_view(row) })
 }

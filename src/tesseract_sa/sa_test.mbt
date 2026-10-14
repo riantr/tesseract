@@ -13,7 +13,7 @@
 
 ///|
 fn scratch(name : String) -> String {
-  "sudokudb_sa_test_" + name + ".db"
+  "tesseract_sa_test_" + name + ".db"
 }
 
 ///|
@@ -29,13 +29,13 @@ fn remove(path : String) -> Unit {
 /// `moon test` runs a package's tests with the **project root** as the working
 /// directory, not the package directory, so the path is rooted there.
 fn real_scan() -> String raise {
-  @xfs.read_file_to_string("src/sudokudb_sa/testdata_scan.tsv")
+  @xfs.read_file_to_string("src/tesseract_sa/testdata_scan.tsv")
 }
 
 ///|
 /// A report with a partial file and two defects, built without a database.
-fn sample() -> @sudokudb_sa.ScanReport {
-  @sudokudb_sa.ScanReport::new(
+fn sample() -> @tesseract_sa.ScanReport {
+  @tesseract_sa.ScanReport::new(
     "/tmp/demo",
     "/tmp/demo",
     3,
@@ -48,30 +48,30 @@ fn sample() -> @sudokudb_sa.ScanReport {
     5,
     14,
     [
-      @sudokudb_sa.FileResult::new(
+      @tesseract_sa.FileResult::new(
         ".mbti",
         "/tmp/demo/a.mbti",
-        @sudokudb_sa.FileOutcome::clean(),
+        @tesseract_sa.FileOutcome::clean(),
         0,
         0,
         0,
         0,
         0,
       ),
-      @sudokudb_sa.FileResult::new(
+      @tesseract_sa.FileResult::new(
         ".mbt",
         "/tmp/demo/b.mbt",
-        @sudokudb_sa.FileOutcome::found(),
+        @tesseract_sa.FileOutcome::found(),
         2,
         1,
         2,
         0,
         0,
       ),
-      @sudokudb_sa.FileResult::new(
+      @tesseract_sa.FileResult::new(
         ".mbt",
         "/tmp/demo/c.mbt",
-        @sudokudb_sa.FileOutcome::partial(),
+        @tesseract_sa.FileOutcome::partial(),
         0,
         2,
         1,
@@ -80,26 +80,26 @@ fn sample() -> @sudokudb_sa.ScanReport {
       ),
     ],
     [
-      @sudokudb_sa.Finding::new(
+      @tesseract_sa.Finding::new(
         "/tmp/demo/b.mbt", 12, 3, "error", "UndefinedName", "walk+types", "unknown name `nope`",
       ),
-      @sudokudb_sa.Finding::new(
+      @tesseract_sa.Finding::new(
         "/tmp/demo/c.mbt", 21, 1, "error", "ParseError", "structural", "const declaration is outside the analyzed subset",
       ),
     ],
     [
-      @sudokudb_sa.UnparsedGroup::new("unexpected token", 2, ["/tmp/demo/d.mbt"]),
+      @tesseract_sa.UnparsedGroup::new("unexpected token", 2, ["/tmp/demo/d.mbt"]),
     ],
     [
-      @sudokudb_sa.ByKind::new(".mbt", 2, 1, 2, 3),
-      @sudokudb_sa.ByKind::new(".mbti", 1, 1, 0, 0),
+      @tesseract_sa.ByKind::new(".mbt", 2, 1, 2, 3),
+      @tesseract_sa.ByKind::new(".mbti", 1, 1, 0, 0),
     ],
   )
 }
 
 ///|
 test "a real 0.4.0 scan parses into the counts the tool printed" {
-  let report = match @sudokudb_sa.parse(real_scan()) {
+  let report = match @tesseract_sa.parse(real_scan()) {
     Ok(v) => v
     Err(e) => abort("the captured scan did not parse: " + e)
   }
@@ -138,7 +138,7 @@ test "a real 0.4.0 scan parses into the counts the tool printed" {
 
 ///|
 test "every file the scan mentions has a row, and they add up to the file count" {
-  let report = match @sudokudb_sa.parse(real_scan()) {
+  let report = match @tesseract_sa.parse(real_scan()) {
     Ok(v) => v
     Err(e) => abort("the captured scan did not parse: " + e)
   }
@@ -155,9 +155,9 @@ test "every file the scan mentions has a row, and they add up to the file count"
     defects = defects + f.defects
     notices = notices + f.notices
     match f.outcome {
-      @sudokudb_sa.Clean => read_whole = read_whole + 1
-      @sudokudb_sa.Found => read_whole = read_whole + 1
-      @sudokudb_sa.Partial => {
+      @tesseract_sa.Clean => read_whole = read_whole + 1
+      @tesseract_sa.Found => read_whole = read_whole + 1
+      @tesseract_sa.Partial => {
         partial = partial + 1
         partial_defects = partial_defects + f.defects
       }
@@ -202,14 +202,14 @@ test "a PARTIAL header records how far the file was read" {
   let script = "PARTIAL\t.mbt\tdefects=0\tnotices=1\tread up to line 63, 80 after it not shown\t/tmp/x.mbt\n" +
     "15:1 - error: const declaration is outside the analyzed subset (ParseError) [structural]\n" +
     "SUMMARY\tfiles=1\tparsed=0\tactionable=0\tnotices=1\tunreliable=1\twithheld=0\ttotal=2\n"
-  let report = match @sudokudb_sa.parse(script) {
+  let report = match @tesseract_sa.parse(script) {
     Ok(v) => v
     Err(e) => abort("a partial-file scan did not parse: " + e)
   }
   assert_eq(report.file_results.length(), 1)
   let f = report.file_results[0]
   assert_eq(f.path, "/tmp/x.mbt")
-  assert_eq(f.outcome, @sudokudb_sa.FileOutcome::partial())
+  assert_eq(f.outcome, @tesseract_sa.FileOutcome::partial())
   assert_eq(f.notices, 1)
   assert_eq(f.read_up_to, 63)
   assert_eq(f.not_shown, 80)
@@ -230,7 +230,7 @@ test "a finding line is taken apart and the stack under it is not" {
     "20:1 - warning: value `dead` is never read (and it has: a colon) (UnusedValue) [types]\n" +
     "...  5 more in this file\n" +
     "SUMMARY\tfiles=1\tparsed=1\tactionable=7\tnotices=2\tunreliable=0\twithheld=0\ttotal=9\n"
-  let report = match @sudokudb_sa.parse(script) {
+  let report = match @tesseract_sa.parse(script) {
     Ok(v) => v
     Err(e) => abort("a finding-bearing scan did not parse: " + e)
   }
@@ -270,7 +270,7 @@ test "a 0.3.5 scan still parses, because the database holds both" {
     "  1x  unexpected token\n" +
     "      e.g. /tmp/c.mbt\n" +
     "SUMMARY\tfiles=3\tparsed=2\tactionable=7\twithheld=9\ttotal=16\n"
-  let report = match @sudokudb_sa.parse(script) {
+  let report = match @tesseract_sa.parse(script) {
     Ok(v) => v
     Err(e) => abort("a 0.3.5-shaped scan did not parse: " + e)
   }
@@ -297,21 +297,21 @@ test "output with no SUMMARY is a failure, not an empty clean run" {
   // The tool's own documentation: a target it cannot find still exits 0 and
   // prints only this line. Storing it would put a run in the database whose
   // zero findings read like "the scan found nothing".
-  let r = @sudokudb_sa.parse("ERROR\tcannot locate source for target: /nope\n")
+  let r = @tesseract_sa.parse("ERROR\tcannot locate source for target: /nope\n")
   assert_true(r is Err(_))
   match r {
     Err(e) => assert_true(e.contains("cannot locate source"))
     Ok(_) => assert_true(false)
   }
-  assert_true(@sudokudb_sa.parse("") is Err(_))
-  assert_true(@sudokudb_sa.parse("hello\n") is Err(_))
+  assert_true(@tesseract_sa.parse("") is Err(_))
+  assert_true(@tesseract_sa.parse("hello\n") is Err(_))
 }
 
 ///|
 test "a byte-order mark on the first line does not hide the TARGET" {
   let script = "\u{FEFF}TARGET\t/tmp/demo\t/tmp/demo\n" +
     "SUMMARY\tfiles=0\tparsed=0\tactionable=0\tnotices=0\tunreliable=0\twithheld=0\ttotal=0\n"
-  let report = match @sudokudb_sa.parse(script) {
+  let report = match @tesseract_sa.parse(script) {
     Ok(v) => v
     Err(e) => abort("BOM-prefixed output did not parse: " + e)
   }
@@ -324,9 +324,9 @@ test "a stored report reads back exactly as it parsed" {
   let path = scratch("roundtrip")
   remove(path)
   let want = sample()
-  let id = @sudokudb_sa.save(path, want)
+  let id = @tesseract_sa.save(path, want)
   assert_true(id > 0)
-  let got = match @sudokudb_sa.load(path, id) {
+  let got = match @tesseract_sa.load(path, id) {
     Some(v) => v
     None => abort("the run was not readable back")
   }
@@ -339,12 +339,12 @@ test "a stored report reads back exactly as it parsed" {
   assert_eq(got.withheld, want.withheld)
   assert_eq(got.total, want.total)
   assert_eq(got.file_results.length(), 3)
-  assert_eq(got.file_results[1].outcome, @sudokudb_sa.FileOutcome::found())
+  assert_eq(got.file_results[1].outcome, @tesseract_sa.FileOutcome::found())
   assert_eq(got.file_results[1].defects, 2)
   assert_eq(got.file_results[1].notices, 1)
   // A partial file has to come back partial, with the extent intact - that is
   // the whole reason it is a separate outcome.
-  assert_eq(got.file_results[2].outcome, @sudokudb_sa.FileOutcome::partial())
+  assert_eq(got.file_results[2].outcome, @tesseract_sa.FileOutcome::partial())
   assert_eq(got.file_results[2].read_up_to, 45)
   assert_eq(got.file_results[2].not_shown, 145)
   assert_eq(got.by_kind.length(), 2)
@@ -358,12 +358,12 @@ test "a stored report reads back exactly as it parsed" {
 test "the real 0.4.0 scan survives a trip through the database" {
   let path = scratch("realscan")
   remove(path)
-  let want = match @sudokudb_sa.parse(real_scan()) {
+  let want = match @tesseract_sa.parse(real_scan()) {
     Ok(v) => v
     Err(e) => abort("the captured scan did not parse: " + e)
   }
-  let id = @sudokudb_sa.save(path, want)
-  let got = match @sudokudb_sa.load(path, id) {
+  let id = @tesseract_sa.save(path, want)
+  let got = match @tesseract_sa.load(path, id) {
     Some(v) => v
     None => abort("the run was not readable back")
   }
@@ -398,26 +398,26 @@ test "the real 0.4.0 scan survives a trip through the database" {
 test "runs accumulate and each keeps its own rows" {
   let path = scratch("history")
   remove(path)
-  let first = @sudokudb_sa.save(path, sample())
+  let first = @tesseract_sa.save(path, sample())
   let second = match
-    @sudokudb_sa.parse(
+    @tesseract_sa.parse(
       "SUMMARY\tfiles=9\tparsed=1\tactionable=3\tnotices=1\tunreliable=2\twithheld=100\ttotal=106\n",
     ) {
-    Ok(v) => @sudokudb_sa.save(path, v)
+    Ok(v) => @tesseract_sa.save(path, v)
     Err(e) => abort("a bare summary did not parse: " + e)
   }
   assert_true(second > first)
-  match @sudokudb_sa.latest_run(path) {
+  match @tesseract_sa.latest_run(path) {
     None => assert_true(false)
     Some(latest) => {
       assert_eq(latest, second)
-      let got = match @sudokudb_sa.load(path, latest) {
+      let got = match @tesseract_sa.load(path, latest) {
         Some(v) => v
         None => abort("the newest run was not readable")
       }
       assert_eq(got.files, 9)
       // The earlier run keeps its own file rows rather than being overwritten.
-      let older = match @sudokudb_sa.load(path, first) {
+      let older = match @tesseract_sa.load(path, first) {
         Some(v) => v
         None => abort("the earlier run was not readable")
       }
@@ -428,7 +428,7 @@ test "runs accumulate and each keeps its own rows" {
       // counts are compared against the runs themselves rather than against
       // literals, so this stays a statement about `list_runs` and not about
       // the sample's numbers.
-      let runs = @sudokudb_sa.list_runs(path)
+      let runs = @tesseract_sa.list_runs(path)
       assert_eq(runs.length(), 2)
       assert_eq(runs[0].id, first)
       assert_eq(runs[1].id, latest)

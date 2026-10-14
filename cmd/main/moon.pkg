@@ -1,5 +1,5 @@
 import {
-  "riantr/tesseract/src/sudokudb",
+  "riantr/tesseract/src/tesseract",
   "moonbitlang/core/env",
 }
 

@@ -127,13 +127,13 @@ let cmd_geometry : @proton_contract.Command[GeometryReq, GeometryResp] = @proton
 )
 
 ///|
-/// Render the store as `.sdb`, Markdown, SQL, or the ASCII lattice.
+/// Render the store as `.tsr`, Markdown, SQL, or the ASCII lattice.
 let cmd_export : @proton_contract.Command[ExportReq, ExportResp] = @proton_contract.command(
   "export",
 )
 
 ///|
-/// Load a `.sdb`, Markdown or SQL dump back in.
+/// Load a `.tsr`, Markdown or SQL dump back in.
 let cmd_import : @proton_contract.Command[ImportReq, ImportResp] = @proton_contract.command(
   "import",
 )
@@ -202,7 +202,7 @@ fn write_response(req : WriteReq) -> RespView {
   match req.op {
     "update" =>
       // `update` addresses the cell by key or position and keeps the cell's
-      // own key, so an empty value would leave a record that `export_sdb`
+      // own key, so an empty value would leave a record that `export_tsr`
       // skips and a re-import rejects with INVALID_INPUT - an invisible record
       // that reads as a successful write. The page's own hint already says
       // value cannot be empty; this is where that becomes true.
@@ -220,7 +220,7 @@ fn write_response(req : WriteReq) -> RespView {
         }
       } else {
         resp_view(
-          @sudokudb.SudokuDB::update(db, req.key, req.value, pos, req.digit),
+          @tesseract.Tesseract::update(db, req.key, req.value, pos, req.digit),
         )
       }
     // `delete` with neither a key nor a position is the library's
@@ -241,15 +241,15 @@ fn write_response(req : WriteReq) -> RespView {
           text: "✗ 失败\n错误: DELETE needs a key or a position; to empty the lattice use 清空整个点阵\n错误代码: INVALID_INPUT",
         }
       } else {
-        resp_view(@sudokudb.SudokuDB::delete(db, req.key, pos))
+        resp_view(@tesseract.Tesseract::delete(db, req.key, pos))
       }
-    "clear" => resp_view(@sudokudb.SudokuDB::delete(db, "", None))
+    "clear" => resp_view(@tesseract.Tesseract::delete(db, "", None))
     "cursor" => cursor_response(pos)
     "solve" => solve_response()
     "demo" => demo_response()
     _ =>
       resp_view(
-        @sudokudb.SudokuDB::insert(
+        @tesseract.Tesseract::insert(
           db,
           req.key,
           req.value,
@@ -268,7 +268,7 @@ fn cursor_response(target : Int?) -> RespView {
     Some(p) => p
     None => 0
   }
-  if !@sudokudb.position_in_bounds(wanted) {
+  if !@tesseract.position_in_bounds(wanted) {
     let text = "out of range: " + wanted.to_string() + " (expected 1..81)"
     return RespView::{
       success: false,
@@ -282,19 +282,19 @@ fn cursor_response(target : Int?) -> RespView {
       text,
     }
   }
-  @sudokudb.SudokuDB::set_position(db, wanted)
-  let here = @sudokudb.coords_of(wanted).unwrap()
+  @tesseract.Tesseract::set_position(db, wanted)
+  let here = @tesseract.coords_of(wanted).unwrap()
   let text = "cursor -> " +
     wanted.to_string() +
     " " +
-    @sudokudb.format_coords(here)
+    @tesseract.format_coords(here)
   RespView::{
     success: true,
     operation: "CURSOR",
     message: "插入光标 -> " +
     wanted.to_string() +
     " " +
-    @sudokudb.format_coords(here),
+    @tesseract.format_coords(here),
     error: "",
     error_code: "",
     affected_rows: 0,
@@ -309,13 +309,13 @@ fn cursor_response(target : Int?) -> RespView {
 /// CLI's `.solve` runs, so the window and the command line agree cell for
 /// cell.
 fn solve_response() -> RespView {
-  let digits = @sudokudb.canonical_digits()
+  let digits = @tesseract.canonical_digits()
   let mut filled = 0
   let mut first_failure = ""
-  let mut p = @sudokudb.FIRST_POSITION
-  while p <= @sudokudb.LAST_POSITION {
+  let mut p = @tesseract.FIRST_POSITION
+  while p <= @tesseract.LAST_POSITION {
     let b = StringBuilder::StringBuilder()
-    b.write_string("INSERT INTO sudokuDB (key, value, digit) VALUES ('cell_")
+    b.write_string("INSERT INTO tesseract (key, value, digit) VALUES ('cell_")
     b.write_object(p)
     b.write_string("', '{\"pos\": ")
     b.write_object(p)
@@ -324,7 +324,7 @@ fn solve_response() -> RespView {
     b.write_string(") AT ")
     b.write_object(p)
     b.write_char(';')
-    let r = @sudokudb.execute(db, b.to_string())
+    let r = @tesseract.execute(db, b.to_string())
     if r.success {
       filled = filled + 1
     } else if first_failure == "" {
@@ -343,7 +343,7 @@ fn solve_response() -> RespView {
     " 个格子" +
     first_failure
   RespView::{
-    success: filled == @sudokudb.TOTAL,
+    success: filled == @tesseract.TOTAL,
     operation: "SOLVE",
     message: summary,
     error: first_failure,
@@ -365,18 +365,18 @@ fn solve_response() -> RespView {
 /// the list cannot silently detach the report from the step it describes.
 fn demo_response() -> RespView {
   let steps = [
-    "DELETE FROM sudokuDB;", "INSERT INTO sudokuDB (key, value) VALUES ('user_001', '{\"age\": 25}');",
-    "INSERT INTO sudokuDB (key, value) VALUES ('user_002', '{\"age\": 30}');", "INSERT INTO sudokuDB (key, value) VALUES ('user_003', '{\"age\": 28}');",
-    "SELECT * FROM sudokuDB;", "UPDATE sudokuDB SET value = '{\"age\": 26}' WHERE key = 'user_001';",
-    "SELECT * FROM sudokuDB WHERE key = 'user_001';", "INSERT INTO sudokuDB (key, value, digit) VALUES ('d1', '{\"n\": 1}', 1) AT 1;",
-    "INSERT INTO sudokuDB (key, value, digit) VALUES ('d2', '{\"n\": 2}', 1) AT 3;",
-    "DELETE FROM sudokuDB WHERE key = 'user_003';",
+    "DELETE FROM tesseract;", "INSERT INTO tesseract (key, value) VALUES ('user_001', '{\"age\": 25}');",
+    "INSERT INTO tesseract (key, value) VALUES ('user_002', '{\"age\": 30}');", "INSERT INTO tesseract (key, value) VALUES ('user_003', '{\"age\": 28}');",
+    "SELECT * FROM tesseract;", "UPDATE tesseract SET value = '{\"age\": 26}' WHERE key = 'user_001';",
+    "SELECT * FROM tesseract WHERE key = 'user_001';", "INSERT INTO tesseract (key, value, digit) VALUES ('d1', '{\"n\": 1}', 1) AT 1;",
+    "INSERT INTO tesseract (key, value, digit) VALUES ('d2', '{\"n\": 2}', 1) AT 3;",
+    "DELETE FROM tesseract WHERE key = 'user_003';",
   ]
   let mut applied = 0
   let mut clash = ""
   let mut i = 0
   while i < steps.length() {
-    let r = @sudokudb.execute(db, steps[i])
+    let r = @tesseract.execute(db, steps[i])
     if r.error_code == "SUDOKU_CONFLICT" {
       clash = r.error_code + " (" + r.error + ")"
     }
@@ -406,7 +406,7 @@ fn demo_response() -> RespView {
     error_code: "",
     affected_rows: applied,
     position: 0,
-    total_records: @sudokudb.SudokuDB::occupancy(db),
+    total_records: @tesseract.Tesseract::occupancy(db),
     text: summary,
   }
 }
@@ -415,7 +415,7 @@ fn demo_response() -> RespView {
 fn digit_or_zero(d : Int?) -> Int {
   match d {
     Some(v) => v
-    None => @sudokudb.NO_DIGIT
+    None => @tesseract.NO_DIGIT
   }
 }
 
@@ -426,7 +426,7 @@ fn digit_or_zero(d : Int?) -> Int {
 /// The repaint keeps the caller's plane. Repainting plane (0,0) instead would
 /// silently move the user off whatever they were looking at.
 fn handle_query(req : QueryReq) -> QueryResp {
-  let r = @sudokudb.execute(db, req.sql)
+  let r = @tesseract.execute(db, req.sql)
   QueryResp::{
     response: resp_view(r),
     rows: record_views(r),
@@ -446,29 +446,29 @@ fn handle_geometry(req : GeometryReq) -> GeometryResp {
   // it twice - once for the covered positions, once for the rows - meant the
   // highlight and the result set could disagree with each other, and the
   // lattice was decoded twice to allow it.
-  let (covered, r) = match @sudokudb.coords_of(req.position) {
+  let (covered, r) = match @tesseract.coords_of(req.position) {
     Some(c) =>
       match req.kind {
         "line" =>
           (
-            positions_of(@sudokudb.line_through(c, axis)),
-            @sudokudb.SudokuDB::line_query(db, req.position, axis),
+            positions_of(@tesseract.line_through(c, axis)),
+            @tesseract.Tesseract::line_query(db, req.position, axis),
           )
         "slab" =>
           (
-            positions_of(@sudokudb.slab_through(c, axis)),
-            @sudokudb.SudokuDB::slab_query(db, req.position, axis),
+            positions_of(@tesseract.slab_through(c, axis)),
+            @tesseract.Tesseract::slab_query(db, req.position, axis),
           )
         _ =>
           (
-            positions_of(@sudokudb.peers(c)),
-            @sudokudb.SudokuDB::peer_query(db, req.position),
+            positions_of(@tesseract.peers(c)),
+            @tesseract.Tesseract::peer_query(db, req.position),
           )
       }
     None =>
       (
         [],
-        @sudokudb.err_response(
+        @tesseract.err_response(
           "POSITION_OUT_OF_RANGE",
           "Position out of range: " + req.position.to_string(),
         ),
@@ -484,21 +484,21 @@ fn handle_geometry(req : GeometryReq) -> GeometryResp {
 
 ///|
 /// Positions of a set of cells.
-fn positions_of(cells : Array[@sudokudb.Coords]) -> Array[Int] {
-  cells.map(fn(c) { @sudokudb.position_of(c) })
+fn positions_of(cells : Array[@tesseract.Coords]) -> Array[Int] {
+  cells.map(fn(c) { @tesseract.position_of(c) })
 }
 
 ///|
 fn handle_export(req : ExportReq) -> ExportResp {
   let text = match req.format {
-    "md" => @sudokudb.export_markdown(db)
-    "sql" => @sudokudb.export_sql(db)
+    "md" => @tesseract.export_markdown(db)
+    "sql" => @tesseract.export_sql(db)
     "lattice" =>
-      @sudokudb.render_lattice(
+      @tesseract.render_lattice(
         db,
-        @sudokudb.SudokuDB::status(db).current_position,
+        @tesseract.Tesseract::status(db).current_position,
       )
-    _ => @sudokudb.export_sdb(db)
+    _ => @tesseract.export_tsr(db)
   }
   ExportResp::{ format: req.format, text, }
 }
@@ -508,15 +508,15 @@ fn handle_export(req : ExportReq) -> ExportResp {
 /// same message the CLI prints.
 ///
 /// `lattice` is export-only: it is a rendering, and handing it to
-/// `import_sdb` would fail with "Not valid JSON" while looking like a user
+/// `import_tsr` would fail with "Not valid JSON" while looking like a user
 /// mistake. It is refused with its own message instead.
 fn handle_import(req : ImportReq) -> ImportResp {
   let outcome = match req.format {
-    "md" => @sudokudb.import_markdown(db, req.text)
-    "sql" => @sudokudb.import_sql(db, req.text)
+    "md" => @tesseract.import_markdown(db, req.text)
+    "sql" => @tesseract.import_sql(db, req.text)
     "lattice" =>
-      Err("lattice is an export-only rendering; choose sdb, md or sql")
-    _ => @sudokudb.import_sdb(db, req.text)
+      Err("lattice is an export-only rendering; choose tsr, md or sql")
+    _ => @tesseract.import_tsr(db, req.text)
   }
   let (ok, detail) = match outcome {
     // The SQL importer counts the statements it ran, not the rows it wrote, so

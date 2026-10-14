@@ -4,7 +4,7 @@
 /// This is a separate binary rather than a flag on `cmd/main` because
 /// `moonbit-community/sqlite3` only builds for `native` and `wasm`. Adding it
 /// to `cmd/main` would drop that package from `js` and `wasm-gc`, and
-/// `src/sudokudb` would still have to stay dependency-free for the same
+/// `src/tesseract` would still have to stay dependency-free for the same
 /// reason. Nothing in the core library or the original CLI is touched.
 ///
 /// Persistence is a snapshot, not a mirror: the lattice lives in memory for the
@@ -18,7 +18,7 @@
 ///
 /// ```sh
 /// moon run cmd/persist --target native -- .open sudoku.db \
-///   "INSERT INTO sudokuDB (key,value,digit) VALUES ('a','{\"n\":1}',1) AT 1;" \
+///   "INSERT INTO tesseract (key,value,digit) VALUES ('a','{\"n\":1}',1) AT 1;" \
 ///   .save .status
 /// ```
 
@@ -88,9 +88,9 @@ fn print_help() -> Unit {
 }
 
 ///|
-fn print_status(db : @sudokudb.SudokuDB) -> Unit {
-  let s = @sudokudb.SudokuDB::status(db)
-  let here = @sudokudb.coords_of(s.current_position).unwrap()
+fn print_status(db : @tesseract.Tesseract) -> Unit {
+  let s = @tesseract.Tesseract::status(db)
+  let here = @tesseract.coords_of(s.current_position).unwrap()
   out("database: " + s.db_name)
   out("lattice : 3x3x3x3 = 81 cells, 108 lines, 12 slabs")
   out("records : " + s.current_count.to_string())
@@ -99,7 +99,7 @@ fn print_status(db : @sudokudb.SudokuDB) -> Unit {
     "cursor  : " +
     s.current_position.to_string() +
     " " +
-    @sudokudb.format_coords(here),
+    @tesseract.format_coords(here),
   )
   if cli.opened != "" {
     out("file    : " + cli.opened)
@@ -108,23 +108,23 @@ fn print_status(db : @sudokudb.SudokuDB) -> Unit {
 
 ///|
 /// `.verify` — the same check `cmd/main` runs, over the digits in the store.
-fn verify(db : @sudokudb.SudokuDB) -> Unit {
-  let all = @sudokudb.SudokuDB::select(
+fn verify(db : @tesseract.Tesseract) -> Unit {
+  let all = @tesseract.Tesseract::select(
     db,
     "",
     "",
     None,
-    @sudokudb.no_filter(),
+    @tesseract.no_filter(),
     None,
   )
-  let digits = @sudokudb.empty_digits()
+  let digits = @tesseract.empty_digits()
   for row in all.data {
-    if row.digit != @sudokudb.NO_DIGIT {
-      @sudokudb.set_digit(digits, row.position, row.digit)
+    if row.digit != @tesseract.NO_DIGIT {
+      @tesseract.set_digit(digits, row.position, row.digit)
     }
   }
-  let lines = @sudokudb.line_violations(digits)
-  let slabs = @sudokudb.slab_violations(digits)
+  let lines = @tesseract.line_violations(digits)
+  let slabs = @tesseract.slab_violations(digits)
   out("line violations : " + lines.length().to_string())
   out("slab imbalances : " + slabs.length().to_string())
 }
@@ -132,11 +132,11 @@ fn verify(db : @sudokudb.SudokuDB) -> Unit {
 ///|
 /// Everything after the first word, trimmed.
 fn argument(line : String, keyword : String) -> String {
-  @sudokudb.trim_ws(@sudokudb.slice(line, keyword.length(), line.length()))
+  @tesseract.trim_ws(@tesseract.slice(line, keyword.length(), line.length()))
 }
 
 ///|
-fn handle_dot(db : @sudokudb.SudokuDB, line : String) -> Bool {
+fn handle_dot(db : @tesseract.Tesseract, line : String) -> Bool {
   if line == ".help" || line == "-h" || line == "--help" {
     print_help()
     return true
@@ -149,10 +149,10 @@ fn handle_dot(db : @sudokudb.SudokuDB, line : String) -> Bool {
     verify(db)
     return true
   }
-  if @sudokudb.starts_with(line, ".open ") {
+  if @tesseract.starts_with(line, ".open ") {
     let path = argument(line, ".open")
     safely(".open", fn() raise {
-      let report = @sudokudb_sqlite.load(path, db)
+      let report = @tesseract_sqlite.load(path, db)
       cli.opened = path
       out(
         "opened " +
@@ -167,14 +167,14 @@ fn handle_dot(db : @sudokudb.SudokuDB, line : String) -> Bool {
     })
     return true
   }
-  if @sudokudb.starts_with(line, ".save") {
+  if @tesseract.starts_with(line, ".save") {
     let wanted = argument(line, ".save")
     let path = if wanted == "" { cli.opened } else { wanted }
     if path == "" {
       warn(".save needs a path, or an .open to take it from")
     } else {
       safely(".save", fn() raise {
-        let written = @sudokudb_sqlite.save(path, db)
+        let written = @tesseract_sqlite.save(path, db)
         cli.saved = true
         out("saved " + written.to_string() + " record(s) to " + path)
       })
@@ -193,14 +193,14 @@ fn handle_dot(db : @sudokudb.SudokuDB, line : String) -> Bool {
 fn main {
   let all = @env.args()
   let args = if all.length() > 0 { all[1:] } else { all }
-  warn("SudokuDB 4D - persistence CLI (native + wasm)")
+  warn("Tesseract 4D - persistence CLI (native + wasm)")
   if args.length() == 0 {
     print_help()
     return
   }
-  let logger = @sudokudb.new_logger("sudokuDB")
-  let db = @sudokudb.new_db("sudokuDB", logger)
-  @sudokudb.SudokuDBLogger::set_echo(@sudokudb.SudokuDB::get_logger(db), true)
+  let logger = @tesseract.new_logger("tesseract")
+  let db = @tesseract.new_db("tesseract", logger)
+  @tesseract.TesseractLogger::set_echo(@tesseract.Tesseract::get_logger(db), true)
   let mut i = 0
   while i < args.length() {
     // A command and its argument arrive as two argv entries under ordinary
@@ -222,7 +222,7 @@ fn main {
     }
     if !cli.quit {
       if !handle_dot(db, arg) {
-        out(@sudokudb.format_response(@sudokudb.execute(db, arg)))
+        out(@tesseract.format_response(@tesseract.execute(db, arg)))
       }
     }
     i = i + 1

@@ -1,5 +1,5 @@
 import {
-  "riantr/tesseract/src/sudokudb",
+  "riantr/tesseract/src/tesseract",
   "moonbit-community/sqlite3",
 }
 
@@ -7,7 +7,7 @@ import {
   "moonbitlang/x/fs" @xfs,
 } for "test"
 
-// The database is SQLite, so this package follows `src/sudokudb_sqlite` and
+// The database is SQLite, so this package follows `src/tesseract_sqlite` and
 // builds for the two backends that package supports.
 
 supported_targets = "native+wasm"

@@ -1,5 +1,5 @@
 ///|
-/// Structured logging with a bounded ring, ported from the C# `SudokuDBLogger`.
+/// Structured logging with a bounded ring, ported from the C# `TesseractLogger`.
 ///
 /// The C# version stamped every entry with `DateTime.UtcNow` and kept the last
 /// 100. MoonBit's core library exposes no wall clock, and reaching for one
@@ -83,7 +83,7 @@ pub fn format_details(details : Map[String, String]) -> String {
 
 ///|
 /// Bounded log buffer.
-pub struct SudokuDBLogger {
+pub struct TesseractLogger {
   name : String
   mut logs : Array[LogEntry]
   mut seq : Int
@@ -92,25 +92,25 @@ pub struct SudokuDBLogger {
 
 ///|
 /// A logger that starts empty and does not print.
-pub fn new_logger(name : String) -> SudokuDBLogger {
+pub fn new_logger(name : String) -> TesseractLogger {
   { name, logs: [], seq: 0, echo: false, }
 }
 
 ///|
 /// Turns console mirroring on or off; the CLI turns it on, tests leave it off.
-pub fn SudokuDBLogger::set_echo(self : SudokuDBLogger, on : Bool) -> Unit {
+pub fn TesseractLogger::set_echo(self : TesseractLogger, on : Bool) -> Unit {
   self.echo = on
 }
 
 ///|
 /// The current entry count.
-pub fn SudokuDBLogger::count(self : SudokuDBLogger) -> Int {
+pub fn TesseractLogger::count(self : TesseractLogger) -> Int {
   self.logs.length()
 }
 
 ///|
 /// A snapshot of the retained entries, oldest first.
-pub fn SudokuDBLogger::entries(self : SudokuDBLogger) -> Array[LogEntry] {
+pub fn TesseractLogger::entries(self : TesseractLogger) -> Array[LogEntry] {
   let out : Array[LogEntry] = []
   let mut i = 0
   while i < self.logs.length() {
@@ -124,14 +124,14 @@ pub fn SudokuDBLogger::entries(self : SudokuDBLogger) -> Array[LogEntry] {
 
 ///|
 /// stay unique after a clear.
-pub fn SudokuDBLogger::clear(self : SudokuDBLogger) -> Unit {
+pub fn TesseractLogger::clear(self : TesseractLogger) -> Unit {
   self.logs = []
 }
 
 ///|
 /// Appends one entry, trimming the oldest once the ring is full.
-pub fn SudokuDBLogger::add(
-  self : SudokuDBLogger,
+pub fn TesseractLogger::add(
+  self : TesseractLogger,
   level : LogLevel,
   message : String,
   details : String,
@@ -156,17 +156,17 @@ pub fn SudokuDBLogger::add(
   }
   if self.echo {
     // Diagnostics go to stderr, not stdout: the CLI documents
-    // `moon run cmd/main -- .export sdb > dump.sdb`, and mirroring the log on
+    // `moon run cmd/main -- .export tsr > dump.tsr`, and mirroring the log on
     // stdout meant the redirected file began with a banner and a log line -
-    // which its own `import_sdb` then rejected as invalid JSON.
+    // which its own `import_tsr` then rejected as invalid JSON.
     eprintln("[" + entry.stamp + "] [" + level_name(level) + "] " + message)
   }
 }
 
 ///|
 /// Logs at DEBUG.
-pub fn SudokuDBLogger::log_debug(
-  self : SudokuDBLogger,
+pub fn TesseractLogger::log_debug(
+  self : TesseractLogger,
   message : String,
   details : Map[String, String],
 ) -> Unit {
@@ -175,8 +175,8 @@ pub fn SudokuDBLogger::log_debug(
 
 ///|
 /// Logs at INFO.
-pub fn SudokuDBLogger::log_info(
-  self : SudokuDBLogger,
+pub fn TesseractLogger::log_info(
+  self : TesseractLogger,
   message : String,
   details : Map[String, String],
 ) -> Unit {
@@ -185,8 +185,8 @@ pub fn SudokuDBLogger::log_info(
 
 ///|
 /// Logs at WARNING.
-pub fn SudokuDBLogger::log_warning(
-  self : SudokuDBLogger,
+pub fn TesseractLogger::log_warning(
+  self : TesseractLogger,
   message : String,
   details : Map[String, String],
 ) -> Unit {
@@ -195,8 +195,8 @@ pub fn SudokuDBLogger::log_warning(
 
 ///|
 /// Logs at ERROR.
-pub fn SudokuDBLogger::log_error(
-  self : SudokuDBLogger,
+pub fn TesseractLogger::log_error(
+  self : TesseractLogger,
   message : String,
   details : Map[String, String],
 ) -> Unit {
@@ -205,8 +205,8 @@ pub fn SudokuDBLogger::log_error(
 
 ///|
 /// Logs an operation outcome, matching the C# message wording.
-pub fn SudokuDBLogger::log_operation(
-  self : SudokuDBLogger,
+pub fn TesseractLogger::log_operation(
+  self : TesseractLogger,
   operation : String,
   success : Bool,
   details : Map[String, String],

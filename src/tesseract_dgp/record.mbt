@@ -1,5 +1,5 @@
 ///|
-/// Recording a real dataset into a SudokuDB lattice, and reading it back.
+/// Recording a real dataset into a Tesseract lattice, and reading it back.
 ///
 /// The question this package exists to answer is narrow: *given data that is
 /// actually shaped like a dataset, does this store record it?* Three toy
@@ -8,9 +8,9 @@
 /// double-precision outcomes, which is where a store's precision either shows
 /// up or does not.
 ///
-/// Nothing here is special to SudokuDB's rules - no cell carries a digit, so
+/// Nothing here is special to Tesseract's rules - no cell carries a digit, so
 /// the sudoku constraint never fires and the recording is a pure store
-/// question. The constraint layer gets its own tests in `src/sudokudb`.
+/// question. The constraint layer gets its own tests in `src/tesseract`.
 ///
 /// The generated data comes from `riantr/moonbit_doubleML`, which ports the
 /// upstream `doubleml` DGPs to MoonBit. They are seeded, so every assertion
@@ -211,14 +211,14 @@ pub fn decode(value : String) -> Observation? {
 /// rows the store refused - it does not wrap around and overwrite the rows it
 /// already wrote, because that would report success for a dataset it did not
 /// actually record.
-pub fn record(db : @sudokudb.SudokuDB, data : Dataset) -> RecordReport {
+pub fn record(db : @tesseract.Tesseract, data : Dataset) -> RecordReport {
   let mut recorded = 0
   let mut rejected = 0
   let mut stopped_at = 0
   let mut i = 0
   for obs in data.observations {
     let position = i + 1
-    if !@sudokudb.position_in_bounds(position) {
+    if !@tesseract.position_in_bounds(position) {
       rejected = rejected + 1
       if stopped_at == 0 {
         stopped_at = position
@@ -228,12 +228,12 @@ pub fn record(db : @sudokudb.SudokuDB, data : Dataset) -> RecordReport {
     match encode(obs) {
       None => rejected = rejected + 1
       Some(value) => {
-        let response = @sudokudb.SudokuDB::insert(
+        let response = @tesseract.Tesseract::insert(
           db,
           observation_key(obs.index),
           value,
           Some(position),
-          @sudokudb.NO_DIGIT,
+          @tesseract.NO_DIGIT,
         )
         if response.success {
           recorded = recorded + 1
@@ -269,7 +269,7 @@ pub fn to_sql(data : Dataset) -> String {
         // The value is JSON: it contains `"` but never `'`, so the single
         // quotes this parser expects wrap it without further escaping.
         out.write_string(
-          "INSERT INTO sudokuDB (key,value) VALUES ('" +
+          "INSERT INTO tesseract (key,value) VALUES ('" +
           observation_key(obs.index) +
           "','" +
           value +
@@ -293,8 +293,8 @@ pub fn observation_key(index : Int) -> String {
 
 ///|
 /// Every row the lattice currently holds, ordered by cell.
-pub fn recorded(db : @sudokudb.SudokuDB) -> Array[@sudokudb.Record] {
-  @sudokudb.SudokuDB::select(db, "", "", None, @sudokudb.no_filter(), None).data
+pub fn recorded(db : @tesseract.Tesseract) -> Array[@tesseract.Record] {
+  @tesseract.Tesseract::select(db, "", "", None, @tesseract.no_filter(), None).data
 }
 
 ///|
@@ -305,7 +305,7 @@ pub fn recorded(db : @sudokudb.SudokuDB) -> Array[@sudokudb.Record] {
 /// record, the second is a wrong one, and only the second is a fidelity
 /// failure. The tests assert on both.
 pub fn read_back(
-  db : @sudokudb.SudokuDB,
+  db : @tesseract.Tesseract,
   expected : Dataset,
 ) -> Array[Observation]? {
   let rows = recorded(db)

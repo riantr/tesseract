@@ -1,14 +1,14 @@
 import {
-  "riantr/tesseract/src/sudokudb",
+  "riantr/tesseract/src/tesseract",
   "moonbit-community/sqlite3",
 }
 
 import {
   "moonbitlang/x/fs" @xfs,
-  // Test-only. `src/sudokudb_dgp` supplies real, seeded dataset rows so the
+  // Test-only. `src/tesseract_dgp` supplies real, seeded dataset rows so the
   // `.db` round trip is measured on double-precision data rather than on the
   // three hand-written toy records the other tests here use.
-  "riantr/tesseract/src/sudokudb_dgp",
+  "riantr/tesseract/src/tesseract_dgp",
 } for "test"
 
 // Same suppression `moonbit-community/sqlite3` uses: deriving a trait turns

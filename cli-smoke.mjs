@@ -6,7 +6,7 @@
 // covers the argv handling and the persistence path rather than the library,
 // which `moon test` already covers. The window has `gui-smoke.mjs`; these two
 // binaries had no gate at all, which is how `.open sudoku.db` could fail to
-// open and `.export md` could quietly write an .sdb file under a .md name.
+// open and `.export md` could quietly write an .tsr file under a .md name.
 //
 // Every argument here is passed as its own argv entry, the way a shell splits
 // it. That is the whole point: a command and its argument reach the program as
@@ -62,8 +62,8 @@ function run(pkg, args, cwd) {
 }
 
 const SQL_ADD =
-  "INSERT INTO sudokuDB (key,value,digit) VALUES ('u_probe','v1',1) AT 1;";
-const SELECT_ALL = "SELECT * FROM sudokuDB;";
+  "INSERT INTO tesseract (key,value,digit) VALUES ('u_probe','v1',1) AT 1;";
+const SELECT_ALL = "SELECT * FROM tesseract;";
 
 // `格式: 时间: 1` - only a rendered record carries one, never an INSERT reply.
 const stampOf = (out, key) => {
@@ -78,21 +78,21 @@ function main() {
 
   // A scratch directory this script owns outright, so it can clean up after
   // itself without touching anything of yours.
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sudokudb-cli-"));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tesseract-cli-"));
   try {
     // ---- cmd/main: a command and its format arrive as two argv entries ----
-    let r = run("main", ["INSERT INTO sudokuDB (key,value) VALUES ('a','1') AT 5;", ".export", "md"], dir);
+    let r = run("main", ["INSERT INTO tesseract (key,value) VALUES ('a','1') AT 5;", ".export", "md"], dir);
     // Pre-fix, bare `.export` exported the default format and `md` ran as SQL.
-    check("`.export md` exports Markdown, not the default format", r.out.startsWith("# SudokuDB 4D"), true, r.out);
+    check("`.export md` exports Markdown, not the default format", r.out.startsWith("# Tesseract 4D"), true, r.out);
     // Both streams: once `.export` has run it sends everything else to stderr,
     // so the failed parse of `md` would not show up in stdout at all.
     check("`.export md` does not run `md` as SQL", (r.out + r.err).includes("Unsupported SQL statement"), false, r.out + r.err);
 
     r = run("main", [".export", "sql"], dir);
-    check("`.export sql` exports a SQL dump", r.out.startsWith("-- SudokuDB 4D export"), true, r.out);
+    check("`.export sql` exports a SQL dump", r.out.startsWith("-- Tesseract 4D export"), true, r.out);
 
     r = run("main", [".export"], dir);
-    check("`.export` on its own still defaults to .sdb", r.out.trimStart().startsWith("{"), true, r.out);
+    check("`.export` on its own still defaults to .tsr", r.out.trimStart().startsWith("{"), true, r.out);
 
     // ---- cmd/persist: `.open` takes a path, and it is a separate argv entry ----
     const xdb = path.join(dir, "x.db");
@@ -124,7 +124,7 @@ function main() {
     r = run(
       "persist",
       [SELECT_ALL, SELECT_ALL, SELECT_ALL, SELECT_ALL, SELECT_ALL, ".open", "x.db", SELECT_ALL,
-       "INSERT INTO sudokuDB (key,value,digit) VALUES ('u_marker','m',0) AT 37;", SELECT_ALL],
+       "INSERT INTO tesseract (key,value,digit) VALUES ('u_marker','m',0) AT 37;", SELECT_ALL],
       dir,
     );
     const loadedB = stampOf(r.out, "u_probe");

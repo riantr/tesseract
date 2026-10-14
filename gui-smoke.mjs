@@ -1,4 +1,4 @@
-// End-to-end smoke test for the SudokuDB window.
+// End-to-end smoke test for the Tesseract window.
 //
 //   proton_cli dev            # in one terminal, PROTON_HEADLESS=1 is fine
 //   node gui-smoke.mjs        # in another
@@ -12,7 +12,7 @@
 import { spawn } from "node:child_process";
 
 const PORT = process.env.PROTON_DEVTOOLS_PORT || "";
-const URL_PREFIX = process.env.SUDOKUDB_URL_PREFIX || "cmd/gui/web/index.html";
+const URL_PREFIX = process.env.TESSERACT_URL_PREFIX || "cmd/gui/web/index.html";
 
 const log = (...a) => console.log(...a);
 
@@ -281,7 +281,7 @@ async function main() {
 
     // SQL through the real console.
     await cdp.eval(`(() => {
-      document.getElementById('sql').value = "SELECT * FROM sudokuDB;";
+      document.getElementById('sql').value = "SELECT * FROM tesseract;";
       document.getElementById('btnSql').click();
       return true;
     })()`);
@@ -327,7 +327,7 @@ async function main() {
         (await cdp.eval("document.getElementById('fPos').value")),
     );
     await cdp.eval(`(() => {
-      document.getElementById('sql').value = "SELECT * FROM sudokuDB;";
+      document.getElementById('sql').value = "SELECT * FROM tesseract;";
       document.getElementById('btnSql').click();
       return true;
     })()`);
@@ -413,7 +413,7 @@ async function main() {
     // Export round trip.
     await cdp.eval("document.getElementById('btnExport').click(); true");
     await new Promise((r) => setTimeout(r, 2000));
-    check("export produced .sdb text", await cdp.eval("document.getElementById('ioText').value.length > 100"), true);
+    check("export produced .tsr text", await cdp.eval("document.getElementById('ioText').value.length > 100"), true);
 
     log("");
     log(failures === 0 ? "all smoke checks passed" : `${failures} smoke check(s) FAILED`);

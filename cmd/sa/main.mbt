@@ -78,14 +78,14 @@ fn print_help() -> Unit {
 /// Coverage first: `parsed / files` is the number that decides how much the
 /// rest is worth.
 fn show(db : String) -> Unit raise {
-  let run_id = match @sudokudb_sa.latest_run(db) {
+  let run_id = match @tesseract_sa.latest_run(db) {
     None => {
       warn("no runs in " + db)
       return
     }
     Some(v) => v
   }
-  let report = match @sudokudb_sa.load(db, run_id) {
+  let report = match @tesseract_sa.load(db, run_id) {
     None => {
       warn("run " + run_id.to_string() + " is not readable")
       return
@@ -138,14 +138,14 @@ fn show(db : String) -> Unit raise {
 
 ///|
 fn list_files(db : String) -> Unit raise {
-  let run_id = match @sudokudb_sa.latest_run(db) {
+  let run_id = match @tesseract_sa.latest_run(db) {
     None => {
       warn("no runs in " + db)
       return
     }
     Some(v) => v
   }
-  let report = match @sudokudb_sa.load(db, run_id) {
+  let report = match @tesseract_sa.load(db, run_id) {
     None => return
     Some(v) => v
   }
@@ -211,14 +211,14 @@ fn list_files(db : String) -> Unit raise {
 
 ///|
 fn list_unparsed(db : String) -> Unit raise {
-  let run_id = match @sudokudb_sa.latest_run(db) {
+  let run_id = match @tesseract_sa.latest_run(db) {
     None => {
       warn("no runs in " + db)
       return
     }
     Some(v) => v
   }
-  let report = match @sudokudb_sa.load(db, run_id) {
+  let report = match @tesseract_sa.load(db, run_id) {
     None => return
     Some(v) => v
   }
@@ -244,7 +244,7 @@ fn list_unparsed(db : String) -> Unit raise {
 /// than tab-separated so the eye can compare two rows, which is the only
 /// reason this command exists.
 fn list_runs(db : String) -> Unit raise {
-  let runs = @sudokudb_sa.list_runs(db)
+  let runs = @tesseract_sa.list_runs(db)
   if runs.length() == 0 {
     warn("no runs in " + db)
     return
@@ -293,7 +293,7 @@ fn store(scan_file : String, db : String) -> Unit raise {
   // failure signal - a run that could not find its target still exits 0. Storing
   // that would put a run in the database whose zero findings read like a clean
   // bill of health.
-  let report = match @sudokudb_sa.parse(text) {
+  let report = match @tesseract_sa.parse(text) {
     Ok(v) => v
     Err(e) => {
       warn("✗ " + scan_file + " is not a completed scan")
@@ -301,7 +301,7 @@ fn store(scan_file : String, db : String) -> Unit raise {
       return
     }
   }
-  let id = @sudokudb_sa.save(db, report)
+  let id = @tesseract_sa.save(db, report)
   out("stored run " + id.to_string() + " in " + db)
   out("  files     : " + report.files.to_string())
   out(
@@ -326,7 +326,7 @@ fn store(scan_file : String, db : String) -> Unit raise {
 fn main {
   let all = @env.args()
   let args = if all.length() > 0 { all[1:] } else { all }
-  warn("SudokuDB - static analysis store (native + wasm)")
+  warn("Tesseract - static analysis store (native + wasm)")
   if args.length() == 0 {
     print_help()
     return

@@ -1,5 +1,5 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "riantr/tesseract/src/sudokudb"
+package "riantr/tesseract/src/tesseract"
 
 import {
   "moonbitlang/core/debug",
@@ -34,7 +34,7 @@ pub fn cell_is_empty(GridCell) -> Bool
 
 pub fn contains_ci(String, String) -> Bool
 
-pub fn coord_at(Coords, Int) -> Int
+pub fn coord_at(Coords, Int) -> Int?
 
 pub fn coord_filter(Int, Int, Int, Int) -> CoordFilter
 
@@ -64,19 +64,19 @@ pub fn eq_ci(String, String) -> Bool
 
 pub fn err_response(String, String) -> DBResponse
 
-pub fn execute(SudokuDB, String) -> DBResponse
+pub fn execute(Tesseract, String) -> DBResponse
 
-pub fn export_markdown(SudokuDB) -> String
+pub fn export_markdown(Tesseract) -> String
 
-pub fn export_sdb(SudokuDB) -> String
+pub fn export_sql(Tesseract) -> String
 
-pub fn export_sql(SudokuDB) -> String
+pub fn export_tsr(Tesseract) -> String
 
 pub fn filter_matches(CoordFilter, Coords) -> Bool
 
-pub fn find_all_by_key(SudokuDB, String) -> Array[Int]
+pub fn find_all_by_key(Tesseract, String) -> Array[Int]
 
-pub fn find_by_key(SudokuDB, String) -> Int?
+pub fn find_by_key(Tesseract, String) -> Int?
 
 pub fn format_coords(Coords) -> String
 
@@ -88,11 +88,11 @@ pub fn format_response(DBResponse) -> String
 
 pub fn free_axis_of(Array[Coords]) -> Int
 
-pub fn import_markdown(SudokuDB, String) -> Result[Int, String]
+pub fn import_markdown(Tesseract, String) -> Result[Int, String]
 
-pub fn import_sdb(SudokuDB, String) -> Result[Int, String]
+pub fn import_sql(Tesseract, String) -> Result[Int, String]
 
-pub fn import_sql(SudokuDB, String) -> Result[Int, String]
+pub fn import_tsr(Tesseract, String) -> Result[Int, String]
 
 pub fn index0(Coords) -> Int
 
@@ -118,9 +118,9 @@ pub fn lower(String) -> String
 
 pub fn neighbours(Coords, Int) -> Array[Coords]
 
-pub fn new_db(String, SudokuDBLogger) -> SudokuDB
+pub fn new_db(String, TesseractLogger) -> Tesseract
 
-pub fn new_logger(String) -> SudokuDBLogger
+pub fn new_logger(String) -> TesseractLogger
 
 pub fn no_filter() -> CoordFilter
 
@@ -148,7 +148,7 @@ pub fn position_in_bounds(Int) -> Bool
 
 pub fn position_of(Coords) -> Int
 
-pub fn render_lattice(SudokuDB, Int) -> String
+pub fn render_lattice(Tesseract, Int) -> String
 
 pub fn set_digit(Array[Int], Int, Int) -> Unit
 
@@ -253,44 +253,44 @@ pub struct Record {
   digit : Int
 }
 
-pub struct SudokuDB {
+pub struct Tesseract {
   db_name : String
   cells : Array[GridCell]
   mut current_position : Int
-  logger : SudokuDBLogger
+  logger : TesseractLogger
 }
-pub fn SudokuDB::cell_at(Self, Int) -> GridCell?
-pub fn SudokuDB::delete(Self, String, Int?) -> DBResponse
-pub fn SudokuDB::digit_conflict(Self, Int, Int) -> GridCell?
-pub fn SudokuDB::digit_count(Self) -> Int
-pub fn SudokuDB::get_logger(Self) -> SudokuDBLogger
-pub fn SudokuDB::insert(Self, String, String, Int?, Int) -> DBResponse
-pub fn SudokuDB::insert_stamped(Self, String, String, Int?, Int, String?) -> DBResponse
-pub fn SudokuDB::line_query(Self, Int, Int) -> DBResponse
-pub fn SudokuDB::occupancy(Self) -> Int
-pub fn SudokuDB::peer_query(Self, Int) -> DBResponse
-pub fn SudokuDB::select(Self, String, String, Int?, CoordFilter, Int?) -> DBResponse
-pub fn SudokuDB::set_position(Self, Int) -> Unit
-pub fn SudokuDB::slab_query(Self, Int, Int) -> DBResponse
-pub fn SudokuDB::status(Self) -> DBStatus
-pub fn SudokuDB::update(Self, String, String, Int?, Int?) -> DBResponse
+pub fn Tesseract::cell_at(Self, Int) -> GridCell?
+pub fn Tesseract::delete(Self, String, Int?) -> DBResponse
+pub fn Tesseract::digit_conflict(Self, Int, Int) -> GridCell?
+pub fn Tesseract::digit_count(Self) -> Int
+pub fn Tesseract::get_logger(Self) -> TesseractLogger
+pub fn Tesseract::insert(Self, String, String, Int?, Int) -> DBResponse
+pub fn Tesseract::insert_stamped(Self, String, String, Int?, Int, String?) -> DBResponse
+pub fn Tesseract::line_query(Self, Int, Int) -> DBResponse
+pub fn Tesseract::occupancy(Self) -> Int
+pub fn Tesseract::peer_query(Self, Int) -> DBResponse
+pub fn Tesseract::select(Self, String, String, Int?, CoordFilter, Int?) -> DBResponse
+pub fn Tesseract::set_position(Self, Int) -> Unit
+pub fn Tesseract::slab_query(Self, Int, Int) -> DBResponse
+pub fn Tesseract::status(Self) -> DBStatus
+pub fn Tesseract::update(Self, String, String, Int?, Int?) -> DBResponse
 
-pub struct SudokuDBLogger {
+pub struct TesseractLogger {
   name : String
   mut logs : Array[LogEntry]
   mut seq : Int
   mut echo : Bool
 }
-pub fn SudokuDBLogger::add(Self, LogLevel, String, String) -> Unit
-pub fn SudokuDBLogger::clear(Self) -> Unit
-pub fn SudokuDBLogger::count(Self) -> Int
-pub fn SudokuDBLogger::entries(Self) -> Array[LogEntry]
-pub fn SudokuDBLogger::log_debug(Self, String, Map[String, String]) -> Unit
-pub fn SudokuDBLogger::log_error(Self, String, Map[String, String]) -> Unit
-pub fn SudokuDBLogger::log_info(Self, String, Map[String, String]) -> Unit
-pub fn SudokuDBLogger::log_operation(Self, String, Bool, Map[String, String]) -> Unit
-pub fn SudokuDBLogger::log_warning(Self, String, Map[String, String]) -> Unit
-pub fn SudokuDBLogger::set_echo(Self, Bool) -> Unit
+pub fn TesseractLogger::add(Self, LogLevel, String, String) -> Unit
+pub fn TesseractLogger::clear(Self) -> Unit
+pub fn TesseractLogger::count(Self) -> Int
+pub fn TesseractLogger::entries(Self) -> Array[LogEntry]
+pub fn TesseractLogger::log_debug(Self, String, Map[String, String]) -> Unit
+pub fn TesseractLogger::log_error(Self, String, Map[String, String]) -> Unit
+pub fn TesseractLogger::log_info(Self, String, Map[String, String]) -> Unit
+pub fn TesseractLogger::log_operation(Self, String, Bool, Map[String, String]) -> Unit
+pub fn TesseractLogger::log_warning(Self, String, Map[String, String]) -> Unit
+pub fn TesseractLogger::set_echo(Self, Bool) -> Unit
 
 pub struct Where {
   key : String

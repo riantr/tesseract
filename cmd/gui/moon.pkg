@@ -1,5 +1,5 @@
 import {
-  "riantr/tesseract/src/sudokudb",
+  "riantr/tesseract/src/tesseract",
   "moonbit-community/proton",
   "moonbit-community/proton_contract",
   "moonbitlang/async",
