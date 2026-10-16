@@ -1,0 +1,221 @@
+# Publish riantr/tesseract to mooncakes.io.
+#
+# This workflow IS the release. Do not also run `moon publish` on a machine:
+# `moon publish` on an existing version fails, and mooncakes `latest` means
+# "whatever was published last", so a manual publish would leave the registry
+# pointing somewhere the tag order does not suggest.
+#
+# To cut a release:
+#   1. set version in moon.mod, and sync every version reference in the README
+#   2. commit, then push master to gitee (daily remote) and to github
+#   3. git tag -a v<version> -m "..." && git push github v<version>
+#
+# Step 3 is what triggers this. A tag pushed to gitee alone does nothing.
+#
+# WHY THE GATE DOES NOT RUN THE `native` TARGET
+# `cmd/gui` is native-only by design -- it needs proton's native library. A
+# Linux runner has to link that to build it, which is a different question from
+# "does the library still work", and it is the one gate in this file that cannot
+# be verified from the machine this workflow was written on. The targets below
+# are the ones that were run before the tag was pushed: wasm (the module's
+# `preferred_target`, and what mooncakes compiles into the published artifact)
+# and js. Every command in the Gate step was executed locally, at the pinned
+# typos version, before this tag was cut. Adding `native` is a deliberate
+# follow-up, not an oversight.
+#
+# WHY TYPOS IS IN HERE
+# On the sibling riantr/moonbit_doubleML repository the gate that actually
+# blocked releases was `Check typos`, not authentication: 45 red runs had been
+# written off as a missing token when the real cause was spelling in vendored
+# files. So it is pinned here to the exact version that was run locally
+# (v1.50.3) rather than floated -- a floating pin can accept a word locally
+# and reject the same word on the runner.
+#
+# The authentication mechanism is not an environment variable. `moon publish`
+# reads $HOME/.moon/credentials.json, so the secret is written there, used, and
+# removed by a trap on the way out -- including on failure.
+#
+# TO ENABLE ON A NEW REPOSITORY: set the secret under
+#     Settings -> Secrets and variables -> Actions
+# as MOONCAKES_RIANTR_TOKEN. The publish step fails fast and loudly when it is
+# absent, by design -- a silent skip would look like a successful release.
+#
+# The secret's VALUE is the whole contents of ~/.moon/credentials.json, not the
+# bare token. The step below writes the secret verbatim into that path, and the
+# file is a JSON object with two fields:
+#
+#     { "token": "<...>", "username": "riantr" }
+#
+# so pasting only the token writes an invalid credentials.json and moon publish
+# then fails with the same opaque exit 255 as a genuine rejection. Copy the file
+# (it lands there after `moon login`), not one field of it.
+
+name: publish
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to (re-)publish, for example v0.1.0"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-tesseract-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      FORCE_COLOR: 1
+      TYPOS_VERSION: v1.50.3
+      SECRET: ${{ secrets.MOONCAKES_RIANTR_TOKEN }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+
+      - name: Install moon
+        # The official install script, not a setup action: moonbitlang/setup-moonbit
+        # does not exist (404), which is what made the sibling gate.yml fail every
+        # run at "Set up job" -- actions a workflow references are resolved during
+        # job setup, before any step is named in the log.
+        #
+        # The path is install/unix.sh. install.sh answers 403 even from a GitHub
+        # runner.
+        run: |
+          set -euo pipefail
+          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+          echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
+          export PATH="$HOME/.moon/bin:$PATH"
+          command -v moon >/dev/null || {
+            echo "::error::moon is still not on PATH after the install script"
+            exit 1
+          }
+          moon version --all
+
+      - name: Resolve the registry index
+        # A fresh runner's index is empty, and this module imports proton and
+        # sqlite3 from mooncakes.io, so the gate below would fail with
+        # "Failed to resolve registry dependency" without this.
+        run: moon update
+
+      - name: moon.mod must agree with the tag
+        # moon publish takes the version from moon.mod, not from the tag. If
+        # they disagree the module is published under a version the tag does
+        # not name, and the tag then points at a release that does not exist.
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            tag="${{ inputs.tag }}"
+          else
+            tag="$GITHUB_REF_NAME"
+          fi
+          case "$tag" in
+            v*) want="${tag#v}" ;;
+            *)
+              echo "::error::Release tag must use the v* format, got: $tag"
+              exit 1
+              ;;
+          esac
+          # No `| head -n 1`: sed is the only writer and head closing the pipe
+          # early can hand the pipeline a SIGPIPE, which `pipefail` would then
+          # report as a failure of a version check that actually passed.
+          got=$(sed -n 's/^version = "\(.*\)"$/\1/p' moon.mod)
+          if [ "$got" != "$want" ]; then
+            echo "::error file=moon.mod::version is '$got', tag says '$want'."
+            exit 1
+          fi
+          echo "ok  moon.mod  version=$got"
+
+      - name: There must be exactly one module
+        # The shape is asserted rather than a hard-coded list of paths, so a
+        # layout change has to change this workflow on purpose instead of
+        # quietly publishing a different set of packages. `src/tesseract`,
+        # `src/tesseract_dgp`, `src/tesseract_sqlite`, `cmd/*` all carry a
+        # moon.pkg and no moon.mod, so the registry shows them as children of
+        # this one module -- which is what the README's import paths assume.
+        run: |
+          set -euo pipefail
+          n=$(find . -name moon.mod -not -path "./_build/*" \
+                -not -path "./.mooncakes/*" | wc -l)
+          if [ "$n" -ne 1 ]; then
+            echo "::error::found $n moon.mod files; this workflow publishes the"
+            echo "single root module. If the layout changed, update this workflow"
+            echo "on purpose rather than letting it publish the wrong set."
+            exit 1
+          fi
+          echo "ok  exactly one module at the repository root"
+
+      - name: Gate
+        # Every command here was run on the development machine before this tag
+        # was cut. See the note at the top for why `native` is not in the list.
+        run: |
+          set -euo pipefail
+          moon fmt --check
+          moon check --target wasm --deny-warn
+          moon check --target js --deny-warn
+          moon test --target wasm --deny-warn
+          moon build --target wasm
+
+      - name: Download typos
+        run: |
+          set -euo pipefail
+          curl -LsSf "https://github.com/crate-ci/typos/releases/download/$TYPOS_VERSION/typos-$TYPOS_VERSION-x86_64-unknown-linux-musl.tar.gz" \
+            | tar zxf - -C "${CARGO_HOME:-$HOME/.cargo}/bin"
+          typos --version
+
+      - name: Check typos
+        run: typos
+
+      - name: Publish to Mooncakes
+        # moon publish exits 255 for "secret missing", "secret has the wrong
+        # shape", "publish rejected" and "version already exists", so without
+        # this guard the annotation names none of them.
+        #
+        # Only the "missing" case is checked. A shape check was tried and
+        # REMOVED rather than shipped: an unverified guard risks a permanently
+        # red run -- the exact failure the tag trigger used to be disabled for.
+        # If the next release dies at auth, check the secret's shape first: it
+        # must be the JSON body of ~/.moon/credentials.json, not a bare token.
+        run: |
+          set -euo pipefail
+          # ${SECRET:-} rather than $SECRET: `set -u` turns an undefined name
+          # into "unbound variable", which would replace the message that says
+          # what is actually wrong with one that says nothing.
+          if [ -z "${SECRET:-}" ]; then
+            echo "::error::MOONCAKES_RIANTR_TOKEN is not set on this repository; moon publish cannot authenticate. If it IS set, check its SHAPE: it must be the JSON body of ~/.moon/credentials.json, not a bare token."
+            exit 1
+          fi
+          mkdir -p "$HOME/.moon"
+          printf '%s' "$SECRET" > "$HOME/.moon/credentials.json"
+          trap 'rm -f "$HOME/.moon/credentials.json"' EXIT
+          moon publish
+
+      - name: Create GitHub Release
+        # The tag comes from an if/else rather than `[ ... ] && tag=...`:
+        # under `set -e` an AND-list whose left side is false returns non-zero,
+        # and the step would abort before `gh release create` -- on every tag
+        # push, which is the only case that matters.
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            tag="${{ inputs.tag }}"
+          else
+            tag="$GITHUB_REF_NAME"
+          fi
+          gh release create "$tag" \
+            --title "tesseract ${tag#v}" \
+            --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}
