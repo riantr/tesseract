@@ -18,6 +18,13 @@ version = "0.1.0"
 
 readme = "README.mbt.md"
 
+// Where the source lives. `moon publish` warns
+// "'repository' field is not set or empty in module manifest" without it, and
+// the registry entry is the only place a reader can get from the package back
+// to the code. 0.1.0 was published before this line existed.
+
+repository = "https://github.com/riantr/tesseract"
+
 license = "Apache-2.0"
 
 keywords = [ "sudoku", "database", "key-value", "lattice", "4d" ]
