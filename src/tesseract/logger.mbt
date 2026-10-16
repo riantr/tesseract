@@ -2,10 +2,12 @@
 /// Structured logging with a bounded ring, ported from the C# `TesseractLogger`.
 ///
 /// The C# version stamped every entry with `DateTime.UtcNow` and kept the last
-/// 100. MoonBit's core library exposes no wall clock, and reaching for one
-/// would pin this package to a single target, so the clock is a field: the
-/// default is a logical sequence number and a caller that has a real clock can
-/// supply one. That also makes log output deterministic under test.
+/// 100. This port stamps with a `Clock` instead: the default is the logical
+/// sequence number, which keeps log output byte-comparable between two runs, and
+/// a surface that wants real timestamps sets `System`. The clock is a value
+/// rather than a call because a clock called inline makes every stamp a function
+/// of when the process happened to start. See `clock.mbt` for what that clock is
+/// and why it does not cost a dependency.
 
 ///|
 /// Oldest entries past this count are dropped, matching the C# limit.
@@ -88,12 +90,27 @@ pub struct TesseractLogger {
   mut logs : Array[LogEntry]
   mut seq : Int32
   mut echo : Bool
+  mut clock : Clock
 }
 
 ///|
-/// A logger that starts empty and does not print.
+/// A logger that starts empty, does not print, and stamps logically.
 pub fn new_logger(name : String) -> TesseractLogger {
-  { name, logs: [], seq: 0, echo: false, }
+  { name, logs: [], seq: 0, echo: false, clock: Logical, }
+}
+
+///|
+/// Switches the clock. Entries already written keep the stamp they were given;
+/// only later entries are affected, so switching to `System` mid-run leaves a
+/// readable seam rather than a hole.
+pub fn TesseractLogger::set_clock(self : TesseractLogger, c : Clock) -> Unit {
+  self.clock = c
+}
+
+///|
+/// The clock this logger is stamping with.
+pub fn TesseractLogger::clock_of(self : TesseractLogger) -> Clock {
+  self.clock
 }
 
 ///|
@@ -139,7 +156,7 @@ pub fn TesseractLogger::add(
   self.seq = self.seq + 1
   let entry = {
     seq: self.seq,
-    stamp: "#" + self.seq.to_string(),
+    stamp: self.clock.stamp(self.seq),
     level,
     message,
     details,

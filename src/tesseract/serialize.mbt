@@ -48,9 +48,15 @@ pub fn export_tsr(db : Tesseract) -> String {
   b.write_string("  \"dbName\": \"")
   b.write_string(json_escape(db.db_name))
   b.write_string("\",\n")
-  b.write_string("  \"dimensions\": 4,\n")
-  b.write_string("  \"side\": 3,\n")
-  b.write_string("  \"total_cells\": 81,\n")
+  b.write_string("  \"dimensions\": ")
+  b.write_object(DIM)
+  b.write_string(",\n")
+  b.write_string("  \"side\": ")
+  b.write_object(db.lattice.side)
+  b.write_string(",\n")
+  b.write_string("  \"total_cells\": ")
+  b.write_object(db.lattice.total)
+  b.write_string(",\n")
   b.write_string("  \"records\": [\n")
   let all = Tesseract::select(db, "", "", None, no_filter(), None)
   let mut first = true
@@ -100,11 +106,74 @@ fn json_str(v : Json, key : String) -> String {
 
 ///|
 /// Reads a value at a JSON key as an integer, or `fallback`.
-fn json_int(v : Json, key : String, fallback : Int32) -> Int32 {
+fn json_int(v : Json, key : String, fallback : Int64) -> Int64 {
   match json_field(v, key) {
-    Some(Json::Number(n, repr=_)) => n.to_int()
+    Some(Json::Number(n, repr=_)) => n.to_int64()
     _ => fallback
   }
+}
+
+///|
+/// Where a file record belongs in `db`'s lattice.
+///
+/// **Coordinates win over position numbers, and that ordering is the whole
+/// point of this function.** A position number is only meaningful relative to
+/// the side it was written under: measured on this project, 78 of the 81
+/// positions in a 3-per-axis lattice name a *different cell* once the side is
+/// 4 (position 40 is (1,1,1,0) at side 3 and (0,2,1,3) at side 4). Importing by
+/// number into a differently sized lattice therefore relocates almost every
+/// record while still reading as a clean load.
+///
+/// So: a record that carries coordinates is placed by those coordinates, mapped
+/// into the target lattice. The position number is consulted only for a record
+/// carrying no coordinates at all, and only when it is in range. A coordinate
+/// outside the target lattice is an error that names it - never a clamp, and
+/// never a fall-through to the number that would quietly address another cell.
+fn resolve_import_position(
+  db : Tesseract,
+  item : Json,
+  ordinal : Int32,
+) -> Result[Int64, String] {
+  let lat = db.lattice
+  let coords_field = json_str(item, "coords")
+  if coords_field != "" {
+    match parse_coords_raw(coords_field) {
+      Some(c) => {
+        if !coords_in_bounds(lat, c) {
+          return Err(
+            "Record " +
+            ordinal.to_string() +
+            " has coords " +
+            coords_field +
+            ", outside the 0.." +
+            (lat.side - 1L).to_string() +
+            " range of this side-" +
+            lat.side.to_string() +
+            " lattice",
+          )
+        }
+        return Ok(position_of(lat, c))
+      }
+      None =>
+        return Err(
+          "Record " +
+          ordinal.to_string() +
+          " has unparsable coords " +
+          coords_field,
+        )
+    }
+  }
+  let gp = json_int(item, "grid_position", 0L)
+  if position_in_bounds(lat, gp) {
+    return Ok(gp)
+  }
+  Err(
+    "Record " +
+    ordinal.to_string() +
+    " has no usable coords or grid_position for a side-" +
+    lat.side.to_string() +
+    " lattice",
+  )
 }
 
 ///|
@@ -112,16 +181,31 @@ fn json_int(v : Json, key : String, fallback : Int32) -> Int32 {
 ///
 /// The database is cleared first, so a failed load leaves an empty database
 /// rather than a half-overwritten one mixed with whatever was there before.
-pub fn import_tsr(db : Tesseract, text : String) -> Result[Int32, String] {
+///
+/// Records are placed by their coordinates, so a file written under one side can
+/// be loaded into a database built for another as long as every coordinate fits
+/// the target. See `resolve_import_position` for why the position number is not
+/// consulted first.
+pub fn import_tsr(db : Tesseract, text : String) -> Result[Int64, String] {
   if !@json.valid(text) {
     return Err("Not valid JSON")
   }
   let root = @json.parse(text) catch { _ => return Err("Not valid JSON") }
+  let dims = json_int(root, "dimensions", DIM)
+  if dims != DIM {
+    return Err(
+      "File declares " +
+      dims.to_string() +
+      " dimensions; this build is " +
+      DIM.to_string() +
+      "-dimensional",
+    )
+  }
   let items = match json_field(root, "records") {
     Some(Json::Array(a)) => a
     _ => return Err("Missing records array")
   }
-  let mut loaded = 0
+  let mut loaded = 0L
   let mut i = 0
   // The clear this function has always documented. Without it a load merged
   // into whatever was already stored, so the count it returned described only
@@ -133,25 +217,12 @@ pub fn import_tsr(db : Tesseract, text : String) -> Result[Int32, String] {
     let key = json_str(item, "key")
     let value = json_str(item, "value")
     if key != "" && value != "" {
-      let mut target = json_int(item, "grid_position", 0)
-      if !position_in_bounds(target) {
-        let coords_field = json_str(item, "coords")
-        target = match parse_coords(coords_field) {
-          Some(c) => position_of(c)
-          None => 0
-        }
-      }
-      if !position_in_bounds(target) {
-        // Falling back to cell 1 is exactly the "a malformed address resolves
-        // to another cell" behaviour the rest of the library refuses: it
-        // displaces whatever was in cell 1 and still reads as a clean load.
-        return Err(
-          "Record " +
-          i.to_string() +
-          " (" +
-          key +
-          ") has no usable grid_position or coords",
-        )
+      // Falling back to cell 1 would be exactly the "a malformed address
+      // resolves to another cell" behaviour the rest of the library refuses: it
+      // displaces whatever was in cell 1 and still reads as a clean load.
+      let target = match resolve_import_position(db, item, i) {
+        Ok(p) => p
+        Err(e) => return Err(e)
       }
       let digit = json_int(item, "digit", NO_DIGIT)
       // The file's own timestamp is restored rather than re-derived from the
@@ -171,7 +242,7 @@ pub fn import_tsr(db : Tesseract, text : String) -> Result[Int32, String] {
         },
       )
       if response.success {
-        loaded = loaded + 1
+        loaded = loaded + 1L
       }
     }
     i = i + 1
@@ -281,7 +352,7 @@ pub fn export_markdown(db : Tesseract) -> String {
   let b = StringBuilder::StringBuilder()
   b.write_string("# Tesseract 4D 数据导出\n\n")
   let s = Tesseract::status(db)
-  b.write_string("维度: 3x3x3x3 (81 cells)  \n")
+  b.write_string("维度: " + lattice_shape_text(db.lattice) + "  \n")
   b.write_string("总记录数: ")
   b.write_object(s.current_count)
   b.write_string("  \n")
@@ -395,22 +466,44 @@ pub fn import_markdown(db : Tesseract, text : String) -> Result[Int32, String] {
         i = i + 1
         continue
       }
-      let mut target = 0
-      if pos_col >= 0 && pos_col < cells.length() {
+      // Same rule as the `.tsr` importer, for the same reason: coordinates are
+      // authoritative and the position number is the fallback. See
+      // `resolve_import_position`.
+      let lat = db.lattice
+      let mut target = 0L
+      let mut resolved = false
+      if coords_col >= 0 && coords_col < cells.length() {
+        match parse_coords_raw(cells[coords_col]) {
+          Some(c) => {
+            if !coords_in_bounds(lat, c) {
+              return Err(
+                "Row " +
+                i.to_string() +
+                " (" +
+                key +
+                ") has coords " +
+                cells[coords_col] +
+                ", outside the 0.." +
+                (lat.side - 1L).to_string() +
+                " range of this side-" +
+                lat.side.to_string() +
+                " lattice",
+              )
+            }
+            target = position_of(lat, c)
+            resolved = true
+          }
+          None => resolved = false
+        }
+      }
+      if !resolved && pos_col >= 0 && pos_col < cells.length() {
         match parse_int(cells[pos_col]) {
-          Some(p) => target = p
-          None => target = 0
+          Some(p) => target = p.to_int64()
+          None => target = 0L
         }
+        resolved = position_in_bounds(lat, target)
       }
-      if !position_in_bounds(target) &&
-        coords_col >= 0 &&
-        coords_col < cells.length() {
-        match parse_coords(cells[coords_col]) {
-          Some(c) => target = position_of(c)
-          None => target = 0
-        }
-      }
-      if !position_in_bounds(target) {
+      if !resolved {
         return Err(
           "Row " +
           i.to_string() +
@@ -421,7 +514,7 @@ pub fn import_markdown(db : Tesseract, text : String) -> Result[Int32, String] {
       }
       let digit = if digit_col >= 0 && digit_col < cells.length() {
         match parse_int(cells[digit_col]) {
-          Some(d) => d
+          Some(d) => d.to_int64()
           None => NO_DIGIT
         }
       } else {
@@ -474,7 +567,7 @@ fn escape_sql_literal(s : String) -> String {
 pub fn export_sql(db : Tesseract) -> String {
   let b = StringBuilder::StringBuilder()
   b.write_string("-- Tesseract 4D export\n")
-  b.write_string("-- lattice: 3x3x3x3, 81 cells\n")
+  b.write_string("-- lattice: " + lattice_shape_text(db.lattice) + "\n")
   let s = Tesseract::status(db)
   b.write_string("-- records: ")
   b.write_object(s.current_count)
@@ -627,8 +720,8 @@ pub fn import_sql(db : Tesseract, text : String) -> Result[Int32, String] {
 
 ///|
 /// One cell rendered for the lattice view.
-fn lattice_cell(db : Tesseract, position : Int32, cursor : Int32) -> String {
-  let cell = db.cells[position - 1]
+fn lattice_cell(db : Tesseract, position : Int64, cursor : Int64) -> String {
+  let cell = db.cells[slot_of(position)]
   let marker = if position == cursor { ">" } else { " " }
   let label = if cell_is_empty(cell) {
     "."
@@ -652,39 +745,78 @@ fn lattice_cell(db : Tesseract, position : Int32, cursor : Int32) -> String {
 }
 
 ///|
-/// The 4D lattice as 27 slices of 3x3, grouped three to a line.
+/// The lattice shape as text, e.g. `3x3x3x3 (81 cells)`, or
+/// `4x4x4x4 (256 cells)`.
 ///
-/// With only 3 cells per axis there is no single "right" way to flatten four
-/// dimensions onto a terminal, so this fixes the two slowest axes and lays the
-/// remaining 3x3 out as a grid — the same reading a 2D sudoku grid gets.
-pub fn render_lattice(db : Tesseract, cursor : Int32) -> String {
+/// The Markdown and SQL exports used to carry the literal `3x3x3x3, 81 cells` as
+/// a fixed string, so an export from a 4-per-axis database described a lattice
+/// it did not have. Anything that names the shape has to ask the lattice.
+pub fn lattice_shape_text(lat : Lattice) -> String {
   let b = StringBuilder::StringBuilder()
-  let mut x = 0
-  while x < SIDE {
+  let mut axis = 0L
+  while axis < DIM {
+    if axis > 0L {
+      b.write_char('x')
+    }
+    b.write_object(lat.side)
+    axis = axis + 1L
+  }
+  b.write_string(" (")
+  b.write_object(lat.total)
+  // "1 cell", not "1 cells". The banner and the export headers both print this,
+  // and a side-1 lattice is a supported value, not an error.
+  if lat.total == 1L {
+    b.write_string(" cell)")
+  } else {
+    b.write_string(" cells)")
+  }
+  b.to_string()
+}
+
+///|
+/// The 4D lattice as `side^2` slices of `side` x `side`, grouped `side` to a line.
+///
+/// With `side` cells per axis there is no single "right" way to flatten four
+/// dimensions onto a terminal, so this fixes the two slowest axes and lays the
+/// remaining `side` x `side` out as a grid — the same reading a 2D sudoku grid
+/// gets.
+///
+/// At `side == 3` this is byte-for-byte what it always was. At `side == 4` each
+/// block is 4x4 rather than 3x3, so a line is `side * (8 + 2) = 40` columns wide
+/// and there are `side^2 = 16` blocks; it still fits an 80-column terminal.
+pub fn render_lattice(db : Tesseract, cursor : Int64) -> String {
+  let lat = db.lattice
+  let b = StringBuilder::StringBuilder()
+  let mut x = 0L
+  while x < lat.side {
     b.write_string("=== x = ")
     b.write_object(x)
     b.write_string(" ===\n")
-    let mut y = 0
-    while y < SIDE {
-      let mut z = 0
-      while z < SIDE {
-        let mut w = 0
-        while w < SIDE {
+    let mut y = 0L
+    while y < lat.side {
+      let mut z = 0L
+      while z < lat.side {
+        let mut w = 0L
+        while w < lat.side {
           let cell_c = coords(x, y, z, w)
-          let text = lattice_cell(db, position_of(cell_c), cursor)
+          let text = lattice_cell(db, position_of(lat, cell_c), cursor)
           b.write_string(pad_right(text, 8))
-          w = w + 1
+          w = w + 1L
         }
         b.write_string("  ")
-        z = z + 1
+        z = z + 1L
       }
       b.write_string("  y=")
       b.write_object(y)
       b.write_char('\n')
-      y = y + 1
+      y = y + 1L
     }
-    x = x + 1
+    x = x + 1L
   }
-  b.write_string("cells: . empty, digits appended (1-3), > = insert cursor\n")
+  b.write_string(
+    "cells: . empty, digits appended (1-" +
+    lat.max_digit.to_string() +
+    "), > = insert cursor\n",
+  )
   b.to_string()
 }

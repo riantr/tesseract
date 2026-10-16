@@ -10,7 +10,11 @@
 
 ///|
 fn fresh() -> @tesseract.Tesseract {
-  @tesseract.new_db("tesseract", @tesseract.new_logger("test"))
+  @tesseract.new_db(
+    "tesseract",
+    @tesseract.default_lattice(),
+    @tesseract.new_logger("test"),
+  )
 }
 
 ///|
@@ -129,7 +133,7 @@ test "the lattice holds the encoded text verbatim" {
       None => abort("encode refused a finite observation")
     }
     assert_eq(rows[i].value, want)
-    assert_eq(rows[i].position, i + 1)
+    assert_eq(rows[i].position, i.to_int64() + 1L)
     assert_eq(rows[i].key, @tesseract_dgp.observation_key(i))
   }
 }
@@ -182,18 +186,24 @@ test "encoding is exact for the doubles that are hard to print" {
 test "a dataset larger than the lattice is refused, not wrapped" {
   // 93 rows, 81 cells. Wrapping would overwrite rows 1..12 and then report
   // "recorded 93", which is a lie about what is in the store.
+  let lat = @tesseract.default_lattice()
+  let extra = 12L
   let data = @tesseract_dgp.irm_dataset(93, 4, 0.5, 42)
   let db = fresh()
   let report = @tesseract_dgp.record(db, data)
   assert_eq(report.offered, 93)
-  assert_eq(report.recorded, 81)
-  assert_eq(report.rejected, 12)
-  assert_eq(report.stopped_at, 82)
-  assert_eq(@tesseract.Tesseract::occupancy(db), 81)
-  // The first 81 are the first 81 - the overflow must not have clobbered them.
+  assert_eq(report.recorded, lat.total.to_int())
+  assert_eq(report.rejected, extra.to_int())
+  assert_eq(report.stopped_at, lat.last_position + 1L)
+  assert_eq(@tesseract.Tesseract::occupancy(db), lat.total)
+  // The first `lat.total` are the first `lat.total` - the overflow must not have
+  // clobbered them.
   let rows = @tesseract_dgp.recorded(db)
   assert_eq(rows[0].key, @tesseract_dgp.observation_key(0))
-  assert_eq(rows[80].key, @tesseract_dgp.observation_key(80))
+  assert_eq(
+    rows[@tesseract.slot_of(lat.last_position)].key,
+    @tesseract_dgp.observation_key(lat.total.to_int() - 1),
+  )
 }
 
 ///|
@@ -249,7 +259,7 @@ test "the dataset also reaches the store through SQL" {
   assert_eq(rows.length(), 12)
   for i = 0; i < 12; i = i + 1 {
     assert_eq(rows[i].key, @tesseract_dgp.observation_key(i))
-    assert_eq(rows[i].position, i + 1)
+    assert_eq(rows[i].position, i.to_int64() + 1L)
     match @tesseract_dgp.decode(rows[i].value) {
       Some(back) => {
         assert_true(back.d == data.observations[i].d)

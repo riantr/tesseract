@@ -56,7 +56,11 @@ pub struct RecordReport {
   /// Rows the dataset held.
   offered : Int32
   /// The first cell the pass could not use, or 0 when every row was placed.
-  stopped_at : Int32
+  ///
+  /// A position, so `Int64` like every other position in the store - a cell
+  /// number that had to be narrowed to fit the old `Int32` report was already
+  /// the wrong type for a side big enough to matter.
+  stopped_at : Int64
 } derive(Eq, Debug)
 
 ///|
@@ -67,7 +71,14 @@ pub extend RecordReport with Debug::{to_repr}
 
 ///|
 /// The lattice's cell count, which is also this package's per-dataset ceiling.
-pub const CELL_COUNT : Int32 = 81
+///
+/// A function rather than a constant: the cell count is `side^4`, so a `const`
+/// could only ever be right for one side. Asking the store's own lattice is what
+/// keeps this correct at `lattice_of(4)` instead of quietly describing a
+/// 3-per-axis lattice.
+pub fn cell_count(db : @tesseract.Tesseract) -> Int64 {
+  @tesseract.Tesseract::lattice_of_db(db).total
+}
 
 ///|
 /// Builds one observation.
@@ -212,15 +223,18 @@ pub fn decode(value : String) -> Observation? {
 /// already wrote, because that would report success for a dataset it did not
 /// actually record.
 pub fn record(db : @tesseract.Tesseract, data : Dataset) -> RecordReport {
+  // The lattice is the store's own, so the ceiling follows whichever side it was
+  // built at rather than a cell count written into this file.
+  let lat = @tesseract.Tesseract::lattice_of_db(db)
   let mut recorded = 0
   let mut rejected = 0
-  let mut stopped_at = 0
+  let mut stopped_at = 0L
   let mut i = 0
   for obs in data.observations {
-    let position = i + 1
-    if !@tesseract.position_in_bounds(position) {
+    let position = i.to_int64() + lat.first_position
+    if !@tesseract.position_in_bounds(lat, position) {
       rejected = rejected + 1
-      if stopped_at == 0 {
+      if stopped_at == 0L {
         stopped_at = position
       }
       continue
@@ -239,7 +253,7 @@ pub fn record(db : @tesseract.Tesseract, data : Dataset) -> RecordReport {
           recorded = recorded + 1
         } else {
           rejected = rejected + 1
-          if stopped_at == 0 {
+          if stopped_at == 0L {
             stopped_at = position
           }
         }

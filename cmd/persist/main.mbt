@@ -89,10 +89,19 @@ fn print_help() -> Unit {
 
 ///|
 fn print_status(db : @tesseract.Tesseract) -> Unit {
+  let lat = @tesseract.Tesseract::lattice_of_db(db)
   let s = @tesseract.Tesseract::status(db)
-  let here = @tesseract.coords_of(s.current_position).unwrap()
+  let here = @tesseract.coords_of(lat, s.current_position).unwrap()
   out("database: " + s.db_name)
-  out("lattice : 3x3x3x3 = 81 cells, 108 lines, 12 slabs")
+  out(
+    "lattice : " +
+    @tesseract.lattice_shape_text(lat) +
+    " = " +
+    (lat.total / lat.side * @tesseract.DIM).to_string() +
+    " lines, " +
+    (@tesseract.DIM * lat.side).to_string() +
+    " slabs",
+  )
   out("records : " + s.current_count.to_string())
   out("digits  : " + s.digit_count.to_string())
   out(
@@ -109,6 +118,7 @@ fn print_status(db : @tesseract.Tesseract) -> Unit {
 ///|
 /// `.verify` — the same check `cmd/main` runs, over the digits in the store.
 fn verify(db : @tesseract.Tesseract) -> Unit {
+  let lat = @tesseract.Tesseract::lattice_of_db(db)
   let all = @tesseract.Tesseract::select(
     db,
     "",
@@ -117,14 +127,14 @@ fn verify(db : @tesseract.Tesseract) -> Unit {
     @tesseract.no_filter(),
     None,
   )
-  let digits = @tesseract.empty_digits()
+  let digits = @tesseract.empty_digits(lat)
   for row in all.data {
     if row.digit != @tesseract.NO_DIGIT {
-      @tesseract.set_digit(digits, row.position, row.digit)
+      @tesseract.set_digit(lat, digits, row.position, row.digit)
     }
   }
-  let lines = @tesseract.line_violations(digits)
-  let slabs = @tesseract.slab_violations(digits)
+  let lines = @tesseract.line_violations(lat, digits)
+  let slabs = @tesseract.slab_violations(lat, digits)
   out("line violations : " + lines.length().to_string())
   out("slab imbalances : " + slabs.length().to_string())
 }
@@ -199,7 +209,11 @@ fn main {
     return
   }
   let logger = @tesseract.new_logger("tesseract")
-  let db = @tesseract.new_db("tesseract", logger)
+  // Same reasoning as `cmd/main`, and it matters more here: `.save` writes the
+  // timestamps it was given into the `.db` and `.open` reads them back, so a
+  // persisted file full of `#7` counters is not a timestamp.
+  @tesseract.TesseractLogger::set_clock(logger, @tesseract.system_clock())
+  let db = @tesseract.new_db("tesseract", @tesseract.default_lattice(), logger)
   @tesseract.TesseractLogger::set_echo(
     @tesseract.Tesseract::get_logger(db),
     true,

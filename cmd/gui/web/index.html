@@ -22,6 +22,13 @@
         --d1: #2f81f7;
         --d2: #3fb950;
         --d3: #a371f7;
+        /* The digit domain is 1..side, so a side of 9 needs nine of these. */
+        --d4: #f0883e;
+        --d5: #db61a2;
+        --d6: #39c5cf;
+        --d7: #d29922;
+        --d8: #8b949e;
+        --d9: #ff7b72;
         font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
         font-size: 13px;
       }
@@ -214,6 +221,39 @@
       .d3 {
         background: rgba(163, 113, 247, 0.22);
         color: var(--d3);
+      }
+
+      /* The page offers sides up to 9, so the digit swatches do too. Without
+         these a digit 4 rendered with no colour at all - the chip's own class was
+         `d4` and no rule claimed it. */
+      .d4 {
+        background: rgba(240, 136, 62, 0.22);
+        color: var(--d4);
+      }
+
+      .d5 {
+        background: rgba(219, 97, 162, 0.22);
+        color: var(--d5);
+      }
+
+      .d6 {
+        background: rgba(57, 197, 207, 0.22);
+        color: var(--d6);
+      }
+
+      .d7 {
+        background: rgba(210, 153, 34, 0.22);
+        color: var(--d7);
+      }
+
+      .d8 {
+        background: rgba(139, 148, 158, 0.22);
+        color: var(--d8);
+      }
+
+      .d9 {
+        background: rgba(255, 123, 114, 0.22);
+        color: var(--d9);
       }
 
       .cell.empty .key {
@@ -476,7 +516,7 @@
 
   <body>
     <header>
-      <h1>Tesseract<small>3×3×3×3 · 81 格 · 108 线</small></h1>
+      <h1>Tesseract<small id="shape">3×3×3×3 · 81 格 · 108 线</small></h1>
       <div class="chips" id="chips"></div>
     </header>
 
@@ -484,6 +524,11 @@
       <div class="left">
         <section>
           <h2>平面 (x, y)</h2>
+          <div class="plane-bar">
+            <span class="hint">每轴格数</span>
+            <select id="selSide" style="width: 72px"></select>
+            <span class="hint">改变点阵会按坐标保留记录，坐标放不下的会被丢弃</span>
+          </div>
           <div class="plane-bar">
             <select id="selX" style="width: 64px"></select>
             <select id="selY" style="width: 64px"></select>
@@ -503,9 +548,9 @@
             <div style="flex: 0 0 96px">
               <label>类型</label>
               <select id="geoKind">
-                <option value="line">线 (3 格)</option>
-                <option value="slab">板 (27 格)</option>
-                <option value="peers" selected>同位 (8 格)</option>
+                <option value="line" id="optLine">线 (3 格)</option>
+                <option value="slab" id="optSlab">板 (27 格)</option>
+                <option value="peers" selected id="optPeers">同位 (8 格)</option>
               </select>
             </div>
             <div style="flex: 0 0 84px">
@@ -567,12 +612,7 @@
 
         <section>
           <h2>数位</h2>
-          <div class="digits">
-            <button class="d1" data-d="1">1</button>
-            <button class="d2" data-d="2">2</button>
-            <button class="d3" data-d="3">3</button>
-            <button data-d="0">清除</button>
-          </div>
+          <div class="digits" id="digits"></div>
           <div class="hint" style="margin-top: 6px">
             对选中格落子。共享同一条轴向直线的两格不能带同一个数位——冲突会返回
             <code>SUDOKU_CONFLICT</code>。空格会先补上键 <code>cell_N</code>。
@@ -659,7 +699,12 @@
       // late snapshot would repaint the page - and the plane selectors - with
       // state the user has already moved past. Every op takes the next number
       // and a snapshot is only applied if nothing newer has landed since.
-      const S = { x: 0, y: 0, sel: null, marks: new Set(), seq: 0, applied: 0 };
+      // `side` is recorded only to notice a change. It is never the source of truth
+// for the UI: every shape-dependent list (plane pickers, digit options, the
+// grid's column count, the header line, the position placeholder, the geometry
+// labels) is rebuilt from the snapshot's own `side` in `syncShape`, so a stale
+// value here can never make the page offer a digit the store would reject.
+const S = { x: 0, y: 0, side: 0, sel: null, marks: new Set(), seq: 0, applied: 0 };
 
       const $ = (id) => document.getElementById(id);
       const esc = (s) =>
@@ -874,16 +919,23 @@ function clearSelection() {
 
 // `seq` is the number the request carried. A snapshot older than one
       // already applied is dropped rather than repainting the page backwards.
+      //
+      // A snapshot that reports a different side is a *resize*: every
+      // shape-dependent list is rebuilt before anything is rendered, and the
+      // selection is dropped because the cell it named belongs to a lattice that
+      // no longer exists.
       function applyState(st, seq) {
         if (seq !== undefined && seq < S.applied) return false;
         if (seq !== undefined) S.applied = seq;
+        const resized = st.side !== S.side;
+        S.side = st.side;
         S.cells = st.cells;
         S.x = st.plane_x;
         S.y = st.plane_y;
-        // The plane selectors are the only place the chosen plane is shown in
-        // the chrome, so they follow the snapshot rather than keeping whatever
-        // the user last picked. Without this they disagree with the grid after
-        // anything that repaints from the backend.
+        // Before the selectors are given values: `syncShape` replaces their
+        // options, which would otherwise throw away a valid selection.
+        syncShape(st);
+        if (resized) clearSelection();
         $("selX").value = String(st.plane_x);
         $("selY").value = String(st.plane_y);
         renderChips(st);
@@ -1028,17 +1080,113 @@ function clearSelection() {
 
       // ---- wiring -------------------------------------------------------
 
-      function axisOptions(sel) {
-        for (let i = 0; i < 3; i++) {
+      // ---- shape --------------------------------------------------------
+
+      // Rebuilds every list whose length depends on the lattice.
+      //
+      // The page used to hardcode `3` in six places: the axis pickers, the digit
+      // options, the grid's `grid-template-columns`, the header line, the position
+      // placeholder and the geometry labels. At a wider side that shows a 3x3
+      // corner of a 4x4 plane and offers no digit 4 at all, while the backend
+      // would have accepted it. All six are derived here from the snapshot, which
+      // is the only place the shape is known.
+      function syncShape(st) {
+        const side = st.side;
+        const total = st.status.total_cells;
+        const dim = 4;
+        $("shape").textContent =
+          side + "×" + side + "×" + side + "×" + side +
+          " · " + total + " 格 · " + dim * side * side * side + " 线";
+        axisOptions($("selX"), side);
+        axisOptions($("selY"), side);
+        digitOptions(side);
+        digitPalette(side);
+        $("selSide").value = String(side);
+        $("grid").style.gridTemplateColumns = "repeat(" + side + ", 1fr)";
+        $("fPos").placeholder = "1.." + total;
+        $("optLine").textContent = "线 (" + side + " 格)";
+        $("optSlab").textContent = "板 (" + side * side * side + " 格)";
+        $("optPeers").textContent = "同位 (" + dim * (side - 1) + " 格)";
+      }
+
+      // `keep` is honoured when it still exists in the rebuilt list, so a
+      // snapshot arriving from an unrelated repaint does not move the picker.
+      function axisOptions(sel, side) {
+        const keep = sel.value;
+        sel.innerHTML = "";
+        for (let i = 0; i < side; i++) {
           const o = document.createElement("option");
           o.value = String(i);
           o.textContent = String(i);
           sel.appendChild(o);
         }
+        if (keep !== "" && Number(keep) < side) sel.value = keep;
       }
 
-      axisOptions($("selX"));
-      axisOptions($("selY"));
+      // The digit domain is `1..side`. A digit the new side cannot hold falls
+      // back to "none" rather than being left selected on an option that is gone.
+      function digitOptions(side) {
+        const sel = $("fDigit");
+        const keep = sel.value;
+        sel.innerHTML = "";
+        const none = document.createElement("option");
+        none.value = "0";
+        none.textContent = "无";
+        sel.appendChild(none);
+        for (let d = 1; d <= side; d++) {
+          const o = document.createElement("option");
+          o.value = String(d);
+          o.textContent = String(d);
+          sel.appendChild(o);
+        }
+        sel.value = keep !== "" && Number(keep) <= side ? keep : "0";
+      }
+
+      axisOptions($("selX"), 3);
+      axisOptions($("selY"), 3);
+
+      // The clickable swatches, one per digit the lattice can hold. The "清除"
+      // button is not a digit and stays last, as it was.
+      function digitPalette(side) {
+        const box = $("digits");
+        box.innerHTML = "";
+        for (let d = 1; d <= side; d++) {
+          const b = document.createElement("button");
+          b.className = "d" + d;
+          b.dataset.d = String(d);
+          b.textContent = String(d);
+          box.appendChild(b);
+        }
+        const clear = document.createElement("button");
+        clear.dataset.d = "0";
+        clear.textContent = "清除";
+        box.appendChild(clear);
+      }
+
+      // The selector offers a workable range rather than all 215 legal sides: a
+      // 216-cell-per-axis lattice is 256^4 cells, which no window is drawing. The
+      // backend still accepts anything up to MAX_SIDE through SQL and the CLI.
+      (function sideOptions() {
+        const sel = $("selSide");
+        for (let i = 1; i <= 9; i++) {
+          const o = document.createElement("option");
+          o.value = String(i);
+          o.textContent = String(i);
+          sel.appendChild(o);
+        }
+        sel.value = "3";
+      })();
+
+      $("selSide").onchange = async (e) => {
+        const side = parseInt(e.target.value, 10);
+        if (Number.isNaN(side)) return;
+        const seq = ++S.seq;
+        // A resize drops records that do not fit and can move every remaining
+        // one, so it is reported rather than performed silently.
+        const r = await op("lattice", { side: side, x: S.x, y: S.y });
+        showResponse(r.response);
+        applyState(r.state, seq);
+      };
 
       $("selX").onchange = async (e) => {
         S.x = parseInt(e.target.value, 10);
@@ -1059,36 +1207,40 @@ function clearSelection() {
       $("btnDemo").onclick = () => write("demo");
       $("btnClear").onclick = () => write("clear");
 
-      document.querySelectorAll(".digits button").forEach((b) => {
-        b.onclick = async () => {
-          if (!S.sel) {
-            say('<span class="err">先在左侧选一个格子。</span>');
-            return;
-          }
-          const cell = S.cells.find((c) => c.position === S.sel);
-          const d = parseInt(b.dataset.d, 10);
-          // "清除" on a cell that is already empty used to take the insert
-          // branch and materialise a `cell_N` record whose value is "0" - a
-          // record with no digit and nothing else, created by the one control
-          // whose only purpose is to remove something.
-          if (d === 0 && !(cell && cell.occupied)) {
-            say("格子 " + S.sel + " 本来就是空的，无需清除。");
-            return;
-          }
-          $("fPos").value = String(S.sel);
-          $("fDigit").value = String(d);
-          $("fKey").value =
-            $("fKey").value.trim() || (cell && cell.occupied ? cell.key : "cell_" + S.sel);
-          $("fValue").value =
-            $("fValue").value.trim() || (cell && cell.occupied ? cell.value : String(d));
-          // digit goes through as an explicit 0 too: "no digit" is a value the
-          // store understands, not a field to leave unset.
-          await write(cell && cell.occupied ? "update" : "insert", {
-            position: S.sel,
-            digit: d,
-          });
-        };
-      });
+      // Delegated on the container, not bound per button. The palette is rebuilt
+      // whenever the side changes - a side-4 lattice offers a digit 4 the old
+      // markup had no button for - and per-button handlers would be thrown away
+      // with the buttons they were attached to.
+      $("digits").onclick = async (e) => {
+        const b = e.target.closest("button");
+        if (!b) return;
+        if (!S.sel) {
+          say('<span class="err">先在左侧选一个格子。</span>');
+          return;
+        }
+        const cell = S.cells.find((c) => c.position === S.sel);
+        const d = parseInt(b.dataset.d, 10);
+        // "清除" on a cell that is already empty used to take the insert
+        // branch and materialise a `cell_N` record whose value is "0" - a
+        // record with no digit and nothing else, created by the one control
+        // whose only purpose is to remove something.
+        if (d === 0 && !(cell && cell.occupied)) {
+          say("格子 " + S.sel + " 本来就是空的，无需清除。");
+          return;
+        }
+        $("fPos").value = String(S.sel);
+        $("fDigit").value = String(d);
+        $("fKey").value =
+          $("fKey").value.trim() || (cell && cell.occupied ? cell.key : "cell_" + S.sel);
+        $("fValue").value =
+          $("fValue").value.trim() || (cell && cell.occupied ? cell.value : String(d));
+        // digit goes through as an explicit 0 too: "no digit" is a value the
+        // store understands, not a field to leave unset.
+        await write(cell && cell.occupied ? "update" : "insert", {
+          position: S.sel,
+          digit: d,
+        });
+      };
 
       $("btnGeo").onclick = runGeometry;
       $("btnSql").onclick = runSql;

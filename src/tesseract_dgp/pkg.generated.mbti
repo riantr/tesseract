@@ -7,7 +7,7 @@ import {
 }
 
 // Values
-pub const CELL_COUNT : Int = 81
+pub fn cell_count(@tesseract.Tesseract) -> Int64
 
 pub fn decode(String) -> Observation?
 
@@ -50,7 +50,7 @@ pub struct RecordReport {
   recorded : Int
   rejected : Int
   offered : Int
-  stopped_at : Int
+  stopped_at : Int64
 } derive(Eq, @debug.Debug)
 pub fn RecordReport::equal(Self, Self) -> Bool
 pub fn RecordReport::not_equal(Self, Self) -> Bool

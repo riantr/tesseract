@@ -16,7 +16,11 @@ fn scratch(name : String) -> String {
 
 ///|
 fn fresh() -> @tesseract.Tesseract {
-  @tesseract.new_db("tesseract", @tesseract.new_logger("test"))
+  @tesseract.new_db(
+    "tesseract",
+    @tesseract.default_lattice(),
+    @tesseract.new_logger("test"),
+  )
 }
 
 ///|
@@ -116,7 +120,7 @@ fn set_stamp(path : String, position : Int32, stamp : String) -> Unit raise {
 ///
 /// Searches by position instead of indexing, so these tests do not also depend
 /// on the order `select` happens to return rows in.
-fn stamp_at(db : @tesseract.Tesseract, position : Int32) -> String {
+fn stamp_at(db : @tesseract.Tesseract, position : Int64) -> String {
   for row in occupied(db) {
     if row.position == position {
       return row.timestamp
@@ -288,12 +292,12 @@ test "a cell comes back with the timestamp the file was saved with" {
   let dst = fresh()
   let report = @tesseract_sqlite.load(path, dst)
   assert_eq(report.loaded, 3)
-  assert_eq(stamp_at(dst, 48), "18446744073709551615")
+  assert_eq(stamp_at(dst, 48L), "18446744073709551615")
   // The rows nobody touched keep what they were saved with as well, so a load
   // that restored only the edited row would still fail the line above.
-  assert_true(stamp_at(src, 1) != "")
-  assert_eq(stamp_at(dst, 1), stamp_at(src, 1))
-  assert_eq(stamp_at(dst, 37), stamp_at(src, 37))
+  assert_true(stamp_at(src, 1L) != "")
+  assert_eq(stamp_at(dst, 1L), stamp_at(src, 1L))
+  assert_eq(stamp_at(dst, 37L), stamp_at(src, 37L))
   remove(path)
 }
 
@@ -309,6 +313,6 @@ test "a row with no timestamp gets stamped, not stored blank" {
   let dst = fresh()
   let report = @tesseract_sqlite.load(path, dst)
   assert_eq(report.loaded, 3)
-  assert_true(stamp_at(dst, 1) != "")
+  assert_true(stamp_at(dst, 1L) != "")
   remove(path)
 }

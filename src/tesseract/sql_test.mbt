@@ -1,7 +1,11 @@
 ///|
 /// The SQL surface, including the C#-compatible subset and the 4D additions.
 fn fresh_db() -> @tesseract.Tesseract {
-  @tesseract.new_db("test", @tesseract.new_logger("test"))
+  @tesseract.new_db(
+    "test",
+    @tesseract.default_lattice(),
+    @tesseract.new_logger("test"),
+  )
 }
 
 ///|
@@ -72,11 +76,15 @@ test "an unwrapped LIKE pattern matches one value, not every row" {
     run_sql(db, "SELECT * FROM tesseract WHERE value LIKE '%hell%';").total_records,
     1,
   )
-  // `LIKE ''` cannot match any stored record - insert rejects empty values - and
-  // must not quietly become "no predicate".
+  // `LIKE ''` matches no stored record - insert refuses an empty value - and that
+  // is the answer. The old parser made it a syntax error, which was defensible
+  // while `''` was indistinguishable from "no predicate at all". With a real
+  // expression tree an empty pattern is a pattern: it matches nothing, and saying
+  // so is what the statement asked. The failure that mattered - an unwrapped
+  // literal becoming "every row" - is pinned by the three assertions above.
   let empty = run_sql(db, "SELECT * FROM tesseract WHERE value LIKE '';")
-  assert_false(empty.success)
-  assert_eq(empty.error_code, "INVALID_SYNTAX")
+  assert_true(empty.success)
+  assert_eq(empty.total_records, 0)
 }
 
 ///|
@@ -92,7 +100,10 @@ test "a malformed string literal is an error, not a key that matches nothing" {
   let trailing = run_sql(db, "SELECT * FROM tesseract WHERE key = 'a' garbage;")
   assert_false(trailing.success)
   assert_eq(trailing.error_code, "INVALID_SYNTAX")
-  assert_true(trailing.error.contains("Unexpected text"))
+  // The message has to name the text it choked on. Asserting on the parser's exact
+  // wording instead would pin a phrase rather than the behaviour, and the phrase
+  // is the part that has no reason to stay put.
+  assert_true(trailing.error.contains("garbage"))
   // The well-formed form still works.
   assert_eq(
     run_sql(db, "SELECT * FROM tesseract WHERE key = 'a';").total_records,
@@ -222,25 +233,34 @@ test "column/value count mismatch is rejected" {
 
 ///|
 test "AT addresses an explicit position or a 4D address" {
+  let lat = @tesseract.default_lattice()
   let db = fresh_db()
   assert_true(
     run_sql(db, "INSERT INTO tesseract (key, value) VALUES ('a', '1') AT 42;").success,
   )
-  assert_eq(@tesseract.Tesseract::cell_at(db, 42).unwrap().key, "a")
+  assert_eq(@tesseract.Tesseract::cell_at(db, 42L).unwrap().key, "a")
   assert_true(
     run_sql(
       db, "INSERT INTO tesseract (key, value) VALUES ('b', '2') AT (1,2,0,2);",
     ).success,
   )
   // (1,2,0,2) is row-major index 47, so 1-based position 48.
-  assert_eq(@tesseract.Tesseract::cell_at(db, 48).unwrap().key, "b")
-  assert_eq(@tesseract.coords_of(48), Some(@tesseract.coords(1, 2, 0, 2)))
+  assert_eq(@tesseract.Tesseract::cell_at(db, 48L).unwrap().key, "b")
   assert_eq(
-    run_sql(
-      db, "INSERT INTO tesseract (key, value) VALUES ('c','3') AT (9,9,9,9);",
-    ).error_code,
-    "INVALID_SYNTAX",
+    @tesseract.coords_of(lat, 48L),
+    Some(@tesseract.coords(1L, 2L, 0L, 2L)),
   )
+  // `AT (9,9,9,9)` is four well-formed integers outside a 3-per-axis lattice, so
+  // the parser accepts it and the executor refuses it. `INVALID_POSITION` rather
+  // than `INVALID_SYNTAX`: the statement is well formed, the *cell* is the problem,
+  // and the message names the coordinate. The old parser had no lattice to check
+  // against, so it could only call it a syntax error - which is not what was wrong.
+  let wide = run_sql(
+    db, "INSERT INTO tesseract (key, value) VALUES ('c','3') AT (9,9,9,9);",
+  )
+  assert_eq(wide.error_code, "INVALID_POSITION")
+  assert_true(wide.error.contains("(9,9,9,9)"))
+  // Three coordinates is still a syntax error: that is the parser's call.
   assert_eq(
     run_sql(db, "INSERT INTO tesseract (key, value) VALUES ('c','3') AT (1,2);").error_code,
     "INVALID_SYNTAX",
@@ -367,9 +387,21 @@ test "UPDATE can set a value and a digit together" {
   let cell = @tesseract.Tesseract::cell_at(db, 1).unwrap()
   assert_eq(cell.value, "9")
   assert_eq(cell.digit, 3)
+  // `SET digit` on its own now works. The old parser only knew how to rewrite a
+  // value, so a statement that set a digit and left the value alone was a syntax
+  // error - which made the *first* form the only way to change a digit at all,
+  // even when the value was not what you meant to set.
+  let digit_only = run_sql(
+    db, "UPDATE tesseract SET digit = 2 WHERE key = 'a';",
+  )
+  assert_true(digit_only.success)
+  assert_eq(@tesseract.Tesseract::cell_at(db, 1).unwrap().digit, 2)
+  // The value survives a statement that did not name it.
+  assert_eq(@tesseract.Tesseract::cell_at(db, 1).unwrap().value, "9")
+  // The key still names the record and cannot be rewritten by a SET.
   assert_eq(
-    run_sql(db, "UPDATE tesseract SET digit = 2 WHERE key = 'a';").error_code,
-    "INVALID_SYNTAX",
+    run_sql(db, "UPDATE tesseract SET key = 'b' WHERE key = 'a';").error_code,
+    "INVALID_COLUMNS",
   )
 }
 
@@ -391,9 +423,18 @@ test "DELETE honours WHERE, and bare DELETE clears the lattice" {
 ///|
 test "unknown columns and functions are rejected, not ignored" {
   let db = fresh_db()
+  // `INVALID_COLUMNS`, not `INVALID_SYNTAX`: the statement parses, and what is
+  // wrong is that the table has no such column. The refusal is what this test is
+  // for; the code just has to name which of the two problems it is.
+  //
+  // It is checked on an *empty* table on purpose. A filter is evaluated against
+  // rows, so with no rows an unknown column was never evaluated at all and the
+  // statement succeeded with zero rows - accepted when the table was empty and
+  // refused when it was full. The data cannot decide whether a statement is well
+  // formed.
   assert_eq(
     run_sql(db, "SELECT * FROM tesseract WHERE bogus = 'x'").error_code,
-    "INVALID_SYNTAX",
+    "INVALID_COLUMNS",
   )
   assert_eq(
     run_sql(db, "SELECT * FROM tesseract WHERE nosuchfn(1)").error_code,
@@ -401,11 +442,11 @@ test "unknown columns and functions are rejected, not ignored" {
   )
   assert_eq(
     run_sql(db, "SELECT * FROM tesseract WHERE grid_position = 'abc'").error_code,
-    "INVALID_SYNTAX",
+    "INVALID_INPUT",
   )
   assert_eq(
     run_sql(db, "UPDATE tesseract SET bogus = 'x' WHERE key = 'a';").error_code,
-    "INVALID_SYNTAX",
+    "INVALID_COLUMNS",
   )
 }
 

@@ -1,59 +1,155 @@
 ///|
-/// The 3x3x3x3 lattice: coordinates, flat positions, and the sudoku
+/// The 4D lattice: coordinates, flat positions, and the sudoku
 /// sub-structures that make the grid a sudoku grid rather than a reshaped list.
 ///
 /// The C# original kept 9 records in a flat ring presented as a 3x3 box (two
-/// dimensions). The 4D form lifts that to 81 cells addressed by four
-/// coordinates in `0..2`.
+/// dimensions). The 4D form lifted that to 81 cells addressed by four
+/// coordinates in `0..2`, which is this module's default.
+///
+/// **The side is a value, not a constant.** `lattice_of(3)` reproduces the
+/// original 81-cell lattice exactly - same positions, same order, same digit
+/// domain - and `lattice_of(4)` gives a 256-cell lattice over digits `1..4`.
+/// Every function that used to read the `SIDE` constant takes a `Lattice`
+/// instead, so a caller has to say which lattice it means.
 ///
 /// Two numbering schemes coexist deliberately:
 ///
 /// - **coordinates** `(x, y, z, w)` are 0-based, matching array indexing;
-/// - **positions** `1..81` are 1-based, matching the C# `grid_position`
+/// - **positions** `1..total` are 1-based, matching the C# `grid_position`
 ///   column, so stored SQL and `.tsr` files keep the same shape.
 ///
-/// `position = 1 + x*27 + y*9 + z*3 + w` (row-major, `x` slowest) and the
-/// inverse is exact for all 81 cells.
-
-///|
-/// Cells along each of the four axes.
-pub const SIDE : Int32 = 3
+/// `position = 1 + x*side^3 + y*side^2 + z*side + w` (row-major, `x` slowest),
+/// and the inverse is exact for every cell.
+///
+/// Everything here is `Int64` rather than `Int32`, for a measured reason, and
+/// the reason is narrower than "there are no conversions". What this toolchain
+/// lacks is a direct `Int64 -> Int32` (`Int64::to_int32` does not compile) and
+/// any `Int32 -> Int` (`Int32::to_int` does not compile either), while `Array`
+/// is indexed by `Int`. `Int32` is therefore a dead end from here in both
+/// directions: the index arithmetic produces `Int64`, and `Int32` can neither be
+/// reached from it nor address storage. `Int64 -> Int` does exist (`to_int`),
+/// which is the one narrowing in the library, isolated in `slot_of` and in the
+/// array reads that want a flat 0-based index.
 
 ///|
 /// Number of axes.
-pub const DIM : Int32 = 4
+///
+/// Fixed, and unrelated to `side`: a 2-cell-per-axis lattice and a 9-cell-per-axis
+/// lattice are both four-dimensional. Widening the *number* of axes is a
+/// different change from widening the number of cells along each axis, and this
+/// module does the latter.
+pub const DIM : Int64 = 4
 
 ///|
-/// Total cells in the lattice: 3^4 = 81.
-pub const TOTAL : Int32 = 81
+/// The highest `side` a lattice can have.
+///
+/// The cap is storage, not arithmetic. Cells live in one flat `Array` and
+/// `Array` is indexed by `Int`, which is 32-bit on the wasm target - the
+/// compiler rejects the literal `2147483648` as an `Int` - so `side^4` cells
+/// have to stay addressable by a 32-bit index, and `215^4 - 1 = 2136750624`
+/// is the largest cell count that fits.
+///
+/// With `Int64` index arithmetic alone the bound would be 55108 (`55108^4 =
+/// 9222710978872688896`); raising it needs storage that is not one flat array,
+/// which is a separate change and is recorded in LOOP.md rather than folded in.
+pub const MAX_SIDE : Int64 = 215
 
 ///|
-/// Lowest valid 1-based position.
-pub const FIRST_POSITION : Int32 = 1
+/// Sudoku digits live in `1..side`; 0 means "this cell carries no digit".
+///
+/// The only constant here that does not come from a lattice, because it is a
+/// sentinel rather than a size.
+pub const NO_DIGIT : Int64 = 0L
 
 ///|
-/// Highest valid 1-based position.
-pub const LAST_POSITION : Int32 = 81
+/// The shape of a lattice: `side` cells along each of four fixed axes.
+///
+/// Built only by `lattice_of`. The strides are stored rather than recomputed
+/// because `index0` is the hottest function in the library and `side^3` is three
+/// multiplications it does not need to repeat on every call.
+pub struct Lattice {
+  side : Int64
+  total : Int64
+  first_position : Int64
+  last_position : Int64
+  max_digit : Int64
+  stride_y : Int64
+  stride_z : Int64
+  stride_w : Int64
+}
 
 ///|
-/// Sudoku digits live in `1..SIDE`; 0 means "this cell carries no digit".
-pub const NO_DIGIT : Int32 = 0
+/// Builds the lattice shape for `side` cells per axis.
+///
+/// Two refusals, deliberately kept apart rather than merged into one range
+/// check, because they are different mistakes: a side below 1 asks for a
+/// lattice with no cells, and a side above `MAX_SIDE` asks for more cells than
+/// the store can address. The message names which one happened, and never
+/// computes `side^4` on the way to saying so - a large `side` would overflow
+/// while the error was being formatted.
+pub fn lattice_of(side : Int64) -> Result[Lattice, String] {
+  if side < 1L {
+    return Err("side must be at least 1, got " + side.to_string())
+  }
+  if side > MAX_SIDE {
+    return Err(
+      "side " +
+      side.to_string() +
+      " is above the maximum " +
+      MAX_SIDE.to_string() +
+      " (cells are stored in one flat array indexed by a 32-bit Int)",
+    )
+  }
+  let s2 = side * side
+  let s3 = s2 * side
+  let total = s3 * side
+  let lat = {
+    side,
+    total,
+    first_position: 1L,
+    last_position: total,
+    max_digit: side,
+    stride_y: s3,
+    stride_z: s2,
+    stride_w: side,
+  }
+  Ok(lat)
+}
 
 ///|
-/// Highest sudoku digit.
-pub const MAX_DIGIT : Int32 = 3
+/// The 3-per-axis lattice: the original 81-cell store.
+///
+/// Used wherever a caller has no lattice of its own to name, which in practice
+/// means the defaults in the CLI and the fixtures in the test suite.
+pub fn default_lattice() -> Lattice {
+  match lattice_of(3L) {
+    Ok(lat) => lat
+    Err(_) => abort("default_lattice: lattice_of(3) cannot fail")
+  }
+}
 
 ///|
-/// A cell in the 4D lattice. Each coordinate is in `0..SIDE-1`.
+/// The array slot holding 1-based `position`.
+///
+/// The single narrowing from `Int64` to `Int` in the whole library. It is safe
+/// exactly because `lattice_of` caps `side` at `MAX_SIDE`, so `position` never
+/// exceeds `MAX_SIDE^4` and always fits a 32-bit index. Widening `MAX_SIDE` means
+/// widening this, not just relaxing a guard.
+pub fn slot_of(position : Int64) -> Int32 {
+  (position - 1L).to_int()
+}
+
+///|
+/// A cell in the 4D lattice. Each coordinate is in `0..side-1`.
 ///
 /// Equality and debug output are structural; the `extend` declarations keep the
 /// trait methods from being implicitly promoted as regular methods, which the
 /// compiler warns about.
 pub struct Coords {
-  x : Int32
-  y : Int32
-  z : Int32
-  w : Int32
+  x : Int64
+  y : Int64
+  z : Int64
+  w : Int64
 } derive(Eq, Debug)
 
 ///|
@@ -63,31 +159,31 @@ pub extend Coords with Eq::{equal, not_equal}
 pub extend Coords with @debug.Debug::{to_repr}
 
 ///|
-/// Builds a coordinate tuple.
-pub fn coords(x : Int32, y : Int32, z : Int32, w : Int32) -> Coords {
+/// Builds a coordinate tuple. Does not check bounds; use `parse_coords` or
+/// `coords_of` for a checked one.
+pub fn coords(x : Int64, y : Int64, z : Int64, w : Int64) -> Coords {
   { x, y, z, w, }
 }
 
 ///|
 /// One coordinate inside the lattice.
-fn coord_in_bounds(v : Int32) -> Bool {
-  v >= 0 && v < SIDE
+fn coord_in_bounds(v : Int64, side : Int64) -> Bool {
+  v >= 0L && v < side
 }
 
 ///|
-/// True when every coordinate is inside the lattice.
-pub fn coords_in_bounds(c : Coords) -> Bool {
-  let a = coord_in_bounds(c.x)
-  let b = coord_in_bounds(c.y)
-  let d = coord_in_bounds(c.z)
-  let e = coord_in_bounds(c.w)
-  a && b && d && e
+/// True when every coordinate is inside `lat`.
+pub fn coords_in_bounds(lat : Lattice, c : Coords) -> Bool {
+  coord_in_bounds(c.x, lat.side) &&
+  coord_in_bounds(c.y, lat.side) &&
+  coord_in_bounds(c.z, lat.side) &&
+  coord_in_bounds(c.w, lat.side)
 }
 
 ///|
-/// True when `p` is a valid 1-based position.
-pub fn position_in_bounds(p : Int32) -> Bool {
-  p >= FIRST_POSITION && p <= LAST_POSITION
+/// True when `p` is a valid 1-based position in `lat`.
+pub fn position_in_bounds(lat : Lattice, p : Int64) -> Bool {
+  p >= lat.first_position && p <= lat.last_position
 }
 
 ///|
@@ -100,8 +196,8 @@ pub fn position_in_bounds(p : Int32) -> Bool {
 /// fourth coordinate as if the caller had asked for it. A wrong coordinate is
 /// the one failure a caller cannot notice from the result: every value is a
 /// legitimate coordinate of `c`, and nothing marks it as the wrong one.
-pub fn coord_at(c : Coords, axis : Int32) -> Int32? {
-  if axis < 0 || axis >= DIM {
+pub fn coord_at(c : Coords, axis : Int64) -> Int64? {
+  if axis < 0L || axis >= DIM {
     return None
   }
   Some(coord_at_unchecked(c, axis))
@@ -115,57 +211,71 @@ pub fn coord_at(c : Coords, axis : Int32) -> Int32? {
 /// `None` branch is unreachable; writing `.unwrap()` at each would put a guard
 /// that can never fail into the code, which reads like a check and checks
 /// nothing. An outside caller goes through `coord_at`, which reports the range.
-fn coord_at_unchecked(c : Coords, axis : Int32) -> Int32 {
+fn coord_at_unchecked(c : Coords, axis : Int64) -> Int64 {
   match axis {
-    0 => c.x
-    1 => c.y
-    2 => c.z
+    0L => c.x
+    1L => c.y
+    2L => c.z
     _ => c.w
   }
 }
 
 ///|
 /// `c` with its `axis`-th coordinate replaced by `v`.
-pub fn with_coord(c : Coords, axis : Int32, v : Int32) -> Coords {
+pub fn with_coord(c : Coords, axis : Int64, v : Int64) -> Coords {
   match axis {
-    0 => { x: v, y: c.y, z: c.z, w: c.w, }
-    1 => { x: c.x, y: v, z: c.z, w: c.w, }
-    2 => { x: c.x, y: c.y, z: v, w: c.w, }
+    0L => { x: v, y: c.y, z: c.z, w: c.w, }
+    1L => { x: c.x, y: v, z: c.z, w: c.w, }
+    2L => { x: c.x, y: c.y, z: v, w: c.w, }
     _ => { x: c.x, y: c.y, z: c.z, w: v, }
   }
 }
 
 ///|
-/// Zero-based row-major index of `c`.
-pub fn index0(c : Coords) -> Int32 {
-  c.x * 27 + c.y * 9 + c.z * 3 + c.w
-}
-
-///|
-/// The 1-based position of `c`.
-pub fn position_of(c : Coords) -> Int32 {
-  index0(c) + 1
-}
-
-///|
-/// The coordinate at 1-based position `p`.
+/// Zero-based row-major index of `c` in `lat`.
 ///
-/// Returns `None` for positions outside `1..81`; the caller decides whether
+/// Was `x*27 + y*9 + z*3 + w` with the strides written out as literals. At
+/// `side == 3` the stored strides are 27, 9 and 3, so this is the same
+/// arithmetic on the same cells; the literals were only ever a spelling of the
+/// strides.
+pub fn index0(lat : Lattice, c : Coords) -> Int64 {
+  c.x * lat.stride_y + c.y * lat.stride_z + c.z * lat.stride_w + c.w
+}
+
+///|
+/// The 1-based position of `c` in `lat`.
+pub fn position_of(lat : Lattice, c : Coords) -> Int64 {
+  index0(lat, c) + lat.first_position
+}
+
+///|
+/// The coordinate at 1-based position `p` in `lat`.
+///
+/// Returns `None` for positions outside `1..total`; the caller decides whether
 /// that is an error or just an empty result.
-pub fn coords_of(p : Int32) -> Coords? {
-  if !position_in_bounds(p) {
+pub fn coords_of(lat : Lattice, p : Int64) -> Coords? {
+  if !position_in_bounds(lat, p) {
     return None
   }
-  let i = p - 1
-  Some(coords(i / 27, i / 9 % 3, i / 3 % 3, i % 3))
+  let i = p - lat.first_position
+  Some(
+    coords(
+      i / lat.stride_y,
+      i / lat.stride_z % lat.side,
+      i / lat.stride_w % lat.side,
+      i % lat.side,
+    ),
+  )
 }
 
 ///|
-/// Every cell, in row-major order. Length is always `TOTAL`.
-pub fn all_coords() -> Array[Coords] {
+/// Every cell, in row-major order. Length is always `total`.
+pub fn all_coords(lat : Lattice) -> Array[Coords] {
   let out : Array[Coords] = []
-  for i = 0; i < TOTAL; i = i + 1 {
-    out.push(coords_of(i + 1).unwrap())
+  let mut i = lat.first_position
+  while i <= lat.last_position {
+    out.push(coords_of(lat, i).unwrap())
+    i = i + 1L
   }
   out
 }
@@ -187,12 +297,15 @@ pub fn format_coords(c : Coords) -> String {
 }
 
 ///|
-/// Parses `(x,y,z,w)` or `x,y,z,w`.
+/// Parses `(x,y,z,w)` or `x,y,z,w` into four integers, with no bounds check.
 ///
-/// Every coordinate must be an integer in `0..2`; anything else is `None`
-/// rather than a clamped value, so a malformed address can never silently
-/// address a different cell than the caller asked for.
-pub fn parse_coords(s : String) -> Coords? {
+/// Split out from `parse_coords` because an importer needs to tell two failures
+/// apart. `parse_coords` collapses "not four integers" and "an integer outside
+/// the lattice" into one `None`, so a caller cannot report *which* coordinate of
+/// a file record did not fit the target lattice. Importing a 3-per-axis file
+/// into a 2-per-axis one has to be able to name the offending coordinate, and
+/// that needs the parsed value in hand even when it is out of range.
+pub fn parse_coords_raw(s : String) -> Coords? {
   let t = trim_ws(s)
   let body = if t.length() >= 2 && t.at(0) == '(' && t.at(t.length() - 1) == ')' {
     slice(t, 1, t.length() - 1)
@@ -200,23 +313,32 @@ pub fn parse_coords(s : String) -> Coords? {
     t
   }
   let parts = split(body, ",")
-  if parts.length() != DIM {
+  if parts.length() != DIM.to_int() {
     return None
   }
-  let vals : Array[Int32] = []
-  let mut i = 0
+  let vals : Array[Int64] = []
+  let mut i = 0L
   while i < DIM {
-    match parse_int(parts[i]) {
-      Some(v) => vals.push(v)
+    match parse_int(parts[i.to_int()]) {
+      Some(v) => vals.push(v.to_int64())
       None => return None
     }
-    i = i + 1
+    i = i + 1L
   }
-  let c = coords(vals[0], vals[1], vals[2], vals[3])
-  if !coords_in_bounds(c) {
-    return None
+  Some(coords(vals[0], vals[1], vals[2], vals[3]))
+}
+
+///|
+/// Parses `(x,y,z,w)` or `x,y,z,w`.
+///
+/// Every coordinate must be an integer in `0..side-1`; anything else is `None`
+/// rather than a clamped value, so a malformed address can never silently
+/// address a different cell than the caller asked for.
+pub fn parse_coords(lat : Lattice, s : String) -> Coords? {
+  match parse_coords_raw(s) {
+    Some(c) => if coords_in_bounds(lat, c) { Some(c) } else { None }
+    None => None
   }
-  Some(c)
 }
 
 ///|
@@ -228,19 +350,19 @@ pub fn parse_coords(s : String) -> Coords? {
 ///
 /// An `axis` outside `0..DIM-1` gives an empty list. For a real axis this
 /// function never returns an empty list - every cell has at least one
-/// neighbour on a 3-long axis - so an empty result is unambiguously a bad axis
-/// and not a cell that happens to stand alone.
-pub fn neighbours(c : Coords, axis : Int32) -> Array[Coords] {
+/// neighbour on a `side`-long axis - so an empty result is unambiguously a bad
+/// axis and not a cell that happens to stand alone.
+pub fn neighbours(lat : Lattice, c : Coords, axis : Int64) -> Array[Coords] {
   let out : Array[Coords] = []
   let here = match coord_at(c, axis) {
     None => return out
     Some(v) => v
   }
-  if here - 1 >= 0 {
-    out.push(with_coord(c, axis, here - 1))
+  if here - 1L >= 0L {
+    out.push(with_coord(c, axis, here - 1L))
   }
-  if here + 1 < SIDE {
-    out.push(with_coord(c, axis, here + 1))
+  if here + 1L < lat.side {
+    out.push(with_coord(c, axis, here + 1L))
   }
   out
 }
@@ -248,21 +370,21 @@ pub fn neighbours(c : Coords, axis : Int32) -> Array[Coords] {
 ///|
 /// True when `a` and `b` share one axis-parallel line.
 ///
-/// Two cells are on a common line exactly when they agree on three of four
-/// coordinates, i.e. differ along a single axis.
+/// Two cells are on a common line exactly when they agree on all but one
+/// coordinate, i.e. differ along a single axis.
 pub fn shares_line(a : Coords, b : Coords) -> Bool {
-  let mut same = 0
+  let mut same = 0L
   if a.x == b.x {
-    same = same + 1
+    same = same + 1L
   }
   if a.y == b.y {
-    same = same + 1
+    same = same + 1L
   }
   if a.z == b.z {
-    same = same + 1
+    same = same + 1L
   }
   if a.w == b.w {
-    same = same + 1
+    same = same + 1L
   }
-  same >= DIM - 1
+  same >= DIM - 1L
 }

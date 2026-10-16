@@ -1,36 +1,36 @@
 ///|
-/// The sudoku layer: a digit assignment over the 3^4 lattice, the constraint
-/// that makes it a sudoku, and a checker for both.
+/// The sudoku layer: a digit assignment over the `side^4` lattice, the
+/// constraint that makes it a sudoku, and a checker for both.
 ///
-/// What the constraint *is* at this size matters, so it is spelled out rather
-/// than inherited from the 2D intuition. A 2D sudoku draws rows, columns and
-/// boxes from one digit domain of 9. Along a 3-long axis the line rule still
-/// works — 3 cells, digits 1..3 — but the box rule degenerates, because a box
-/// is only non-trivial when the axis length is at least the digit domain. So the
-/// line family is the constraint here, and slab balance is a *consequence*:
+/// What the constraint *is* matters, so it is spelled out rather than inherited
+/// from the 2D intuition. A 2D sudoku draws rows, columns and boxes from one
+/// digit domain. Along a `side`-long axis the line rule still works - `side`
+/// cells, digits `1..side` - but the box rule degenerates, because a box is only
+/// non-trivial when the axis length is at least the digit domain. So the line
+/// family is the constraint here, and slab balance is a *consequence*:
 ///
-/// Every slab is exactly nine lines parallel to any one axis within it, and
+/// Every slab is exactly `side^2` lines parallel to any one axis within it, and
 /// each such line contributes one of every digit, so each digit appears
-/// `27 / 3 = 9` times. `slab_violations` checks that empirically rather than
-/// trusting the argument, and `solve_lattice` produces independent solutions so
-/// the implication is tested on more than the closed form.
+/// `side^3 / side = side^2` times. `slab_violations` checks that empirically
+/// rather than trusting the argument, and `solve_lattice` produces independent
+/// solutions so the implication is tested on more than the closed form.
 
 ///|
 /// A digit per cell, indexed by `position - 1`; 0 means "no digit".
-pub fn empty_digits() -> Array[Int32] {
-  let d : Array[Int32] = []
-  let mut i = 0
-  while i < TOTAL {
+pub fn empty_digits(lat : Lattice) -> Array[Int64] {
+  let d : Array[Int64] = []
+  let mut i = lat.first_position
+  while i <= lat.last_position {
     d.push(NO_DIGIT)
-    i = i + 1
+    i = i + 1L
   }
   d
 }
 
 ///|
 /// An independent copy of a digit assignment.
-pub fn copy_digits(d : Array[Int32]) -> Array[Int32] {
-  let out : Array[Int32] = []
+pub fn copy_digits(d : Array[Int64]) -> Array[Int64] {
+  let out : Array[Int64] = []
   let mut i = 0
   while i < d.length() {
     out.push(d[i])
@@ -41,31 +41,41 @@ pub fn copy_digits(d : Array[Int32]) -> Array[Int32] {
 
 ///|
 /// The digit at `position`, or 0.
-pub fn digit_at(d : Array[Int32], position : Int32) -> Int32 {
-  if !position_in_bounds(position) {
+pub fn digit_at(lat : Lattice, d : Array[Int64], position : Int64) -> Int64 {
+  if !position_in_bounds(lat, position) {
     return NO_DIGIT
   }
-  d[position - 1]
+  d[slot_of(position)]
 }
 
 ///|
 /// Places a digit, ignoring out-of-range positions.
-pub fn set_digit(d : Array[Int32], position : Int32, digit : Int32) -> Unit {
-  if position_in_bounds(position) {
-    d[position - 1] = digit
+pub fn set_digit(
+  lat : Lattice,
+  d : Array[Int64],
+  position : Int64,
+  digit : Int64,
+) -> Unit {
+  if position_in_bounds(lat, position) {
+    d[slot_of(position)] = digit
   }
 }
 
 ///|
-/// The closed-form solution `digit(x,y,z,w) = (x+y+z+w) mod 3 + 1`.
+/// The closed-form solution `digit(x,y,z,w) = (x+y+z+w) mod side + 1`.
 ///
-/// Stepping one cell along any axis adds 1 modulo 3, so each axis-parallel line
-/// cycles through all three digits. Useful as a known-good starting point and
-/// as the fixture the checkers are tested against.
-pub fn canonical_digits() -> Array[Int32] {
-  let d = empty_digits()
-  for c in all_coords() {
-    set_digit(d, position_of(c), (c.x + c.y + c.z + c.w) % SIDE + 1)
+/// Stepping one cell along any axis adds 1 modulo `side`, so each axis-parallel
+/// line cycles through all `side` digits. Useful as a known-good starting point
+/// and as the fixture the checkers are tested against.
+pub fn canonical_digits(lat : Lattice) -> Array[Int64] {
+  let d = empty_digits(lat)
+  for c in all_coords(lat) {
+    set_digit(
+      lat,
+      d,
+      position_of(lat, c),
+      (c.x + c.y + c.z + c.w) % lat.side + 1L,
+    )
   }
   d
 }
@@ -74,15 +84,15 @@ pub fn canonical_digits() -> Array[Int32] {
 /// Line violations in `d`, as human-readable strings.
 ///
 /// Reports one message per offending line. An empty result means every
-/// axis-parallel line holds 1, 2 and 3 exactly once.
-pub fn line_violations(d : Array[Int32]) -> Array[String] {
+/// axis-parallel line holds `1..side` exactly once.
+pub fn line_violations(lat : Lattice, d : Array[Int64]) -> Array[String] {
   let out : Array[String] = []
-  for line in all_lines() {
-    let seen : Array[Int32] = []
+  for line in all_lines(lat) {
+    let seen : Array[Int64] = []
     let mut bad = false
     let mut i = 0
     while i < line.length() {
-      let digit = d[index0(line[i])]
+      let digit = d[index0(lat, line[i]).to_int()]
       if digit == NO_DIGIT {
         i = i + 1
         continue
@@ -111,42 +121,55 @@ pub fn line_violations(d : Array[Int32]) -> Array[String] {
 ///|
 /// Slab imbalance in `d`, as human-readable strings.
 ///
-/// A balanced slab holds each digit exactly 9 times. Cells with no digit are
-/// skipped, so a partially filled lattice only reports slabs that are already
-/// full.
-pub fn slab_violations(d : Array[Int32]) -> Array[String] {
+/// A balanced slab holds each digit exactly `side^2` times. Cells with no digit
+/// are skipped, so a partially filled lattice only reports slabs that are
+/// already full.
+pub fn slab_violations(lat : Lattice, d : Array[Int64]) -> Array[String] {
   let out : Array[String] = []
-  let mut axis = 0
+  let origin = coords(0L, 0L, 0L, 0L)
+  let mut axis = 0L
   while axis < DIM {
-    let mut v = 0
-    while v < SIDE {
-      let anchor = with_coord(coords(0, 0, 0, 0), axis, v)
-      let slab = slab_through(anchor, axis)
-      let counts = [0, 0, 0, 0]
-      let mut filled = 0
+    let mut v = 0L
+    while v < lat.side {
+      let anchor = with_coord(origin, axis, v)
+      let slab = slab_through(lat, anchor, axis)
+      // The tally is sized from the lattice rather than written out as
+      // `[0, 0, 0, 0]`. A fixed 4-slot array addresses digits 0..3, so at
+      // side == 4 - where the domain is 1..4 - `counts[digit]` would reach
+      // index 4 and be out of bounds. Digit 0 stays a real slot because
+      // NO_DIGIT is skipped by the `filled` branch below but the loop still
+      // indexes by digit, and skipping 0 would need a -1 offset on a signed
+      // value.
+      let counts : Array[Int64] = []
+      let mut ci = 0L
+      while ci <= lat.max_digit {
+        counts.push(0L)
+        ci = ci + 1L
+      }
+      let mut filled = 0L
       let mut i = 0
       while i < slab.length() {
-        let digit = d[index0(slab[i])]
+        let digit = d[index0(lat, slab[i]).to_int()]
         if digit != NO_DIGIT {
-          counts[digit] = counts[digit] + 1
-          filled = filled + 1
+          counts[digit.to_int()] = counts[digit.to_int()] + 1L
+          filled = filled + 1L
         }
         i = i + 1
       }
       // "Balanced" is only meaningful for a *full* slab: a slab with holes in
-      // it has no count distribution to be balanced against, and `filled / SIDE`
-      // would not even divide. The guard used to be `TOTAL / DIM`, which is 20
-      // for a lattice of 81 and 4 axes - not a size any slab can be, so it only
-      // ever fired on a half-filled slab and called it imbalanced.
-      if filled == slab.length() {
-        let expected = filled / SIDE
-        let mut k = 1
+      // it has no count distribution to be balanced against, and `filled /
+      // side` would not even divide. The guard used to be `TOTAL / DIM`, which
+      // is 20 for a lattice of 81 and 4 axes - not a size any slab can be, so
+      // it only ever fired on a half-filled slab and called it imbalanced.
+      if filled == slab.length().to_int64() {
+        let expected = filled / lat.side
+        let mut k = 1L
         let mut imbalanced = false
-        while k <= MAX_DIGIT {
-          if counts[k] != expected {
+        while k <= lat.max_digit {
+          if counts[k.to_int()] != expected {
             imbalanced = true
           }
-          k = k + 1
+          k = k + 1L
         }
         if imbalanced {
           let b = StringBuilder::StringBuilder()
@@ -155,25 +178,28 @@ pub fn slab_violations(d : Array[Int32]) -> Array[String] {
           b.write_string(" coord ")
           b.write_object(v)
           b.write_string(" counts ")
-          b.write_object(counts[1])
-          b.write_char('/')
-          b.write_object(counts[2])
-          b.write_char('/')
-          b.write_object(counts[3])
+          let mut k = 1L
+          while k <= lat.max_digit {
+            if k > 1L {
+              b.write_char('/')
+            }
+            b.write_object(counts[k.to_int()])
+            k = k + 1L
+          }
           out.push(b.to_string())
         }
       }
-      v = v + 1
+      v = v + 1L
     }
-    axis = axis + 1
+    axis = axis + 1L
   }
   out
 }
 
 ///|
 /// True when `d` has no line violation and no slab imbalance.
-pub fn is_solution(d : Array[Int32]) -> Bool {
-  line_violations(d).length() == 0 && slab_violations(d).length() == 0
+pub fn is_solution(lat : Lattice, d : Array[Int64]) -> Bool {
+  line_violations(lat, d).length() == 0 && slab_violations(lat, d).length() == 0
 }
 
 ///|
@@ -186,14 +212,14 @@ pub fn is_solution(d : Array[Int32]) -> Bool {
 /// duplicate outright.
 fn earlier_peers(c : Coords) -> Array[Coords] {
   let out : Array[Coords] = []
-  let mut axis = 0
+  let mut axis = 0L
   while axis < DIM {
-    let mut back = coord_at_unchecked(c, axis) - 1
-    while back >= 0 {
+    let mut back = coord_at_unchecked(c, axis) - 1L
+    while back >= 0L {
       out.push(with_coord(c, axis, back))
-      back = back - 1
+      back = back - 1L
     }
-    axis = axis + 1
+    axis = axis + 1L
   }
   out
 }
@@ -201,36 +227,37 @@ fn earlier_peers(c : Coords) -> Array[Coords] {
 ///|
 /// Depth-first fill honouring the line rule, collecting up to `limit` results.
 fn backtrack(
-  d : Array[Int32],
-  index : Int32,
-  limit : Int32,
-  out : Array[Array[Int32]],
+  lat : Lattice,
+  d : Array[Int64],
+  index : Int64,
+  limit : Int64,
+  out : Array[Array[Int64]],
 ) -> Bool {
-  if out.length() >= limit {
+  if out.length().to_int64() >= limit {
     return true
   }
-  if index >= TOTAL {
+  if index >= lat.total {
     out.push(copy_digits(d))
-    return out.length() >= limit
+    return out.length().to_int64() >= limit
   }
-  let c = coords_of(index + 1).unwrap()
-  let mut digit = 1
-  while digit <= MAX_DIGIT {
+  let c = coords_of(lat, index + lat.first_position).unwrap()
+  let mut digit = 1L
+  while digit <= lat.max_digit {
     let mut clash = false
     for peer in earlier_peers(c) {
-      if digit_at(d, position_of(peer)) == digit {
+      if digit_at(lat, d, position_of(lat, peer)) == digit {
         clash = true
       }
     }
     if !clash {
-      d[index] = digit
-      if backtrack(d, index + 1, limit, out) {
-        d[index] = NO_DIGIT
+      d[slot_of(index + lat.first_position)] = digit
+      if backtrack(lat, d, index + 1L, limit, out) {
+        d[slot_of(index + lat.first_position)] = NO_DIGIT
         return true
       }
-      d[index] = NO_DIGIT
+      d[slot_of(index + lat.first_position)] = NO_DIGIT
     }
-    digit = digit + 1
+    digit = digit + 1L
   }
   false
 }
@@ -238,11 +265,11 @@ fn backtrack(
 ///|
 /// Enumerates up to `limit` complete solutions of the line rule.
 ///
-/// Independent of `canonical_digits`, which is what makes it useful: the
-/// closed form proves the structure is satisfiable, and this proves the
-/// *implication* that slab balance follows, on solutions nobody designed.
-pub fn solve_lattice(limit : Int32) -> Array[Array[Int32]] {
-  let out : Array[Array[Int32]] = []
-  ignore(backtrack(empty_digits(), 0, limit, out))
+/// Independent of `canonical_digits`, which is what makes it useful: the closed
+/// form proves the structure is satisfiable, and this proves the *implication*
+/// that slab balance follows, on solutions nobody designed.
+pub fn solve_lattice(lat : Lattice, limit : Int64) -> Array[Array[Int64]] {
+  let out : Array[Array[Int64]] = []
+  ignore(backtrack(lat, empty_digits(lat), 0L, limit, out))
   out
 }

@@ -35,11 +35,16 @@
 /// Its own type rather than `@tesseract.Record`, because `Record` carries a
 /// `coords` field the file does not store — coordinates are derived from the
 /// position on load rather than persisted twice.
+///
+/// `position` and `digit` are `Int64` because that is what the store speaks:
+/// SQLite already hands both back as `Int64`, so keeping them narrower here
+/// would add a round trip through `Int` on every load and back again on every
+/// save, for no gain.
 pub struct CellRow {
-  position : Int32
+  position : Int64
   key : String
   value : String
-  digit : Int32
+  digit : Int64
   timestamp : String
 }
 
@@ -48,7 +53,7 @@ pub struct CellRow {
 pub struct LoadReport {
   loaded : Int32
   rejected : Int32
-  cursor : Int32
+  cursor : Int64
 } derive(Eq, Debug)
 
 ///|
@@ -164,13 +169,7 @@ fn read_cells(conn : @sqlite3.Connection) -> Array[CellRow] raise {
     let value : String = stmt.column(index=2)
     let digit : Int64 = stmt.column(index=3)
     let timestamp : String = stmt.column(index=4)
-    out.push(CellRow::{
-      position: position.to_int(),
-      key,
-      value,
-      digit: digit.to_int(),
-      timestamp,
-    })
+    out.push(CellRow::{ position, key, value, digit, timestamp, })
   }
   out
 }
@@ -203,6 +202,7 @@ fn read_meta(conn : @sqlite3.Connection, name : String) -> String? raise {
 /// Each row is reinserted through `insert_stamped` with the timestamp the file
 /// carried, so the lattice that comes back is the one that was saved.
 pub fn load(path : String, db : @tesseract.Tesseract) -> LoadReport raise {
+  let lat = @tesseract.Tesseract::lattice_of_db(db)
   let conn = @sqlite3.Connection::open(path)
   defer conn.close()
   ensure_schema(conn)
@@ -236,8 +236,8 @@ pub fn load(path : String, db : @tesseract.Tesseract) -> LoadReport raise {
     Some(text) =>
       match @tesseract.parse_int(text) {
         Some(p) =>
-          if @tesseract.position_in_bounds(p) {
-            @tesseract.Tesseract::set_position(db, p)
+          if @tesseract.position_in_bounds(lat, p.to_int64()) {
+            @tesseract.Tesseract::set_position(db, p.to_int64())
           }
         None => ()
       }

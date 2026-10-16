@@ -415,6 +415,60 @@ async function main() {
     await new Promise((r) => setTimeout(r, 2000));
     check("export produced .tsr text", await cdp.eval("document.getElementById('ioText').value.length > 100"), true);
 
+    // ---- the side selector --------------------------------------------
+    //
+    // Everything above ran at the default side. These check the other half: that
+    // the window is not quietly hardcoded to 3. Each of the page's six
+    // shape-dependent lists used to carry a literal 3, and a selector that only
+    // changed the grid would have passed a test that looked at the grid alone.
+    await cdp.eval(`(() => {
+      const s = document.getElementById('selSide');
+      s.value = '4';
+      s.dispatchEvent(new Event('change'));
+      return true;
+    })()`);
+    for (let i = 0; i < 40; i++) {
+      if ((await chips(cdp)).includes("/ 256")) break;
+      await new Promise((r) => setTimeout(r, 500));
+    }
+    check("side 4 reports 256 cells", await cdp.eval("document.getElementById('chips').innerText.includes('/ 256')"), true, (await chips(cdp)) + " || " + (await resp(cdp)));
+    check("side 4 shows a 4x4 plane", await cdp.eval("document.querySelectorAll('#grid .cell').length"), 16);
+    check("side 4 plane pickers have 4 options", await cdp.eval("document.getElementById('selX').options.length"), 4);
+    check("side 4 digit list reaches 4", await cdp.eval("[...document.getElementById('fDigit').options].map(o => o.value).join(',')"), "0,1,2,3,4");
+    check("side 4 digit palette offers 4", await cdp.eval("document.querySelectorAll('#digits button.d4').length"), 1);
+    check("side 4 header names the shape", await cdp.eval("document.getElementById('shape').innerText.includes('4×4×4×4')"), true, await cdp.eval("document.getElementById('shape').innerText"));
+    check("side 4 position placeholder follows", await cdp.eval("document.getElementById('fPos').placeholder"), "1..256");
+    check("side 4 geometry labels follow", await cdp.eval("document.getElementById('optLine').textContent + ' / ' + document.getElementById('optSlab').textContent + ' / ' + document.getElementById('optPeers').textContent"), "线 (4 格) / 板 (64 格) / 同位 (12 格)");
+
+    // The solved side-3 lattice carried over by coordinate. The count is 81, not
+    // 256, and that is the correct answer rather than a shortfall: every one of
+    // the 81 side-3 coordinates lies inside a side-4 lattice, so all 81 records
+    // survive and the 175 newly reachable cells are simply blank. A resize moves
+    // digits to the cells their coordinates name; it does not re-solve.
+    //
+    // The badge therefore reads "no digit-rule conflict", not "complete
+    // solution", and both halves are asserted - including the negative, so the
+    // window cannot start claiming a complete 256-cell solution without this
+    // test failing.
+    check("resize carried all 81 records by coordinate", await cdp.eval("document.getElementById('chips').innerText.includes('81 / 256')"), true, await chips(cdp));
+    check("carried digits still satisfy the side-4 rule", await cdp.eval("document.getElementById('chips').innerText.includes('数位规则无冲突')"), true, await chips(cdp));
+    check("window does not claim a complete 256-cell solution", await cdp.eval("document.getElementById('chips').innerText.includes('完整解')"), false, await chips(cdp));
+
+    // And back again, which is the same operation in the other direction.
+    await cdp.eval(`(() => {
+      const s = document.getElementById('selSide');
+      s.value = '3';
+      s.dispatchEvent(new Event('change'));
+      return true;
+    })()`);
+    for (let i = 0; i < 40; i++) {
+      if ((await chips(cdp)).includes("/ 81")) break;
+      await new Promise((r) => setTimeout(r, 500));
+    }
+    check("back to side 3", await cdp.eval("document.querySelectorAll('#grid .cell').length"), 9);
+    check("side 3 digit list is back to 3", await cdp.eval("document.getElementById('fDigit').options.length"), 4);
+    check("side 3 header is back", await cdp.eval("document.getElementById('shape').innerText.includes('3×3×3×3')"), true, await cdp.eval("document.getElementById('shape').innerText"));
+
     log("");
     log(failures === 0 ? "all smoke checks passed" : `${failures} smoke check(s) FAILED`);
   } finally {

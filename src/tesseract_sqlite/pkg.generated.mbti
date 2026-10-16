@@ -18,17 +18,17 @@ pub fn save(String, @tesseract.Tesseract) -> Int raise
 
 // Types and methods
 pub struct CellRow {
-  position : Int
+  position : Int64
   key : String
   value : String
-  digit : Int
+  digit : Int64
   timestamp : String
 }
 
 pub struct LoadReport {
   loaded : Int
   rejected : Int
-  cursor : Int
+  cursor : Int64
 } derive(Eq, @debug.Debug)
 
 // Type aliases

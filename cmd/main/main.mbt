@@ -15,6 +15,20 @@
 /// moon run cmd/main -- .export tsr > dump.tsr
 /// ```
 ///
+/// `--side N` chooses how many cells each of the four axes has. The default is 3,
+/// the 81-cell lattice every existing `.tsr` and `.db` file was written under, so
+/// an invocation without the flag behaves exactly as it always has:
+///
+/// ```sh
+/// moon run cmd/main -- --side 4 .status      # 256 cells, digits 1..4
+/// moon run cmd/main -- --side 4 .solve .verify
+/// ```
+///
+/// The upper bound is 215, not the number the arithmetic alone would allow:
+/// `Array` is indexed by `Int`, which is 32-bit on this toolchain, so `side^4`
+/// cells have to stay addressable. `lattice_of` refuses anything larger and says
+/// so rather than truncating.
+///
 /// A REPL is a one-line shell loop over the same commands:
 ///
 /// ```sh
@@ -55,20 +69,122 @@ fn warn(text : String) -> Unit {
 }
 
 ///|
+/// Pulls a `--side N` or `--side=N` option out of the argument list.
+///
+/// Returns the raw value text ("" when the option is absent), whether the option
+/// appeared with no value after it, and the arguments with the option removed.
+///
+/// The option is allowed to sit anywhere among the commands, because a flag that
+/// only works in first position is a flag people get wrong. Only the *first*
+/// occurrence counts: `--side 3 --side 4` taking the last one would mean the
+/// earlier flag silently did nothing.
+///
+/// Both spellings consume their own argument. `--side=N` once set the value and
+/// left itself in the list, so it went on to be executed as SQL and the run
+/// reported "Unsupported SQL statement: --side=3" after having already built the
+/// database at the side that flag asked for.
+///
+/// The raw text is handed back rather than a side, so that "not a number" and
+/// "out of range" are decided by `lattice_of` and reported the same way wherever
+/// the value came from.
+fn parse_side_option(args : ArrayView[String]) -> (String, Bool, Array[String]) {
+  let rest : Array[String] = []
+  let mut raw = ""
+  let mut missing = false
+  let mut i = 0
+  while i < args.length() {
+    let a = args[i]
+    // Recognised on every pass, not just until the first value lands: a second
+    // `--side` has to be *consumed*, or it and its value go on to be executed as
+    // SQL and the run fails on a flag it already honoured once.
+    let mut consumed = false
+    if a == "--side" {
+      if i + 1 < args.length() {
+        if raw == "" {
+          raw = args[i + 1]
+        }
+        i = i + 1 // also consume the value
+      } else if raw == "" {
+        missing = true
+      }
+      consumed = true
+    } else if @tesseract.starts_with(a, "--side=") {
+      if raw == "" {
+        raw = @tesseract.slice(a, 7, a.length())
+      }
+      consumed = true
+    }
+    if !consumed {
+      rest.push(a)
+    }
+    i = i + 1
+  }
+  (raw, missing, rest)
+}
+
+///|
+/// Resolves `--side` into a lattice, and returns it with the remaining
+/// arguments.
+///
+/// A bad value is refused here, before any statement runs, so `--side` can never
+/// leave a half-built database behind to be mistaken for a successful one.
+fn lattice_from_args(
+  args : ArrayView[String],
+) -> Result[(@tesseract.Lattice, Array[String]), String] {
+  let (raw, missing, rest) = parse_side_option(args)
+  if missing {
+    return Err("--side needs a value, as --side 4 or --side=4")
+  }
+  if raw == "" {
+    return Ok((@tesseract.default_lattice(), rest))
+  }
+  match @tesseract.parse_int(raw) {
+    None => Err("--side needs an integer, got '" + raw + "'")
+    Some(n) =>
+      match @tesseract.lattice_of(n.to_int64()) {
+        Ok(l) => Ok((l, rest))
+        Err(message) => Err("--side " + message)
+      }
+  }
+}
+
+///|
 fn main {
   let all = @env.args()
   // args[0] is the path of the executable itself; the rest are ours.
-  let args = if all.length() > 0 { all[1:] } else { all }
+  let argv = if all.length() > 0 { all[1:] } else { all }
+  // Everything below reads the lattice's shape off this one value, so the
+  // banner, the cursor range, `.solve` and `.export` all follow `--side`
+  // together. The default stays 3, which is the lattice every existing `.tsr`
+  // and `.db` file was written under.
+  let (lat, args) = match lattice_from_args(argv) {
+    Ok(pair) => pair
+    Err(message) => {
+      warn(message)
+      return
+    }
+  }
   // The banner is a diagnostic, not output: `.export` writes a document to
   // stdout and this command is documented as redirecting it into a file, so
   // anything else on stdout ends up inside that file.
-  warn("Tesseract 4D - 3x3x3x3 lattice, 81 cells, 108 sudoku lines")
+  warn(
+    "Tesseract 4D - " +
+    @tesseract.lattice_shape_text(lat) +
+    " lattice, " +
+    sudoku_line_count(lat).to_string() +
+    " sudoku lines",
+  )
   if args.length() == 0 {
     print_help()
     return
   }
   let logger = @tesseract.new_logger("tesseract")
-  let db = @tesseract.new_db("tesseract", logger)
+  // A real command line gets real timestamps. The library default is the logical
+  // counter, which is what keeps the tests comparable between runs; a surface
+  // that prints stamps for a person should say when it happened, not how many
+  // log lines preceded it. Set before `new_db`, which keeps its own copy.
+  @tesseract.TesseractLogger::set_clock(logger, @tesseract.system_clock())
+  let db = @tesseract.new_db("tesseract", lat, logger)
   @tesseract.TesseractLogger::set_echo(
     @tesseract.Tesseract::get_logger(db),
     true,
@@ -110,15 +226,27 @@ fn main {
 }
 
 ///|
+/// The number of axis-parallel lines through the lattice: `DIM * side^3`.
+///
+/// Named once because the banner and the status readout both report it, and a
+/// literal `108` in each would be two places to forget when the side changes.
+fn sudoku_line_count(lat : @tesseract.Lattice) -> Int64 {
+  lat.total / lat.side * @tesseract.DIM
+}
+
+///|
 /// The command list, also printed when invoked with no arguments.
 fn print_help() -> Unit {
   out("")
-  out("usage: moon run cmd/main -- <sql-or-command>...")
+  out("usage: moon run cmd/main -- [--side N] <sql-or-command>...")
+  out("")
+  out("options:")
+  out("  --side N                 cells per axis, 1..215 (default 3)")
   out("")
   out("commands:")
   out("  .help                   this list")
   out("  .status                 lattice occupancy and cursor")
-  out("  .grid                   draw the 3x3x3x3 lattice view")
+  out("  .grid                   draw the lattice view")
   out("  .pos N | .pos (x,y,z,w) move the insert cursor")
   out("  .neighbours N           occupied cells sharing a line with N")
   out("  .solve                  fill every cell from the closed-form solution")
@@ -166,7 +294,11 @@ fn handle_dot(db : @tesseract.Tesseract, line : String) -> Bool {
     let arg = @tesseract.trim_ws(@tesseract.slice(line, 12, line.length()))
     match @tesseract.parse_int(arg) {
       Some(p) =>
-        out(@tesseract.format_response(@tesseract.Tesseract::peer_query(db, p)))
+        out(
+          @tesseract.format_response(
+            @tesseract.Tesseract::peer_query(db, p.to_int64()),
+          ),
+        )
       None => out("expected a position")
     }
     return true
@@ -216,10 +348,19 @@ fn handle_dot(db : @tesseract.Tesseract, line : String) -> Bool {
 ///|
 /// Occupancy and cursor readout.
 fn print_status(db : @tesseract.Tesseract) -> Unit {
+  let lat = @tesseract.Tesseract::lattice_of_db(db)
   let s = @tesseract.Tesseract::status(db)
-  let here = @tesseract.coords_of(s.current_position).unwrap()
+  let here = @tesseract.coords_of(lat, s.current_position).unwrap()
   out("database: " + s.db_name)
-  out("lattice : 3x3x3x3 = 81 cells, 108 lines, 12 slabs")
+  out(
+    "lattice : " +
+    @tesseract.lattice_shape_text(lat) +
+    " = " +
+    sudoku_line_count(lat).to_string() +
+    " lines, " +
+    (@tesseract.DIM * lat.side).to_string() +
+    " slabs",
+  )
   out("records : " + s.current_count.to_string())
   out("digits  : " + s.digit_count.to_string())
   out(
@@ -233,50 +374,62 @@ fn print_status(db : @tesseract.Tesseract) -> Unit {
 ///|
 /// `.pos` — accepts a position or an `(x,y,z,w)` address.
 fn move_cursor(db : @tesseract.Tesseract, arg : String) -> Unit {
+  let lat = @tesseract.Tesseract::lattice_of_db(db)
   let resolved = if @tesseract.starts_ci(arg, "(") {
-    match @tesseract.parse_coords(arg) {
-      Some(c) => Some(@tesseract.position_of(c))
+    match @tesseract.parse_coords(lat, arg) {
+      Some(c) => Some(@tesseract.position_of(lat, c))
       None => None
     }
   } else {
     match @tesseract.parse_int(arg) {
-      Some(p) => Some(p)
+      Some(p) => Some(p.to_int64())
       None => None
     }
   }
   match resolved {
     Some(p) =>
-      if @tesseract.position_in_bounds(p) {
+      if @tesseract.position_in_bounds(lat, p) {
         @tesseract.Tesseract::set_position(db, p)
         out(
           "cursor -> " +
           p.to_string() +
           " " +
-          @tesseract.format_coords(@tesseract.coords_of(p).unwrap()),
+          @tesseract.format_coords(@tesseract.coords_of(lat, p).unwrap()),
         )
       } else {
-        out("out of range: " + p.to_string() + " (expected 1..81)")
+        out(
+          "out of range: " +
+          p.to_string() +
+          " (expected 1.." +
+          lat.last_position.to_string() +
+          ")",
+        )
       }
     None => out("expected a position or an (x,y,z,w) address")
   }
 }
 
 ///|
-/// `.solve` — fills all 81 cells from the closed-form solution.
+/// `.solve` — fills every cell from the closed-form solution.
 fn solve(db : @tesseract.Tesseract) -> Unit {
-  out("filling every cell from digit(x,y,z,w) = (x+y+z+w) mod 3 + 1")
-  let digits = @tesseract.canonical_digits()
-  let mut p = 1
+  let lat = @tesseract.Tesseract::lattice_of_db(db)
+  out(
+    "filling every cell from digit(x,y,z,w) = (x+y+z+w) mod " +
+    lat.side.to_string() +
+    " + 1",
+  )
+  let digits = @tesseract.canonical_digits(lat)
+  let mut p = lat.first_position
   let mut ok = 0
   let mut first_failure = ""
-  while p <= @tesseract.LAST_POSITION {
+  while p <= lat.last_position {
     let b = StringBuilder::StringBuilder()
     b.write_string("INSERT INTO tesseract (key, value, digit) VALUES ('cell_")
     b.write_object(p)
     b.write_string("', '{\"pos\": ")
     b.write_object(p)
     b.write_string("}', ")
-    b.write_object(digits[p - 1])
+    b.write_object(digits[@tesseract.slot_of(p)])
     b.write_string(") AT ")
     b.write_object(p)
     b.write_char(';')
@@ -296,7 +449,7 @@ fn solve(db : @tesseract.Tesseract) -> Unit {
         r.error +
         ")"
     }
-    p = p + 1
+    p = p + 1L
   }
   out("placed " + ok.to_string() + " digits" + first_failure)
   print_status(db)
@@ -305,23 +458,24 @@ fn solve(db : @tesseract.Tesseract) -> Unit {
 ///|
 /// `.verify` — checks the stored digits against the line and slab rules.
 fn verify(db : @tesseract.Tesseract) -> Unit {
-  let digits = @tesseract.empty_digits()
-  let mut p = 1
-  while p <= @tesseract.LAST_POSITION {
+  let lat = @tesseract.Tesseract::lattice_of_db(db)
+  let digits = @tesseract.empty_digits(lat)
+  let mut p = lat.first_position
+  while p <= lat.last_position {
     match @tesseract.Tesseract::cell_at(db, p) {
-      Some(cell) => @tesseract.set_digit(digits, p, cell.digit)
+      Some(cell) => @tesseract.set_digit(lat, digits, p, cell.digit)
       None => ()
     }
-    p = p + 1
+    p = p + 1L
   }
-  let lv = @tesseract.line_violations(digits)
-  let sv = @tesseract.slab_violations(digits)
+  let lv = @tesseract.line_violations(lat, digits)
+  let sv = @tesseract.slab_violations(lat, digits)
   out("line violations : " + lv.length().to_string())
   report(lv)
   out("slab imbalances : " + sv.length().to_string())
   report(sv)
   if lv.length() == 0 && sv.length() == 0 {
-    out("OK - every axis-parallel line holds 1, 2 and 3")
+    out("OK - every axis-parallel line holds 1.." + lat.max_digit.to_string())
   }
 }
 

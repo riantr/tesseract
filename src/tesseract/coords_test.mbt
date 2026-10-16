@@ -1,154 +1,197 @@
 ///|
-/// Geometry of the 3x3x3x3 lattice.
+/// Geometry of the 4D lattice.
+///
+/// Every assertion here is about the *default* 3-per-axis lattice, so the
+/// expected numbers stay exactly as they were. What changed is where they come
+/// from: the hardcoded `81`, `82` and `27` are now read off the lattice, so the
+/// same assertions keep their meaning at any side rather than silently
+/// describing a 3-per-axis world.
 test "index and position round-trip over all 81 cells" {
-  let mut checked = 0
-  for c in @tesseract.all_coords() {
-    let p = @tesseract.position_of(c)
-    assert_true(@tesseract.position_in_bounds(p))
-    assert_eq(@tesseract.coords_of(p), Some(c))
-    assert_eq(@tesseract.index0(c), p - 1)
+  let lat = @tesseract.default_lattice()
+  let mut checked = 0L
+  for c in @tesseract.all_coords(lat) {
+    let p = @tesseract.position_of(lat, c)
+    assert_true(@tesseract.position_in_bounds(lat, p))
+    assert_eq(@tesseract.coords_of(lat, p), Some(c))
+    assert_eq(@tesseract.index0(lat, c), p - 1L)
     checked = checked + 1
   }
-  assert_eq(checked, @tesseract.TOTAL)
+  assert_eq(checked, lat.total)
 }
 
 ///|
-test "positions outside 1..81 are rejected, not clamped" {
-  assert_eq(@tesseract.coords_of(0), None)
-  assert_eq(@tesseract.coords_of(82), None)
-  assert_eq(@tesseract.coords_of(-1), None)
-  assert_true(@tesseract.position_in_bounds(@tesseract.FIRST_POSITION))
-  assert_true(@tesseract.position_in_bounds(@tesseract.LAST_POSITION))
-  assert_false(@tesseract.position_in_bounds(0))
-  assert_false(@tesseract.position_in_bounds(82))
+test "positions outside the lattice are rejected, not clamped" {
+  let lat = @tesseract.default_lattice()
+  assert_eq(@tesseract.coords_of(lat, 0L), None)
+  assert_eq(@tesseract.coords_of(lat, lat.last_position + 1L), None)
+  assert_eq(@tesseract.coords_of(lat, -1L), None)
+  assert_true(@tesseract.position_in_bounds(lat, lat.first_position))
+  assert_true(@tesseract.position_in_bounds(lat, lat.last_position))
+  assert_false(@tesseract.position_in_bounds(lat, 0L))
+  assert_false(@tesseract.position_in_bounds(lat, lat.last_position + 1L))
 }
 
 ///|
-test "coordinates outside 0..2 are rejected" {
-  assert_false(@tesseract.coords_in_bounds(@tesseract.coords(3, 0, 0, 0)))
-  assert_false(@tesseract.coords_in_bounds(@tesseract.coords(0, -1, 0, 0)))
-  assert_false(@tesseract.coords_in_bounds(@tesseract.coords(0, 0, 0, 3)))
-  assert_true(@tesseract.coords_in_bounds(@tesseract.coords(2, 2, 2, 2)))
+test "coordinates outside 0..side-1 are rejected" {
+  let lat = @tesseract.default_lattice()
+  assert_false(
+    @tesseract.coords_in_bounds(lat, @tesseract.coords(3L, 0L, 0L, 0L)),
+  )
+  assert_false(
+    @tesseract.coords_in_bounds(lat, @tesseract.coords(0L, -1L, 0L, 0L)),
+  )
+  assert_false(
+    @tesseract.coords_in_bounds(lat, @tesseract.coords(0L, 0L, 0L, 3L)),
+  )
+  assert_true(
+    @tesseract.coords_in_bounds(lat, @tesseract.coords(2L, 2L, 2L, 2L)),
+  )
 }
 
 ///|
 test "the lattice corners sit at the ends of the row-major order" {
-  assert_eq(@tesseract.coords_of(1), Some(@tesseract.coords(0, 0, 0, 0)))
+  let lat = @tesseract.default_lattice()
   assert_eq(
-    @tesseract.coords_of(@tesseract.TOTAL),
-    Some(@tesseract.coords(2, 2, 2, 2)),
+    @tesseract.coords_of(lat, 1L),
+    Some(@tesseract.coords(0L, 0L, 0L, 0L)),
   )
-  assert_eq(@tesseract.coords_of(28), Some(@tesseract.coords(1, 0, 0, 0)))
+  assert_eq(
+    @tesseract.coords_of(lat, lat.total),
+    Some(@tesseract.coords(2L, 2L, 2L, 2L)),
+  )
+  assert_eq(
+    @tesseract.coords_of(lat, 28L),
+    Some(@tesseract.coords(1L, 0L, 0L, 0L)),
+  )
 }
 
 ///|
 test "coords format and parse agree, with and without parentheses" {
-  let c = @tesseract.coords(1, 0, 2, 1)
+  let lat = @tesseract.default_lattice()
+  let c = @tesseract.coords(1L, 0L, 2L, 1L)
   assert_eq(@tesseract.format_coords(c), "(1,0,2,1)")
-  assert_eq(@tesseract.parse_coords("(1,0,2,1)"), Some(c))
-  assert_eq(@tesseract.parse_coords("1,0,2,1"), Some(c))
-  assert_eq(@tesseract.parse_coords(" ( 1 , 0 , 2 , 1 ) "), Some(c))
+  assert_eq(@tesseract.parse_coords(lat, "(1,0,2,1)"), Some(c))
+  assert_eq(@tesseract.parse_coords(lat, "1,0,2,1"), Some(c))
+  assert_eq(@tesseract.parse_coords(lat, " ( 1 , 0 , 2 , 1 ) "), Some(c))
 }
 
 ///|
 test "a malformed address never silently resolves to another cell" {
-  assert_eq(@tesseract.parse_coords("(1,0,2)"), None)
-  assert_eq(@tesseract.parse_coords("(1,0,2,1,0)"), None)
-  assert_eq(@tesseract.parse_coords("(3,0,2,1)"), None)
-  assert_eq(@tesseract.parse_coords("(-1,0,2,1)"), None)
-  assert_eq(@tesseract.parse_coords("(a,0,2,1)"), None)
-  assert_eq(@tesseract.parse_coords(""), None)
+  let lat = @tesseract.default_lattice()
+  assert_eq(@tesseract.parse_coords(lat, "(1,0,2)"), None)
+  assert_eq(@tesseract.parse_coords(lat, "(1,0,2,1,0)"), None)
+  assert_eq(@tesseract.parse_coords(lat, "(3,0,2,1)"), None)
+  assert_eq(@tesseract.parse_coords(lat, "(-1,0,2,1)"), None)
+  assert_eq(@tesseract.parse_coords(lat, "(a,0,2,1)"), None)
+  assert_eq(@tesseract.parse_coords(lat, ""), None)
 }
 
 ///|
 test "neighbours are bounded, never wrapped" {
-  assert_eq(@tesseract.neighbours(@tesseract.coords(0, 0, 0, 0), 0).length(), 1)
-  assert_eq(@tesseract.neighbours(@tesseract.coords(2, 2, 2, 2), 0).length(), 1)
-  assert_eq(@tesseract.neighbours(@tesseract.coords(1, 1, 1, 1), 3).length(), 2)
-  let n = @tesseract.neighbours(@tesseract.coords(0, 0, 0, 0), 0)
-  assert_eq(n[0], @tesseract.coords(1, 0, 0, 0))
-  let m = @tesseract.neighbours(@tesseract.coords(0, 0, 0, 0), 3)
-  assert_eq(m[0], @tesseract.coords(0, 0, 0, 1))
+  let lat = @tesseract.default_lattice()
+  assert_eq(
+    @tesseract.neighbours(lat, @tesseract.coords(0L, 0L, 0L, 0L), 0L).length(),
+    1,
+  )
+  assert_eq(
+    @tesseract.neighbours(lat, @tesseract.coords(2L, 2L, 2L, 2L), 0L).length(),
+    1,
+  )
+  assert_eq(
+    @tesseract.neighbours(lat, @tesseract.coords(1L, 1L, 1L, 1L), 3L).length(),
+    2,
+  )
+  let n = @tesseract.neighbours(lat, @tesseract.coords(0L, 0L, 0L, 0L), 0L)
+  assert_eq(n[0], @tesseract.coords(1L, 0L, 0L, 0L))
+  let m = @tesseract.neighbours(lat, @tesseract.coords(0L, 0L, 0L, 0L), 3L)
+  assert_eq(m[0], @tesseract.coords(0L, 0L, 0L, 1L))
 }
 
 ///|
 test "two cells share a line exactly when they agree on three coordinates" {
-  let a = @tesseract.coords(1, 2, 0, 1)
-  assert_true(@tesseract.shares_line(a, @tesseract.coords(1, 2, 2, 1)))
+  let a = @tesseract.coords(1L, 2L, 0L, 1L)
+  assert_true(@tesseract.shares_line(a, @tesseract.coords(1L, 2L, 2L, 1L)))
   assert_true(@tesseract.shares_line(a, a))
-  assert_false(@tesseract.shares_line(a, @tesseract.coords(0, 0, 0, 0)))
-  assert_false(@tesseract.shares_line(a, @tesseract.coords(1, 2, 1, 0)))
+  assert_false(@tesseract.shares_line(a, @tesseract.coords(0L, 0L, 0L, 0L)))
+  assert_false(@tesseract.shares_line(a, @tesseract.coords(1L, 2L, 1L, 0L)))
   assert_true(
     @tesseract.shares_line(
-      @tesseract.coords(0, 0, 0, 0),
-      @tesseract.coords(1, 0, 0, 0),
+      @tesseract.coords(0L, 0L, 0L, 0L),
+      @tesseract.coords(1L, 0L, 0L, 0L),
     ),
   )
 }
 
 ///|
 test "coord_at and with_coord agree on all four axes" {
-  let c = @tesseract.coords(1, 2, 0, 1)
-  assert_eq(@tesseract.coord_at(c, 0).unwrap(), 1)
-  assert_eq(@tesseract.coord_at(c, 1).unwrap(), 2)
-  assert_eq(@tesseract.coord_at(c, 2).unwrap(), 0)
-  assert_eq(@tesseract.coord_at(c, 3).unwrap(), 1)
-  let axis = 2
-  let moved = @tesseract.with_coord(c, axis, 2)
-  assert_eq(@tesseract.coord_at(moved, axis).unwrap(), 2)
-  assert_eq(@tesseract.coord_at(moved, 0).unwrap(), 1)
-  assert_eq(@tesseract.coord_at(moved, 1).unwrap(), 2)
-  assert_eq(@tesseract.coord_at(moved, 3).unwrap(), 1)
+  let c = @tesseract.coords(1L, 2L, 0L, 1L)
+  assert_eq(@tesseract.coord_at(c, 0L).unwrap(), 1L)
+  assert_eq(@tesseract.coord_at(c, 1L).unwrap(), 2L)
+  assert_eq(@tesseract.coord_at(c, 2L).unwrap(), 0L)
+  assert_eq(@tesseract.coord_at(c, 3L).unwrap(), 1L)
+  let axis = 2L
+  let moved = @tesseract.with_coord(c, axis, 2L)
+  assert_eq(@tesseract.coord_at(moved, axis).unwrap(), 2L)
+  assert_eq(@tesseract.coord_at(moved, 0L).unwrap(), 1L)
+  assert_eq(@tesseract.coord_at(moved, 1L).unwrap(), 2L)
+  assert_eq(@tesseract.coord_at(moved, 3L).unwrap(), 1L)
 }
 
 ///|
 test "an axis outside the lattice is reported, not answered as the last one" {
   // `w` is 2 in this cell, so a fallthrough would hand back 2 for every one of
   // these and look like a real coordinate.
-  let c = @tesseract.coords(1, 2, 0, 2)
-  assert_eq(@tesseract.coord_at(c, 0), Some(1))
-  assert_eq(@tesseract.coord_at(c, 1), Some(2))
-  assert_eq(@tesseract.coord_at(c, 2), Some(0))
-  assert_eq(@tesseract.coord_at(c, 3), Some(2))
+  let c = @tesseract.coords(1L, 2L, 0L, 2L)
+  assert_eq(@tesseract.coord_at(c, 0L), Some(1L))
+  assert_eq(@tesseract.coord_at(c, 1L), Some(2L))
+  assert_eq(@tesseract.coord_at(c, 2L), Some(0L))
+  assert_eq(@tesseract.coord_at(c, 3L), Some(2L))
   // Above the last axis, below zero, and far out of range.
-  assert_eq(@tesseract.coord_at(c, 4), None)
-  assert_eq(@tesseract.coord_at(c, 7), None)
-  assert_eq(@tesseract.coord_at(c, 99), None)
-  assert_eq(@tesseract.coord_at(c, 0 - 1), None)
-  assert_eq(@tesseract.coord_at(c, 0 - 99), None)
+  assert_eq(@tesseract.coord_at(c, 4L), None)
+  assert_eq(@tesseract.coord_at(c, 7L), None)
+  assert_eq(@tesseract.coord_at(c, 99L), None)
+  assert_eq(@tesseract.coord_at(c, 0L - 1L), None)
+  assert_eq(@tesseract.coord_at(c, 0L - 99L), None)
   // The boundary is the axis count, not a hardcoded 3 or 4.
   assert_eq(@tesseract.coord_at(c, @tesseract.DIM), None)
-  assert_eq(@tesseract.coord_at(c, @tesseract.DIM - 1), Some(2))
+  assert_eq(@tesseract.coord_at(c, @tesseract.DIM - 1L), Some(2L))
 }
 
 ///|
 test "the geometry helpers refuse an axis they do not have" {
   // Each of these used to answer with the w-axis geometry, reporting it as the
   // axis that was asked for.
-  let c = @tesseract.coords(1, 2, 0, 2)
-  let w_line = @tesseract.line_through(c, 3)
-  let w_slab = @tesseract.slab_through(c, 3)
+  let lat = @tesseract.default_lattice()
+  let c = @tesseract.coords(1L, 2L, 0L, 2L)
+  let w_line = @tesseract.line_through(lat, c, 3L)
+  let w_slab = @tesseract.slab_through(lat, c, 3L)
   // Controls: the valid axes still work, so an empty list below means "bad
   // axis" rather than "this shape happens to be empty". `w` is 2 here, so
   // axis 3 sits at the end of its axis and has one neighbour; axis 0 is
   // x=1, in the middle, and has two.
   assert_eq(w_line.length(), 3)
   assert_eq(w_slab.length(), 27)
-  assert_eq(@tesseract.neighbours(c, 3).length(), 1)
-  assert_eq(@tesseract.neighbours(c, 0).length(), 2)
-  assert_eq(@tesseract.line_through(c, 3)[0], @tesseract.coords(1, 2, 0, 0))
+  assert_eq(@tesseract.neighbours(lat, c, 3L).length(), 1)
+  assert_eq(@tesseract.neighbours(lat, c, 0L).length(), 2)
+  assert_eq(
+    @tesseract.line_through(lat, c, 3L)[0],
+    @tesseract.coords(1L, 2L, 0L, 0L),
+  )
   // Now the bad axes.
-  assert_eq(@tesseract.line_through(c, 4).length(), 0)
-  assert_eq(@tesseract.line_through(c, 99).length(), 0)
-  assert_eq(@tesseract.line_through(c, 0 - 1).length(), 0)
-  assert_eq(@tesseract.slab_through(c, 4).length(), 0)
-  assert_eq(@tesseract.slab_through(c, 99).length(), 0)
-  assert_eq(@tesseract.slab_through(c, 0 - 1).length(), 0)
-  assert_eq(@tesseract.neighbours(c, 4).length(), 0)
-  assert_eq(@tesseract.neighbours(c, 99).length(), 0)
-  assert_eq(@tesseract.neighbours(c, 0 - 1).length(), 0)
+  assert_eq(@tesseract.line_through(lat, c, 4L).length(), 0)
+  assert_eq(@tesseract.line_through(lat, c, 99L).length(), 0)
+  assert_eq(@tesseract.line_through(lat, c, 0L - 1L).length(), 0)
+  assert_eq(@tesseract.slab_through(lat, c, 4L).length(), 0)
+  assert_eq(@tesseract.slab_through(lat, c, 99L).length(), 0)
+  assert_eq(@tesseract.slab_through(lat, c, 0L - 1L).length(), 0)
+  assert_eq(@tesseract.neighbours(lat, c, 4L).length(), 0)
+  assert_eq(@tesseract.neighbours(lat, c, 99L).length(), 0)
+  assert_eq(@tesseract.neighbours(lat, c, 0L - 1L).length(), 0)
   // An empty list is not the w-axis line in disguise.
-  assert_eq(@tesseract.line_through(c, 9).length() == w_line.length(), false)
+  assert_eq(
+    @tesseract.line_through(lat, c, 9L).length() == w_line.length(),
+    false,
+  )
 }
 
 ///|

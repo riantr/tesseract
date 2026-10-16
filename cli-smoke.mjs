@@ -65,11 +65,29 @@ const SQL_ADD =
   "INSERT INTO tesseract (key,value,digit) VALUES ('u_probe','v1',1) AT 1;";
 const SELECT_ALL = "SELECT * FROM tesseract;";
 
-// `格式: 时间: 1` - only a rendered record carries one, never an INSERT reply.
+// `  时间: 2026-10-16T12:02:35.886Z` under the wall clock, `  时间: 7` under
+// the logical counter. Capturing `\d+` instead of `\S+` looked harmless and was
+// not: it truncated the ISO form to the year, so two stamps written a second
+// apart compared *equal* and the check that A's stamp was restored into B passed
+// for the wrong reason.
 const stampOf = (out, key) => {
-  const m = new RegExp(key + "[\\s\\S]*?时间:\\s*(\\d+)").exec(out);
+  const m = new RegExp(key + "[\\s\\S]*?时间:\\s*(\\S+)").exec(out);
   return m ? m[1] : null;
 };
+
+// ISO-8601 UTC at a fixed width sorts correctly as a string, which is what
+// makes the wall-clock stamps comparable at all. The logical counter is a plain
+// integer. `Number()` is wrong for both in different ways - NaN for ISO - so the
+// two regimes are told apart explicitly and a mixed pair is refused rather than
+// compared across.
+const ISO_STAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+const is_iso = (s) => s !== null && ISO_STAMP.test(s);
+
+function stamp_after(later, earlier) {
+  if (later === null || earlier === null) return false;
+  if (is_iso(later) !== is_iso(earlier)) return false;
+  return is_iso(later) ? later > earlier : Number(later) > Number(earlier);
+}
 
 function main() {
   log("building cmd/main and cmd/persist for native...");
@@ -130,9 +148,13 @@ function main() {
     const loadedB = stampOf(r.out, "u_probe");
     const markerB = stampOf(r.out, "u_marker");
     check("a reopened cell keeps the stamp the file was saved with", loadedB, stampedA, r.out);
-    // The perturbation check: if B's counter had not actually moved past the
-    // saved stamp, the line above would hold for the wrong reason.
-    check("B's counter really had moved past the saved stamp", markerB !== null && Number(markerB) > Number(stampedA), true, r.out);
+    // `cmd/persist` runs on the host clock, so a persisted stamp is an instant
+    // rather than a counter. Pinned rather than assumed: if this ever reads a
+    // logical counter again, the comparison below silently changes meaning.
+    check("a saved stamp is a wall-clock instant", is_iso(stampedA) && is_iso(markerB), true, "A=" + stampedA + " B=" + markerB);
+    // The perturbation check: if B's own stamp had not actually moved past the
+    // saved one, the line above would hold for the wrong reason.
+    check("B's stamp really had moved past the saved one", stamp_after(markerB, stampedA), true, "A=" + stampedA + " B=" + markerB);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

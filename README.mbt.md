@@ -1,33 +1,96 @@
-# Tesseract — 4D (3x3x3x3)
+# Tesseract — 4D, 3 cells per axis by default
 
-A tiny multi-key JSON value database stored over a **3x3x3x3 sudoku lattice**,
-with a SQL surface and sudoku digit constraints.
+A tiny multi-key JSON value database stored over a **4D sudoku lattice**, with a
+SQL surface and sudoku digit constraints.
 
 This is the MoonBit port of the C#/Avalonia `tesseract` project, and the C#
 project itself has been lifted to the same 4D lattice. The two implementations
 were run against the same 26-statement sequence and produce **identical** output —
 same success flags, error codes, positions, coordinates and digits.
 
+## Install
+
+```sh
+moon add riantr/tesseract@0.1.0
+```
+
+The library is the package `riantr/tesseract/src/tesseract`:
+
+```moonbit nocheck
+///|
+import {
+  "riantr/tesseract/src/tesseract",
+}
+```
+
+`cmd/main`, `cmd/persist` and `cmd/gui` are the three executables in the same
+module — the command line, the file-backed store, and the window. Registry entry:
+[mooncakes.io/docs/riantr/tesseract@0.1.0](https://mooncakes.io/docs/riantr/tesseract@0.1.0).
+
 ## The lattice
 
 | | C# original | this version |
 |---|---|---|
-| shape | flat 9-cell ring shown as 3x3 | 3x3x3x3 lattice, 81 cells |
+| shape | flat 9-cell ring shown as 3x3 | 3x3x3x3 lattice, 81 cells (default) |
 | addressing | `grid_position` 1..9 | `grid_position` 1..**81**, or `(x,y,z,w)` |
 | sudoku | none | digits 1..3, one set per axis-parallel line |
 | structure | 9 rows / 1 box | 4 axes x 27 lines = **108 lines**, 12 slabs |
 
+### Cells per axis is a value, not a constant
+
+`side` — how many cells each of the four axes has — is chosen when the database
+is built. Everything above follows from it:
+
+| | `side = 3` (default) | `side = 4` |
+|---|---|---|
+| cells | 81 | 256 |
+| digit domain | 1..3 | 1..4 |
+| lines | 108 | 256 |
+| slabs (each) | 12 of 27 cells | 16 of 64 cells |
+| peers per cell | 8 | 12 |
+
+The sudoku rule is unchanged by this: `digit(x,y,z,w) = (x+y+z+w) mod side + 1`
+steps by one along every axis for any `side`, so every axis-parallel line is a
+permutation of `1..side`. A side-4 lattice solves with **0 line violations and
+0 slab imbalances**, checked in the test suite at every side from 1 to 4.
+
+The range is **1..215**, and the upper bound is storage rather than arithmetic.
+`Array` is indexed by `Int`, which is 32-bit on this toolchain, so `side^4`
+cells have to stay addressable and `215^4 = 2,136,750,625` is the largest count
+that fits. With `Int64` index arithmetic alone the root would be 55108; lifting
+it needs storage that is not one flat array. `lattice_of` refuses a side above
+the limit and says which rule it applied rather than truncating.
+
+```sh
+moon run cmd/main -- --side 4 .status
+moon run cmd/main -- --side 4 .solve .verify
+```
+
+Omitting `--side` gives 3, the lattice every existing `.tsr` and `.db` file was
+written under, so an invocation without the flag behaves exactly as before.
+
 Two numbering schemes coexist deliberately:
 
 - **coordinates** `(x, y, z, w)` are 0-based, matching array indexing;
-- **positions** `1..81` are 1-based, matching the C# `grid_position` column, so
-  stored SQL and `.tsr` files keep the same shape.
+- **positions** `1..total` are 1-based, matching the C# `grid_position` column,
+  so stored SQL and `.tsr` files keep the same shape.
 
 ```
-position = 1 + x*27 + y*9 + z*3 + w      (row-major, x slowest)
+position = 1 + x*side^3 + y*side^2 + z*side + w      (row-major, x slowest)
 ```
 
-The mapping is exact in both directions for all 81 cells.
+The mapping is exact in both directions for every cell.
+
+### Importing across sides
+
+A position number only means something relative to the side it was written
+under: **78 of the 81 positions in a 3-per-axis lattice name a different cell**
+once the side is 4 (position 40 is `(1,1,1,0)` at side 3 and `(0,2,1,3)` at
+side 4). So `.tsr` import places a record by the **coordinates** the file
+carries, and consults the position number only for a record that has no
+coordinates at all. A coordinate the target lattice cannot hold is an error
+naming that coordinate — never a clamp, and never a fall-through to a number
+that would quietly address a different cell.
 
 ## What the sudoku constraint is at this size
 
@@ -67,24 +130,32 @@ src/tesseract/
   coords.mbt     the lattice: coordinates, positions, neighbours, shares_line
   lattice.mbt    lines, slabs, planes, peers
   sudoku.mbt     digits, the line rule, slab balance, backtracking solver
-  types.mbt      GridCell, Record, DBResponse, DBStatus, formatting
+  txn.mbt        transactions: the undo journal, savepoints, statement atomicity
+  types.mbt      GridCell, Record, Computed, DBResponse, DBStatus, formatting
   logger.mbt     bounded log ring (100 entries, matching the C# logger)
-  db.mbt         the 81-cell store
-  sql.mbt        the SQL surface
+  clock.mbt      the injected clock and its ISO-8601 rendering
+  db.mbt         the store, and the in-place resize between shapes
+  lexer.mbt      the SQL tokenizer
+  ast.mbt        the parsed shape of a statement
+  parser.mbt     recursive descent, precedence climbing
+  exec.mbt       the executor: expressions, aggregates, ordering, transactions
   serialize.mbt  .tsr JSON, .md table, .sql dump, lattice rendering
 cmd/main/        command line front end
 cmd/gui/         the proton desktop window
   main.mbt       the App: entry point, page asset, command registration
   state.mbt      the store the window drives, and its JSON projections
-  commands.mbt   the six typed commands the page can call
+  commands.mbt   the seven typed commands the page can call
   web/index.html the page itself - inline CSS and JS, no build step
 proton.project.json   bundle identity, backend package, packaging settings
 gui-smoke.mjs         end-to-end smoke test driven through Chromium DevTools
 ```
 
 The library has **no external dependencies**: the core library in this toolchain
-carries no clock, no file I/O and no stdin reader, so what the package needs is
-implemented here rather than pulled in. `cmd/main` inherits that.
+carries no file I/O and no stdin reader, so what the package needs is implemented
+here rather than pulled in. `cmd/main` inherits that. It does carry a clock —
+`@env.now()` from `moonbitlang/core/env`, which is the toolchain rather than a
+mooncakes import — so the wall clock cost one line of `moon.pkg`, not a
+dependency.
 
 `cmd/gui` is the one exception, and only because it needs a window: it depends on
 `moonbit-community/proton@0.3.4`. Proton is native-only, so that package declares
@@ -94,12 +165,13 @@ implemented here rather than pulled in. `cmd/main` inherits that.
 
 `proton` is Electron-shaped: the page is HTML/CSS/JS, the windows and lifecycle
 live in MoonBit, and the two talk over a typed command bridge. The page never
-touches the lattice directly — it calls six operations and renders what comes
+touches the lattice directly — it calls seven operations and renders what comes
 back, so the store's rules still decide everything:
 
 | operation | what it does |
 |---|---|
-| `app:state` | occupancy, cursor, digit count, one 3x3 plane, sudoku health, log tail |
+| `app:state` | occupancy, cursor, digit count, the current `side × side` plane, sudoku health, log tail |
+| `app:lattice` | change `side`; rebuilds the store in place and reports kept/dropped |
 | `app:write` | `insert` / `update` / `delete` / `clear` / `cursor`, plus `solve` and `demo` |
 | `app:query` | one SQL statement, returning rows and a repaint |
 | `app:geometry` | line / slab / peers around a cell, with the covered positions |
@@ -116,10 +188,10 @@ digit, with `user_002` still at `{"age": 30}` — the same numbers
 Three things the window refuses to do, all because the library's own semantics
 would otherwise make a mistyped form destructive:
 
-- **A position outside `1..81` is an error, not "use the cursor."** The page
+- **A position outside `1..side⁴` is an error, not "use the cursor."** The page
   omits `position` only when the box is empty; anything the user actually typed
-  goes through, so `999` gets `INVALID_POSITION` instead of quietly landing on
-  the cursor cell.
+  goes through, so `999` gets `INVALID_POSITION` at side 3 instead of quietly
+  landing on the cursor cell.
 - **`delete` needs a key or a position.** With neither, the library means
   "empty the whole lattice", which is what 清空整个点阵 is for; the `delete`
   verb refuses that form with `INVALID_INPUT` rather than wiping 81 cells from
@@ -140,8 +212,21 @@ the same intent.
 示例数据巡演 starts with `DELETE FROM tesseract;`, so it is marked as destructive
 and its button says 「先清空」: it cannot preserve what is already stored.
 
-The page picks one of the nine `(x, y)` planes and shows it as a 3x3 grid over
-`(z, w)` — one classic sudoku box, addressed exactly as the library does.
+The page picks one of the `(x, y)` planes — `side` of them — and shows it as a
+`side × side` grid over `(z, w)`, addressed exactly as the library does. At the
+default side 3 that is one classic sudoku box, which is where the picture below
+was taken.
+
+The selector beside the plane pickers changes the side. It offers **1..9**, not the
+full 1..215 the library accepts: side 9 is 6561 cells, which a window cannot draw,
+and the SQL console and `--side` still reach the whole range. The page is not
+allowed to remember the shape between snapshots — `app:state` carries `side` every
+time — because a page holding a stale shape would offer a digit the store refuses.
+Changing the side calls `Tesseract::set_side`, which **resizes in place and carries
+records by coordinate**, the same rule `.tsr` import uses. It does not re-solve: a
+side-3 solution carried to side 4 stays 81 digits in 256 cells, and the badge says
+无冲突（81/256）rather than 完整解, because there is nothing there to be a solution
+of yet.
 
 ![The Tesseract window, filled from the closed-form solution](docs-window.png)
 
@@ -164,6 +249,26 @@ response, the CLI as `placed 80 digits first refused at position 1:
 SUDOKU_CONFLICT (Digit 1 already used at position 55)`.
 
 ## SQL
+
+A real lexer, a real AST and a real executor: `lexer.mbt` → `parser.mbt` →
+`exec.mbt`. Not SQLite, and not a hand-rolled scan either — the earlier version was
+932 lines of repeated string scanning whose `WHERE` was a struct holding at most
+one predicate per field, and the shape of that struct was the bug.
+
+**The rule the executor is built around: a clause the parser accepts is a clause the
+executor applies, or the statement is refused.** The version it replaced parsed
+`LIMIT 1` and `ORDER BY key DESC` as *nothing*, dropped them, and reported success
+— so `LIMIT 1` returned all three rows and `ORDER BY ... DESC` returned them in
+insertion order. A filter that silently answers a different question than the one
+asked is worse than a filter that fails, so nothing here can fail that way.
+
+| | before | now |
+|---|---|---|
+| `WHERE key='a' AND key='b'` | 1 row — the last conjunct overwrote the first | 0 rows |
+| `WHERE key='a' OR key='b'` | `INVALID_SYNTAX` | 2 rows |
+| `LIMIT 1` | **3 rows** | 1 row |
+| `ORDER BY key DESC` | **insertion order** | sorted |
+| `WHERE digit=1+1` | `INVALID_SYNTAX` | evaluates |
 
 The C# statement shapes and error codes still work, so existing dumps load:
 
@@ -204,6 +309,90 @@ Every condition in a `WHERE` applies, including alongside a geometry predicate �
 SELECT * FROM tesseract WHERE peers(42) AND key = 'user_001';
 ```
 
+### Expressions
+
+`WHERE` is an expression tree, so a conjunction over one column is a conjunction
+rather than the last one winning, and `NOT` negates a comparison rather than the
+whole clause. Operators, loosest first:
+
+```
+OR  <  AND  <  NOT  <  = <> != < <= > >= LIKE IN IS NULL
+    <  + -  <  * / %  <  unary -  <  literals, columns, ( ), functions
+```
+
+```sql
+SELECT * FROM tesseract WHERE key = 'a' OR key = 'b';
+SELECT * FROM tesseract WHERE digit = 1 + 1;
+SELECT * FROM tesseract WHERE key IN ('a', 'b', 'c');
+SELECT * FROM tesseract WHERE NOT (x = 1 AND y = 2);
+```
+
+Three-valued throughout: `NULL` is unknown, `AND`/`OR`/`NOT` propagate it, and a
+row is kept only on a known true. `WHERE digit = NULL` is therefore not `digit =
+0` — it matches nothing, which is the difference between "no digit" and "digit
+zero".
+
+Columns are `key`, `value`, `position` (or `grid_position`), `digit`, `timestamp`,
+`x`, `y`, `z`, `w` and `side`. An unknown one is `INVALID_COLUMNS`, **including on
+an empty table** — whether the table has data is not a fact that decides whether a
+statement is well formed, and a filter evaluated against no rows used to make an
+unknown column look acceptable.
+
+Functions: `length`, `upper`, `lower`, `abs`, `coords`, `digits`, the three
+geometry predicates, and the aggregates `count`, `sum`, `min`, `max`, `avg`.
+
+### Grouping, ordering, limits
+
+```sql
+SELECT digit, count(*) FROM tesseract GROUP BY digit;
+SELECT sum(digit) FROM tesseract WHERE digit > 0;
+SELECT key FROM tesseract ORDER BY key DESC, digit ASC;
+SELECT key FROM tesseract ORDER BY key LIMIT 10 OFFSET 20;
+SELECT DISTINCT value FROM tesseract;
+```
+
+`ORDER BY` is **stable**: rows whose sort keys tie keep their position order, so
+`LIMIT` after a tie picks the same rows in two runs of the same query.
+
+`Record` has a fixed shape, so a narrower select is an emptied row rather than a
+narrower one, and an aggregate cannot live in a cell column. Non-column select
+items are evaluated into `Record.computed`, each under the label it was written
+with (`count(*)`, `sum(digit)`, `length(key)`), and `format_response` prints them.
+`SELECT DISTINCT value` compares what was selected: the projection empties
+`position` and `coords` when they were not asked for, which is what makes three
+cells holding one value collapse to one row.
+
+### Transactions
+
+```sql
+BEGIN;
+INSERT INTO tesseract (key, value) VALUES ('a', '1') AT 1;
+SAVEPOINT sp;
+INSERT INTO tesseract (key, value) VALUES ('b', '2') AT 2;
+ROLLBACK TO sp;     -- the 'b' insert goes; the transaction stays open
+COMMIT;
+
+ROLLBACK;           -- or undo the whole thing
+```
+
+Implemented as an **undo journal of before-images**, not a snapshot, so a
+transaction costs what it wrote rather than what the lattice holds — a copy of all
+81 cells per statement would make `side = 215` impossible in a way it currently is
+not. Every mutation goes through one function (`Tesseract::write_cell`), so a
+transaction cannot quietly cover six of the seven write paths.
+
+Two properties worth stating separately:
+
+- **Every statement is atomic, with or without `BEGIN`.** Each one opens an
+  implicit savepoint, so a multi-row `UPDATE` refused on its last row commits none
+  of its earlier ones. This is the case the journal exists for.
+- **`ROLLBACK TO sp` keeps `sp`** and drops only the savepoints after it, matching
+  SQL. `RELEASE sp` forgets it and keeps the work — the opposite effect, under the
+  same kind of name, which is why both have their own test.
+
+`BEGIN` inside a transaction is refused rather than nested; `SAVEPOINT` is the
+supported way to have a rollback point inside one.
+
 `LIKE` follows the SQL spelling rather than being a substring test: `%x%` is a
 contains test and a bare literal is equality. So `value LIKE 'hello'` matches
 the value `hello` exactly, and `value LIKE '%hello%'` matches any value
@@ -227,7 +416,7 @@ reachable and nothing outside it is produced.
 
 ```sh
 moon check --target all     # type-check every backend
-moon test                   # 121 tests
+moon test                   # 220 tests
 moon fmt --check            # canonical formatting
 
 node cli-smoke.mjs          # both CLIs, as real processes (builds them first)
@@ -239,6 +428,20 @@ moon run cmd/main -- .demo
 moon run cmd/main -- .solve .verify
 moon run cmd/main -- "INSERT INTO tesseract (key,value) VALUES ('a','1') AT 5;" "SELECT * FROM tesseract;"
 moon run cmd/main -- .export tsr > dump.tsr
+
+# 256 cells, digits 1..4
+moon run cmd/main -- --side 4 .status
+moon run cmd/main -- --side 4 .solve .verify
+```
+
+`--side N` (or `--side=N`) sets the cells per axis for the run and may appear
+anywhere among the commands; only the first occurrence counts. A value that is
+not an integer, is below 1, or is above 215 is refused before any statement
+runs:
+
+```
+$ moon run cmd/main -- --side 999 .status
+--side side 999 is above the maximum 215 (cells are stored in one flat array indexed by a 32-bit Int)
 ```
 
 ### Persistence
@@ -313,7 +516,7 @@ keep the result in a SQLite database, so a scan is queryable history rather than
 text that scrolled past.
 
 ```sh
-moonx riantr/moonbit_static_analysis@0.4.0 . > scan.tsv
+moonx riantr/moonbit_static_analysis@0.4.1 . > scan.tsv
 moon run cmd/sa --target native -- store scan.tsv scan.db
 moon run cmd/sa --target native -- runs scan.db
 moon run cmd/sa --target native -- show scan.db
@@ -444,13 +647,15 @@ quoting is stripped and a `timestamp` column is accepted and ignored.
 
 Each of these is a behaviour change, so each is deliberate:
 
-1. **The grid is 81 cells, not 9**, and is addressable by coordinate.
+1. **The grid is 81 cells, not 9**, and is addressable by coordinate. The cell
+   count per axis is a value rather than a constant, so 81 is the *default*
+   rather than the only shape; `--side 4` gives 256.
 2. **`current_count` is computed from occupancy**, not accumulated. The C# counter
    saturated at 9 on the first wrap and then only decremented, so it drifted away
    from the number of stored records; reporting the real occupancy is what
    `GetStatus` was always asking for.
 3. **A malformed address never resolves to another cell.** Out-of-range positions
-   and unparseable coordinates are errors, not clamped values — a silent clamp
+   and unparsable coordinates are errors, not clamped values — a silent clamp
    would write to a cell the caller never asked for.
 4. **Out-of-range positions give a clean error code** instead of the C#
    `KeyNotFoundException` surfacing as a generic failure. Which code depends on
@@ -458,9 +663,17 @@ Each of these is a behaviour change, so each is deliberate:
    that address an existing record (`update`, `delete`, the geometry queries),
    and `INVALID_POSITION` for `INSERT`, whose position names a target to write
    rather than a record to find.
-5. **No wall clock.** MoonBit's core library has no clock and reaching for one
-   would pin the package to a single target, so log stamps are a logical sequence
-   number. That also makes log output deterministic under test.
+5. **Timestamps are stamped, not read at the call site.** The C# original put
+   `DateTime.UtcNow` in the logger. MoonBit's *core* library does carry a clock —
+   `@env.now()`, milliseconds since the Unix epoch, implemented for native, js and
+   wasm — so a real one was available without a dependency and without pinning the
+   package to a target. It is injected as a `Clock` rather than called inline
+   because a clock read at the call site makes every stamp a function of when the
+   process started. `cmd/main`, `cmd/persist` and the window read the host;
+   the library default is a logical sequence number, which is what keeps the test
+   suite byte-comparable between runs. So log lines and records show
+   `2026-10-16T19:45:00.123Z`, and a `.tsr` written by either clock still imports
+   into the other.
 6. **There is a window, and it is not Avalonia.** The C# original was Avalonia;
    this is a [proton](https://moonbit-community.github.io/proton/) app — the same
    HTML/CSS page surface and native-window model, rebuilt on a different runtime.

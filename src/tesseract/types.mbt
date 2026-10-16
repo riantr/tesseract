@@ -2,23 +2,34 @@
 /// Record and result types, carried over from the C# model and widened to the
 /// 4D lattice.
 ///
-/// A record keeps `position` (1..81) and a `digit` (0, or 1..3). The digit is
-/// new in 4D: it is what turns a plain ring buffer into a sudoku store, since
-/// two records sharing an axis-parallel line may not carry the same digit.
+/// A record keeps `position` (1..total) and a `digit` (0, or 1..side). The
+/// digit is what turns a plain ring buffer into a sudoku store, since two
+/// records sharing an axis-parallel line may not carry the same digit.
+///
+/// Positions and digits are `Int64`, and the measured reason is narrower than
+/// it first looks. What this toolchain actually lacks is a direct `Int64 ->
+/// Int32` conversion (`Int64::to_int32` does not compile) and any `Int32 -> Int`
+/// conversion (`Int32::to_int` does not compile either), while `Array` is indexed
+/// by `Int`. So `Int32` is a dead end in both directions from here: it cannot be
+/// reached from the `Int64` index arithmetic, and it cannot address storage. An
+/// earlier version of this comment claimed there was no conversion between
+/// `Int32` and either width at all; that was wrong - `Int64::to_int` and
+/// `Int32::to_int64` both exist - and it is the `Int32`-specific gap that
+/// matters.
 
 ///|
 /// One lattice cell's contents. A cell with `key = ""` is empty.
 pub struct GridCell {
-  position : Int32
+  position : Int64
   key : String
   value : String
   timestamp : String
-  digit : Int32
+  digit : Int64
 }
 
 ///|
 /// An empty cell at `position`.
-pub fn empty_cell(position : Int32) -> GridCell {
+pub fn empty_cell(position : Int64) -> GridCell {
   { position, key: "", value: "", timestamp: "", digit: NO_DIGIT, }
 }
 
@@ -30,13 +41,32 @@ pub fn cell_is_empty(c : GridCell) -> Bool {
 
 ///|
 /// One row of a `SELECT` result.
+///
+/// `computed` holds the values of select-list items that are not columns of a
+/// stored cell - an aggregate, or a scalar expression - in select-list order,
+/// each with the label it was written under. `SELECT *` leaves it empty.
+///
+/// It is a field rather than a rendered string in `value` because
+/// `SELECT digit, count(*)` is two columns, not one, and folding them into a
+/// single `value` with a separator would make the result impossible to consume
+/// without re-parsing the text - which is the thing a structured result exists to
+/// avoid. The window's `RecordView` is a separate struct and does not carry this,
+/// so nothing on the wire changes.
+pub struct Computed {
+  label : String
+  value : String
+}
+
+///|
+/// One row of a `SELECT` result.
 pub struct Record {
   key : String
   value : String
-  position : Int32
+  position : Int64
   coords : Coords
   timestamp : String
-  digit : Int32
+  digit : Int64
+  computed : Array[Computed]
 }
 
 ///|
@@ -44,13 +74,13 @@ pub struct Record {
 pub struct DBResponse {
   success : Bool
   operation : String
-  affected_rows : Int32
-  position : Int32
+  affected_rows : Int64
+  position : Int64
   error : String
   error_code : String
   message : String
   data : Array[Record]
-  total_records : Int32
+  total_records : Int64
 }
 
 ///|
@@ -59,13 +89,13 @@ pub fn ok_response(operation : String) -> DBResponse {
   {
     success: true,
     operation,
-    affected_rows: 0,
-    position: 0,
+    affected_rows: 0L,
+    position: 0L,
     error: "",
     error_code: "",
     message: "操作成功",
     data: [],
-    total_records: 0,
+    total_records: 0L,
   }
 }
 
@@ -75,13 +105,13 @@ pub fn err_response(code : String, error : String) -> DBResponse {
   {
     success: false,
     operation: "",
-    affected_rows: 0,
-    position: 0,
+    affected_rows: 0L,
+    position: 0L,
     error,
     error_code: code,
     message: "操作失败",
     data: [],
-    total_records: 0,
+    total_records: 0L,
   }
 }
 
@@ -89,10 +119,10 @@ pub fn err_response(code : String, error : String) -> DBResponse {
 /// Lattice occupancy snapshot.
 pub struct DBStatus {
   db_name : String
-  total_cells : Int32
-  current_count : Int32
-  current_position : Int32
-  digit_count : Int32
+  total_cells : Int64
+  current_count : Int64
+  current_position : Int64
+  digit_count : Int64
 }
 
 ///|
@@ -115,6 +145,17 @@ pub fn format_record(r : Record) -> String {
     b.write_string("\n  时间: ")
     b.write_string(r.timestamp)
   }
+  // A grouped or aggregate row carries its answer here. Without this the result
+  // of `SELECT digit, count(*)` renders as a row with an empty key, which is not
+  // what the query asked for and not something a reader can interpret.
+  let mut i = 0
+  while i < r.computed.length() {
+    b.write_string("\n  ")
+    b.write_string(r.computed[i].label)
+    b.write_string(": ")
+    b.write_string(r.computed[i].value)
+    i = i + 1
+  }
   b.to_string()
 }
 
@@ -129,17 +170,23 @@ pub fn format_response(r : DBResponse) -> String {
       b.write_string(r.operation)
       b.write_char('\n')
     }
-    if r.affected_rows > 0 {
+    if r.affected_rows > 0L {
       b.write_string("影响行数: ")
       b.write_object(r.affected_rows)
       b.write_char('\n')
     }
-    if r.position > 0 {
+    if r.position > 0L {
       b.write_string("格子位置: ")
       b.write_object(r.position)
       b.write_char('\n')
     }
-    if r.total_records > 0 {
+    // A SELECT always states its row count, including zero. The old rendering
+    // only printed the block when there was something in it, so a query that
+    // matched nothing printed `操作: SELECT` and nothing else - indistinguishable
+    // from a statement that had not run. `WHERE key='alpha' AND key='beta'`
+    // answering zero rows is exactly the answer the old parser could not give,
+    // and it has to be visible that it was given.
+    if r.operation == "SELECT" {
       b.write_string("\n查询结果 (")
       b.write_object(r.total_records)
       b.write_string(" 条记录):\n")
@@ -149,6 +196,10 @@ pub fn format_response(r : DBResponse) -> String {
         b.write_char('\n')
         i = i + 1
       }
+    } else if r.total_records > 0L {
+      b.write_string("影响行数: ")
+      b.write_object(r.total_records)
+      b.write_char('\n')
     }
   } else {
     b.write_string("✗ 失败\n")

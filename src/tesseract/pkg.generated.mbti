@@ -6,45 +6,37 @@ import {
 }
 
 // Values
-pub const DIM : Int = 4
-
-pub const FIRST_POSITION : Int = 1
-
-pub const LAST_POSITION : Int = 81
-
-pub const MAX_DIGIT : Int = 3
+pub const DIM : Int64 = 4
 
 pub const MAX_LOGS : Int = 100
 
-pub const NO_DIGIT : Int = 0
+pub const MAX_SIDE : Int64 = 215
 
-pub const SIDE : Int = 3
+pub const NO_DIGIT : Int64 = 0
 
-pub const TOTAL : Int = 81
+pub fn all_coords(Lattice) -> Array[Coords]
 
-pub fn all_coords() -> Array[Coords]
+pub fn all_lines(Lattice) -> Array[Array[Coords]]
 
-pub fn all_lines() -> Array[Array[Coords]]
+pub fn all_slabs(Lattice) -> Array[Array[Coords]]
 
-pub fn all_slabs() -> Array[Array[Coords]]
-
-pub fn canonical_digits() -> Array[Int]
+pub fn canonical_digits(Lattice) -> Array[Int64]
 
 pub fn cell_is_empty(GridCell) -> Bool
 
 pub fn contains_ci(String, String) -> Bool
 
-pub fn coord_at(Coords, Int) -> Int?
+pub fn coord_at(Coords, Int64) -> Int64?
 
-pub fn coord_filter(Int, Int, Int, Int) -> CoordFilter
+pub fn coord_filter(Int64, Int64, Int64, Int64) -> CoordFilter
 
-pub fn coords(Int, Int, Int, Int) -> Coords
+pub fn coords(Int64, Int64, Int64, Int64) -> Coords
 
-pub fn coords_in_bounds(Coords) -> Bool
+pub fn coords_in_bounds(Lattice, Coords) -> Bool
 
-pub fn coords_of(Int) -> Coords?
+pub fn coords_of(Lattice, Int64) -> Coords?
 
-pub fn copy_digits(Array[Int]) -> Array[Int]
+pub fn copy_digits(Array[Int64]) -> Array[Int64]
 
 pub fn cu_char(Int) -> Char
 
@@ -52,13 +44,15 @@ pub fn cu_lower(Int) -> Int
 
 pub fn cu_upper(Int) -> Int
 
-pub fn digit_at(Array[Int], Int) -> Int
+pub fn default_lattice() -> Lattice
+
+pub fn digit_at(Lattice, Array[Int64], Int64) -> Int64
 
 pub fn ellipsize(String, Int) -> String
 
-pub fn empty_cell(Int) -> GridCell
+pub fn empty_cell(Int64) -> GridCell
 
-pub fn empty_digits() -> Array[Int]
+pub fn empty_digits(Lattice) -> Array[Int64]
 
 pub fn eq_ci(String, String) -> Bool
 
@@ -74,9 +68,9 @@ pub fn export_tsr(Tesseract) -> String
 
 pub fn filter_matches(CoordFilter, Coords) -> Bool
 
-pub fn find_all_by_key(Tesseract, String) -> Array[Int]
+pub fn find_all_by_key(Tesseract, String) -> Array[Int64]
 
-pub fn find_by_key(Tesseract, String) -> Int?
+pub fn find_by_key(Tesseract, String) -> Int64?
 
 pub fn format_coords(Coords) -> String
 
@@ -86,23 +80,27 @@ pub fn format_record(Record) -> String
 
 pub fn format_response(DBResponse) -> String
 
-pub fn free_axis_of(Array[Coords]) -> Int
+pub fn free_axis_of(Array[Coords]) -> Int64
 
 pub fn import_markdown(Tesseract, String) -> Result[Int, String]
 
 pub fn import_sql(Tesseract, String) -> Result[Int, String]
 
-pub fn import_tsr(Tesseract, String) -> Result[Int, String]
+pub fn import_tsr(Tesseract, String) -> Result[Int64, String]
 
-pub fn index0(Coords) -> Int
+pub fn index0(Lattice, Coords) -> Int64
 
 pub fn index_of_ci(String, String) -> Int?
 
-pub fn is_solution(Array[Int]) -> Bool
+pub fn is_solution(Lattice, Array[Int64]) -> Bool
 
 pub fn is_space(Int) -> Bool
 
 pub fn join(Array[String], String) -> String
+
+pub fn lattice_of(Int64) -> Result[Lattice, String]
+
+pub fn lattice_shape_text(Lattice) -> String
 
 pub fn level_name(LogLevel) -> String
 
@@ -110,15 +108,15 @@ pub fn like_matches(String, String) -> Bool
 
 pub fn line_key(Array[Coords]) -> String
 
-pub fn line_through(Coords, Int) -> Array[Coords]
+pub fn line_through(Lattice, Coords, Int64) -> Array[Coords]
 
-pub fn line_violations(Array[Int]) -> Array[String]
+pub fn line_violations(Lattice, Array[Int64]) -> Array[String]
 
 pub fn lower(String) -> String
 
-pub fn neighbours(Coords, Int) -> Array[Coords]
+pub fn neighbours(Lattice, Coords, Int64) -> Array[Coords]
 
-pub fn new_db(String, TesseractLogger) -> Tesseract
+pub fn new_db(String, Lattice, TesseractLogger) -> Tesseract
 
 pub fn new_logger(String) -> TesseractLogger
 
@@ -132,35 +130,39 @@ pub fn pad_left(String, Int) -> String
 
 pub fn pad_right(String, Int) -> String
 
-pub fn parse_coords(String) -> Coords?
+pub fn parse_coords(Lattice, String) -> Coords?
+
+pub fn parse_coords_raw(String) -> Coords?
 
 pub fn parse_int(String) -> Int?
 
 pub fn parse_where(String) -> Result[Where, DBResponse]
 
-pub fn peer_count() -> Int
+pub fn peer_count(Lattice) -> Int64
 
-pub fn peers(Coords) -> Array[Coords]
+pub fn peers(Lattice, Coords) -> Array[Coords]
 
-pub fn plane_through(Coords, Int, Int) -> Result[Array[Coords], String]
+pub fn plane_through(Lattice, Coords, Int64, Int64) -> Result[Array[Coords], String]
 
-pub fn position_in_bounds(Int) -> Bool
+pub fn position_in_bounds(Lattice, Int64) -> Bool
 
-pub fn position_of(Coords) -> Int
+pub fn position_of(Lattice, Coords) -> Int64
 
-pub fn render_lattice(Tesseract, Int) -> String
+pub fn render_lattice(Tesseract, Int64) -> String
 
-pub fn set_digit(Array[Int], Int, Int) -> Unit
+pub fn set_digit(Lattice, Array[Int64], Int64, Int64) -> Unit
 
 pub fn shares_line(Coords, Coords) -> Bool
 
-pub fn slab_through(Coords, Int) -> Array[Coords]
+pub fn slab_through(Lattice, Coords, Int64) -> Array[Coords]
 
-pub fn slab_violations(Array[Int]) -> Array[String]
+pub fn slab_violations(Lattice, Array[Int64]) -> Array[String]
 
 pub fn slice(String, Int, Int) -> String
 
-pub fn solve_lattice(Int) -> Array[Array[Int]]
+pub fn slot_of(Int64) -> Int
+
+pub fn solve_lattice(Lattice, Int64) -> Array[Array[Int64]]
 
 pub fn split(String, String) -> Array[String]
 
@@ -172,23 +174,23 @@ pub fn trim_ws(String) -> String
 
 pub fn upper(String) -> String
 
-pub fn with_coord(Coords, Int, Int) -> Coords
+pub fn with_coord(Coords, Int64, Int64) -> Coords
 
 // Errors
 
 // Types and methods
 pub struct CoordFilter {
-  x : Int
-  y : Int
-  z : Int
-  w : Int
+  x : Int64
+  y : Int64
+  z : Int64
+  w : Int64
 }
 
 pub struct Coords {
-  x : Int
-  y : Int
-  z : Int
-  w : Int
+  x : Int64
+  y : Int64
+  z : Int64
+  w : Int64
 } derive(Eq, @debug.Debug)
 pub fn Coords::equal(Self, Self) -> Bool
 pub fn Coords::not_equal(Self, Self) -> Bool
@@ -197,36 +199,47 @@ pub fn Coords::to_repr(Self) -> @debug.Repr
 pub struct DBResponse {
   success : Bool
   operation : String
-  affected_rows : Int
-  position : Int
+  affected_rows : Int64
+  position : Int64
   error : String
   error_code : String
   message : String
   data : Array[Record]
-  total_records : Int
+  total_records : Int64
 }
 
 pub struct DBStatus {
   db_name : String
-  total_cells : Int
-  current_count : Int
-  current_position : Int
-  digit_count : Int
+  total_cells : Int64
+  current_count : Int64
+  current_position : Int64
+  digit_count : Int64
 }
 
 pub enum Geometry {
   None
-  Line(Int, Int)
-  Slab(Int, Int)
-  Peers(Int)
+  Line(Int64, Int64)
+  Slab(Int64, Int64)
+  Peers(Int64)
 }
 
 pub struct GridCell {
-  position : Int
+  position : Int64
   key : String
   value : String
   timestamp : String
-  digit : Int
+  digit : Int64
+}
+
+pub struct Lattice {
+  side : Int64
+  total : Int64
+  first_position : Int64
+  last_position : Int64
+  max_digit : Int64
+  stride_y : Int64
+  stride_z : Int64
+  stride_w : Int64
 }
 
 pub struct LogEntry {
@@ -247,33 +260,43 @@ pub enum LogLevel {
 pub struct Record {
   key : String
   value : String
-  position : Int
+  position : Int64
   coords : Coords
   timestamp : String
-  digit : Int
+  digit : Int64
+}
+
+pub struct ResizeReport {
+  from_side : Int64
+  to_side : Int64
+  kept : Int64
+  dropped : Int64
 }
 
 pub struct Tesseract {
   db_name : String
-  cells : Array[GridCell]
-  mut current_position : Int
+  mut lattice : Lattice
+  mut cells : Array[GridCell]
+  mut current_position : Int64
   logger : TesseractLogger
 }
-pub fn Tesseract::cell_at(Self, Int) -> GridCell?
-pub fn Tesseract::delete(Self, String, Int?) -> DBResponse
-pub fn Tesseract::digit_conflict(Self, Int, Int) -> GridCell?
-pub fn Tesseract::digit_count(Self) -> Int
+pub fn Tesseract::cell_at(Self, Int64) -> GridCell?
+pub fn Tesseract::delete(Self, String, Int64?) -> DBResponse
+pub fn Tesseract::digit_conflict(Self, Int64, Int64) -> GridCell?
+pub fn Tesseract::digit_count(Self) -> Int64
 pub fn Tesseract::get_logger(Self) -> TesseractLogger
-pub fn Tesseract::insert(Self, String, String, Int?, Int) -> DBResponse
-pub fn Tesseract::insert_stamped(Self, String, String, Int?, Int, String?) -> DBResponse
-pub fn Tesseract::line_query(Self, Int, Int) -> DBResponse
-pub fn Tesseract::occupancy(Self) -> Int
-pub fn Tesseract::peer_query(Self, Int) -> DBResponse
-pub fn Tesseract::select(Self, String, String, Int?, CoordFilter, Int?) -> DBResponse
-pub fn Tesseract::set_position(Self, Int) -> Unit
-pub fn Tesseract::slab_query(Self, Int, Int) -> DBResponse
+pub fn Tesseract::insert(Self, String, String, Int64?, Int64) -> DBResponse
+pub fn Tesseract::insert_stamped(Self, String, String, Int64?, Int64, String?) -> DBResponse
+pub fn Tesseract::lattice_of_db(Self) -> Lattice
+pub fn Tesseract::line_query(Self, Int64, Int64) -> DBResponse
+pub fn Tesseract::occupancy(Self) -> Int64
+pub fn Tesseract::peer_query(Self, Int64) -> DBResponse
+pub fn Tesseract::select(Self, String, String, Int64?, CoordFilter, Int64?) -> DBResponse
+pub fn Tesseract::set_position(Self, Int64) -> Unit
+pub fn Tesseract::set_side(Self, Int64) -> Result[ResizeReport, String]
+pub fn Tesseract::slab_query(Self, Int64, Int64) -> DBResponse
 pub fn Tesseract::status(Self) -> DBStatus
-pub fn Tesseract::update(Self, String, String, Int?, Int?) -> DBResponse
+pub fn Tesseract::update(Self, String, String, Int64?, Int64?) -> DBResponse
 
 pub struct TesseractLogger {
   name : String
@@ -295,9 +318,9 @@ pub fn TesseractLogger::set_echo(Self, Bool) -> Unit
 pub struct Where {
   key : String
   pattern : String
-  position : Int?
+  position : Int64?
   coords : CoordFilter
-  digit : Int?
+  digit : Int64?
   geometry : Geometry
 }
 
