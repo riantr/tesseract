@@ -6,7 +6,7 @@
   },
   "package": {
     "product_name": "Tesseract",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "formats": [
       "app",
       "zip"

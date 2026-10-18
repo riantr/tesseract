@@ -1,5 +1,9 @@
 # Tesseract — 4D, 3 cells per axis by default
 
+[![mooncakes](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fmooncakes.io%2Fapi%2Fv0%2Fmodules%2Friantr%2Ftesseract&query=%24.version&label=mooncakes&prefix=v)](https://mooncakes.io/docs/riantr/tesseract)
+[![release](https://img.shields.io/github/v/release/riantr/tesseract)](https://github.com/riantr/tesseract/releases)
+[![license](https://img.shields.io/github/license/riantr/tesseract)](LICENSE)
+
 A tiny multi-key JSON value database stored over a **4D sudoku lattice**, with a
 SQL surface and sudoku digit constraints.
 
@@ -11,7 +15,7 @@ same success flags, error codes, positions, coordinates and digits.
 ## Install
 
 ```sh
-moon add riantr/tesseract@0.1.0
+moon add riantr/tesseract@0.1.1
 ```
 
 The library is the package `riantr/tesseract/src/tesseract`:
@@ -25,7 +29,32 @@ import {
 
 `cmd/main`, `cmd/persist` and `cmd/gui` are the three executables in the same
 module — the command line, the file-backed store, and the window. Registry entry:
-[mooncakes.io/docs/riantr/tesseract@0.1.0](https://mooncakes.io/docs/riantr/tesseract@0.1.0).
+[mooncakes.io/docs/riantr/tesseract@0.1.1](https://mooncakes.io/docs/riantr/tesseract@0.1.1).
+
+### What the release was checked on
+
+`moon 0.1.20261012` — the toolchain the release workflow installs, and the one
+every number in this file was measured on. That is the toolchain this release
+was **verified** against, not a tested **minimum**: no older toolchain has been
+exercised here, and quoting a lower bound nobody ran would be a claim, not a fact.
+
+### Packages and targets
+
+| Package | Kind | Native | Wasm | Wasm-GC | JS |
+|---|---|---:|---:|---:|---:|
+| `riantr/tesseract/src/tesseract` | library | yes | yes | yes | yes |
+| `riantr/tesseract/src/tesseract_dgp` | library | yes | yes | yes | yes |
+| `riantr/tesseract/src/tesseract_sqlite` | library | yes | yes | — | — |
+| `riantr/tesseract/src/tesseract_sa` | library | yes | yes | — | — |
+| `cmd/main` | executable | yes | yes | yes | yes |
+| `cmd/persist` | executable | yes | yes | — | — |
+| `cmd/sa` | executable | yes | yes | — | — |
+| `cmd/gui` | executable | yes | — | — | — |
+
+A `—` means the package's own `moon.pkg` restricts it that way. The whole module
+type-checks on all four backends — `moon check --target <native|wasm|wasm-gc|js>
+--deny-warn` is exit 0 for each — and `cmd/gui` is native-only by design: it needs
+a window, and Proton is native-only.
 
 ## The lattice
 
@@ -269,6 +298,28 @@ asked is worse than a filter that fails, so nothing here can fail that way.
 | `LIMIT 1` | **3 rows** | 1 row |
 | `ORDER BY key DESC` | **insertion order** | sorted |
 | `WHERE digit=1+1` | `INVALID_SYNTAX` | evaluates |
+
+### What the surface does, and what it does not
+
+| Area | Supported |
+|---|---|
+| statements | `CREATE DATABASE`, `INSERT`, `UPDATE`, `DELETE`, `SELECT`, transaction control |
+| columns | `key` `value` `position` `grid_position` `digit` `timestamp` `x` `y` `z` `w` `side` |
+| expressions | arithmetic, comparison, `AND` / `OR` / `NOT`, `LIKE`, parentheses |
+| functions | `length` `upper` `lower` `abs` `coords` `digits`; geometry `line` `slab` `peers`; aggregates `count` `sum` `min` `max` `avg` |
+| clauses | `WHERE` `GROUP BY` `ORDER BY` `LIMIT` `OFFSET` `DISTINCT` |
+| three-valued logic | `null` is unknown; only `WHERE` folds it to false, everything else carries it |
+| **not supported** | joins, subqueries, window functions, `UNION`, CTEs, DDL beyond `CREATE DATABASE`, and reading *inside* the `value` JSON — there is no `json_extract`, so a value is opaque text and `value LIKE` is the only way to match part of one |
+
+Two limits worth stating plainly, both measured rather than inferred:
+
+- The column list **is** the cell anatomy and it is fixed. There is no
+  `CREATE TABLE`, so a record's own attributes are never queryable as columns —
+  only the eleven above, plus the whole `value` as opaque text.
+- An unknown column is refused in `WHERE` (`INVALID_COLUMNS`), but `GROUP BY`,
+  `ORDER BY` and an aggregate select list currently accept one and treat it as a
+  constant, so `GROUP BY nosuchcol` answers one group instead of raising. Known gap,
+  not a design choice.
 
 The C# statement shapes and error codes still work, so existing dumps load:
 
@@ -632,6 +683,36 @@ binary starts:
 node gui-smoke.mjs
 ```
 
+## Verification
+
+The gate, and the result it produced for this version:
+
+| Command | Result |
+|---|---|
+| `moon fmt --check` | exit 0 |
+| `moon check --target wasm --deny-warn` | exit 0 |
+| `moon check --target js --deny-warn` | exit 0 |
+| `moon check --target native --deny-warn` | exit 0 |
+| `moon check --target wasm-gc --deny-warn` | exit 0 |
+| `moon test --target wasm --deny-warn` | **220 passed, 0 failed** |
+| `moon build --target wasm` | exit 0 |
+| `typos` (v1.50.3 — the version the workflow pins) | exit 0 |
+| `node cli-smoke.mjs` | **14 passed, 0 failed** |
+| `node gui-smoke.mjs` | **45 passed, 0 failed** |
+
+The release workflow runs the first two check targets plus the test and build; the
+`native` and `wasm-gc` checks and the two smoke tests were run here as well, and
+are listed because they were run, not because CI depends on them.
+
+`cli-smoke.mjs` drives both CLIs as real processes against a built database.
+`gui-smoke.mjs` drives the window over the Chromium DevTools protocol and needs
+`proton_cli dev` running.
+
+Two things deliberately **not** claimed. No production-load testing has been
+done, and no comparison against another store on the same workload has been run.
+The 26-statement parity against the C# original is a separate comparison, not part
+of the gate above, and reproducing it needs the C# project alongside this one.
+
 ## Export formats
 
 | format | role |
@@ -699,3 +780,32 @@ away, and `.sql` carries none. Use `.tsr` or `.db` when the stamps matter.
 An import replaces the store rather than merging into it, so a failed load
 leaves an empty database instead of a half-overwritten one, and a record with
 no usable address is refused by name rather than being written to cell 1.
+
+## What this is not
+
+Stated plainly, because "it has a SQL surface" invites the wrong assumption.
+
+- **It is not SQLite and does not embed one.** The parser, AST and executor are
+  in this repository — `lexer.mbt`, `ast.mbt`, `parser.mbt`, `exec.mbt`. There is
+  no C library behind them and no FFI. `moonbit-community/sqlite3` appears in
+  this module's dependencies for exactly one package, `src/tesseract_sqlite`,
+  which backs the `.db` file adapter in `cmd/persist`; the SQL surface does not go
+  through it.
+- **It is not a graph database.** The lattice is one flat `Array` indexed by a
+  32-bit `Int`. `peers`, `slab` and `line` are computed from coordinates at query
+  time, not stored edges.
+- **It is not a wrapper around an existing store.** There is no KV core being
+  dressed up. The grid, the sudoku digit rule and the solver are the reason the
+  package exists, and dropping them would leave a much smaller program.
+- **The window is Proton, not a native GUI toolkit.** `cmd/gui` depends on
+  `moonbit-community/proton@0.3.4` and is therefore native-only. The library and
+  `cmd/main` do not depend on it.
+- **The core library has no third-party dependencies.** File I/O and stdin are
+  not in this toolchain's core, so what the package needs is implemented here. The
+  one addition is `@env.now()` from `moonbitlang/core/env`, which is the
+  toolchain rather than a mooncakes import.
+
+Apache-2.0. Provenance of the ported behaviour is in
+[Deliberate departures](#deliberate-departures-from-the-c-original) below, which
+records every place the MoonBit version answers differently from the C# original
+and why.
