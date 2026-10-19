@@ -182,6 +182,116 @@ fn validate_filter(db : Tesseract, filter : Expr) -> DBResponse? {
 }
 
 ///|
+/// Refuses a column this table does not have, anywhere in the clauses of a
+/// `SELECT`, before a single row is read.
+///
+/// `WHERE` has always been checked this way, against a synthetic row, because a
+/// statement that is wrong regardless of the data cannot be validated by the
+/// data. The same argument applies to the clauses that had no such check, and
+/// there the failure was worse than an error, because it was not an error:
+///
+/// - `GROUP BY nosuchcol` evaluated the unknown column to null on every row, so
+///   every row hashed to one group and the query answered *one group* — the same
+///   shape a legitimately uniform column answers, so nothing in the result said
+///   the column did not exist.
+/// - `ORDER BY nosuchcol` sorted on that null and returned rows in the order
+///   they were stored, which is also what a uniform column returns.
+/// - A plain column in a grouped select list was worse still: `group_rows` takes
+///   the `plain_column` branch for a bare name and never evaluates it, so it
+///   reached `project` unchecked and was dropped there in silence.
+///
+/// Only `Column` nodes are checked. Everything else is left to `eval_value`,
+/// which already reports unknown functions and type errors against a real row;
+/// checking aggregates here too would mean inventing a second notion of what
+/// `count(*)` means before the executor has a group to count.
+fn validate_select_columns(db : Tesseract, spec : SelectSpec) -> DBResponse? {
+  if !spec.star {
+    for c in spec.columns {
+      match check_columns(db, c) {
+        Some(r) => return Some(r)
+        None => ()
+      }
+    }
+  }
+  for t in spec.group_by {
+    match check_columns(db, t) {
+      Some(r) => return Some(r)
+      None => ()
+    }
+  }
+  for t in spec.order_by {
+    match check_columns(db, t.expr) {
+      Some(r) => return Some(r)
+      None => ()
+    }
+  }
+  None
+}
+
+///|
+/// Every `Column` in one expression tree must name a real column.
+///
+/// The probe row is built once per call and threaded through, so a nested
+/// expression re-validates against the same row rather than allocating a new
+/// one at every leaf.
+fn check_columns(db : Tesseract, expr : Expr) -> DBResponse? {
+  check_columns_with(db, expr, probe_row(db))
+}
+
+///|
+fn check_columns_with(
+  db : Tesseract,
+  expr : Expr,
+  probe : Record,
+) -> DBResponse? {
+  match expr {
+    Column(name) =>
+      match eval_column(db, name, Some(probe)) {
+        Value(_) => None
+        Failed(r) => Some(r)
+      }
+    Not(inner) => check_columns_with(db, inner, probe)
+    Neg(inner) => check_columns_with(db, inner, probe)
+    IsNull(inner, _) => check_columns_with(db, inner, probe)
+    Binary(_, a, b) =>
+      match check_columns_with(db, a, probe) {
+        Some(r) => Some(r)
+        None => check_columns_with(db, b, probe)
+      }
+    Like(a, b) =>
+      match check_columns_with(db, a, probe) {
+        Some(r) => Some(r)
+        None => check_columns_with(db, b, probe)
+      }
+    In(head, list) =>
+      match check_columns_with(db, head, probe) {
+        Some(r) => Some(r)
+        None => check_columns_in_list(db, list, probe)
+      }
+    Call(_, args) => check_columns_in_list(db, args, probe)
+    Literal(_) => None
+    Star => None
+  }
+}
+
+///|
+fn check_columns_in_list(
+  db : Tesseract,
+  list : Array[Expr],
+  probe : Record,
+) -> DBResponse? {
+  let mut i = 0
+  while i < list.length() {
+    match check_columns_with(db, list[i], probe) {
+      Some(r) => return Some(r)
+      None => ()
+    }
+    i = i + 1
+  }
+  None
+}
+
+///|
 /// A value read as a condition: `1` and non-empty text are true, `0` and empty
 /// text false, `Null` unknown.
 fn truthy(v : SqlValue) -> Bool {
@@ -1299,6 +1409,15 @@ fn run_select(db : Tesseract, spec : SelectSpec) -> DBResponse {
   if failure is Some(_) {
     let f = failure.unwrap()
     return f
+  }
+  // Before the grouping decision, because it is the grouped path that has no
+  // failure channel: `group_key` returns a `String` and `order_rows` returns an
+  // `Array[Record]`, so neither can report that the column was unknown. Refusing
+  // it here is the only place the answer can still be an error.
+  let column_failure = validate_select_columns(db, spec)
+  if column_failure is Some(_) {
+    let cf = column_failure.unwrap()
+    return cf
   }
   // An aggregate anywhere in the select list, or a GROUP BY, makes this a grouped
   // query: one output row per group instead of one per stored row.

@@ -435,3 +435,145 @@ test "the C# insert dialect still loads" {
   // round trip keep it.
   assert_eq(cell.timestamp, "2024-01-01")
 }
+
+///|
+/// Three rows carrying digits 1, 2 and 3.
+///
+/// Positions 1..3 differ only in `w`, so they lie on one axis-parallel line and
+/// the sudoku rule requires three different digits there — which is exactly what
+/// makes them three *distinct* values to group by. A fixture without digits
+/// cannot tell `GROUP BY digit` apart from `GROUP BY nosuchcol`: both answer one
+/// group, so the fixture hides the very difference the test is about.
+fn three_rows_with_digits() -> @tesseract.Tesseract {
+  let db = fresh_engine()
+  ignore(
+    go(db, "INSERT INTO tesseract (key, value, digit) VALUES ('a','1',1) AT 1;"),
+  )
+  ignore(
+    go(db, "INSERT INTO tesseract (key, value, digit) VALUES ('b','2',2) AT 2;"),
+  )
+  ignore(
+    go(db, "INSERT INTO tesseract (key, value, digit) VALUES ('c','3',3) AT 3;"),
+  )
+  db
+}
+
+///|
+/// `GROUP BY nosuchcol` answered **one group, count 3**.
+///
+/// Not an error — a result. The unknown column evaluated to null on every row,
+/// every row hashed to the same key, and the query reported a single group with
+/// the whole table in it, which is the shape a legitimately uniform column
+/// reports. Nothing in the answer said the column did not exist.
+test "group by an unknown column is refused rather than answering one group" {
+  let db = three_rows_with_digits()
+  let r = go(
+    db, "SELECT nosuchcol, count(*) FROM tesseract GROUP BY nosuchcol;",
+  )
+  assert_eq(r.error_code, "INVALID_COLUMNS")
+  assert_false(r.success)
+  assert_eq(r.data.length(), 0)
+}
+
+///|
+/// The control for the test above: the *same* statement with a column that
+/// exists returns three groups, not one. Without this pair the refusal would
+/// pass just as happily against a table where every digit was identical.
+test "group by a real column still returns one group per distinct value" {
+  let db = three_rows_with_digits()
+  let r = go(db, "SELECT digit, count(*) FROM tesseract GROUP BY digit;")
+  assert_true(r.success)
+  assert_eq(r.error_code, "")
+  assert_eq(r.data.length(), 3)
+}
+
+///|
+/// The refusal does not depend on the data — the point of checking against a
+/// synthetic row at all.
+///
+/// With no rows stored, the old path had nothing to evaluate the term against
+/// and returned one group with a count of zero, so the answer changed with the
+/// contents of the table while the statement stayed exactly as wrong.
+test "an unknown group-by column is refused on an empty table too" {
+  let db = fresh_engine()
+  assert_eq(@tesseract.Tesseract::occupancy(db), 0L)
+  assert_eq(
+    go(db, "SELECT nosuchcol, count(*) FROM tesseract GROUP BY nosuchcol;").error_code,
+    "INVALID_COLUMNS",
+  )
+}
+
+///|
+/// `ORDER BY nosuchcol` answered **three rows in storage order**.
+///
+/// Sorting on a null is not the same as failing to sort, so the query returned a
+/// plausible list rather than an error, and the one thing a caller asks an
+/// `ORDER BY` for — an order — was silently not applied.
+test "order by an unknown column is refused rather than returning storage order" {
+  let db = three_rows()
+  assert_eq(
+    go(db, "SELECT key FROM tesseract ORDER BY nosuchcol;").error_code,
+    "INVALID_COLUMNS",
+  )
+  // And the real thing still sorts: keys were inserted zulu, alpha, mike.
+  assert_eq(
+    keys_of(db, "SELECT key FROM tesseract ORDER BY key;"),
+    "alpha,mike,zulu",
+  )
+}
+
+///|
+/// An unknown column in a grouped select list was **dropped in silence**.
+///
+/// `group_rows` takes the plain-column branch for a bare name and never
+/// evaluates it, so it reached `project` unchecked and vanished there — the
+/// query succeeded and returned a group whose row had an empty key, with no
+/// indication that a column of the statement had been discarded.
+test "an unknown column in a grouped select list is refused, not dropped" {
+  let db = three_rows_with_digits()
+  let r = go(
+    db, "SELECT digit, nosuchcol, count(*) FROM tesseract GROUP BY digit;",
+  )
+  assert_eq(r.error_code, "INVALID_COLUMNS")
+  assert_false(r.success)
+}
+
+///|
+/// The check walks the whole expression, not just its top node.
+///
+/// `GROUP BY length(nosuchcol)` is the same mistake written inside a call, and a
+/// validator that only matched on the outermost node would wave it through and
+/// group on an empty string — one group again, which is the wrong answer this
+/// section exists to stop producing.
+test "an unknown column nested inside an expression is refused too" {
+  let db = three_rows_with_digits()
+  assert_eq(
+    go(db, "SELECT count(*) FROM tesseract GROUP BY length(nosuchcol);").error_code,
+    "INVALID_COLUMNS",
+  )
+  assert_eq(
+    go(db, "SELECT count(*) FROM tesseract WHERE key IN ('a', nosuchcol);").error_code,
+    "INVALID_COLUMNS",
+  )
+}
+
+///|
+/// The check refuses unknown columns and nothing else.
+///
+/// It walks `Column` nodes only, so aggregates — which have no single row to
+/// evaluate against until a group exists — are left to the executor that can
+/// actually answer them. If this test ever fails, the validator has started
+/// deciding what `count(*)` means before there is anything to count.
+test "the column check refuses unknown columns and nothing else" {
+  let db = three_rows_with_digits()
+  for
+    sql in [
+      "SELECT count(*) FROM tesseract;", "SELECT digit, count(*) FROM tesseract GROUP BY digit;",
+      "SELECT key, length(value) FROM tesseract;", "SELECT key FROM tesseract ORDER BY length(key) DESC;",
+      "SELECT DISTINCT digit FROM tesseract;", "SELECT count(*) FROM tesseract WHERE digit > 1 AND key <> 'a';",
+    ] {
+    let r = go(db, sql)
+    assert_eq(r.error_code, "")
+    assert_true(r.success)
+  }
+}

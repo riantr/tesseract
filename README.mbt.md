@@ -15,7 +15,7 @@ same success flags, error codes, positions, coordinates and digits.
 ## Install
 
 ```sh
-moon add riantr/tesseract@0.1.1
+moon add riantr/tesseract@0.1.2
 ```
 
 The library is the package `riantr/tesseract/src/tesseract`:
@@ -29,7 +29,7 @@ import {
 
 `cmd/main`, `cmd/persist` and `cmd/gui` are the three executables in the same
 module — the command line, the file-backed store, and the window. Registry entry:
-[mooncakes.io/docs/riantr/tesseract@0.1.1](https://mooncakes.io/docs/riantr/tesseract@0.1.1).
+[mooncakes.io/docs/riantr/tesseract@0.1.2](https://mooncakes.io/docs/riantr/tesseract@0.1.2).
 
 ### What the release was checked on
 
@@ -316,10 +316,14 @@ Two limits worth stating plainly, both measured rather than inferred:
 - The column list **is** the cell anatomy and it is fixed. There is no
   `CREATE TABLE`, so a record's own attributes are never queryable as columns —
   only the eleven above, plus the whole `value` as opaque text.
-- An unknown column is refused in `WHERE` (`INVALID_COLUMNS`), but `GROUP BY`,
-  `ORDER BY` and an aggregate select list currently accept one and treat it as a
-  constant, so `GROUP BY nosuchcol` answers one group instead of raising. Known gap,
-  not a design choice.
+- A column name is checked against that list in **every** clause — `WHERE`,
+  `GROUP BY`, `ORDER BY` and the select list — before a row is read, so an unknown
+  column is an error whether or not the table has anything in it. It was not, and
+  the answer it gave instead was the dangerous kind: `GROUP BY nosuchcol` evaluated
+  the name to null on every row and reported *one group* holding the whole table,
+  which is the same shape a legitimately uniform column reports; `ORDER BY
+  nosuchcol` returned the rows in storage order; and a bare unknown column in a
+  grouped select list was dropped without a word.
 
 The C# statement shapes and error codes still work, so existing dumps load:
 
@@ -694,7 +698,7 @@ The gate, and the result it produced for this version:
 | `moon check --target js --deny-warn` | exit 0 |
 | `moon check --target native --deny-warn` | exit 0 |
 | `moon check --target wasm-gc --deny-warn` | exit 0 |
-| `moon test --target wasm --deny-warn` | **220 passed, 0 failed** |
+| `moon test --target wasm --deny-warn` | **227 passed, 0 failed** |
 | `moon build --target wasm` | exit 0 |
 | `typos` (v1.50.3 — the version the workflow pins) | exit 0 |
 | `node cli-smoke.mjs` | **14 passed, 0 failed** |
