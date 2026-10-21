@@ -15,7 +15,7 @@ same success flags, error codes, positions, coordinates and digits.
 ## Install
 
 ```sh
-moon add riantr/tesseract@0.1.4
+moon add riantr/tesseract@0.1.5
 ```
 
 The library is the package `riantr/tesseract/src/tesseract`:
@@ -30,7 +30,7 @@ import {
 `cmd/main`, `cmd/persist`, `cmd/memory`, `cmd/sa` and `cmd/gui` are the five
 executables in the same module — the command line, the file-backed store, the
 short-term memory, the scan database and the window. Registry entry:
-[mooncakes.io/docs/riantr/tesseract@0.1.4](https://mooncakes.io/docs/riantr/tesseract@0.1.4).
+[mooncakes.io/docs/riantr/tesseract@0.1.5](https://mooncakes.io/docs/riantr/tesseract@0.1.5).
 
 ### What the release was checked on
 
@@ -182,6 +182,7 @@ src/tesseract_memory/
   similar.mbt    the similarity policies and the recency weight
   score.mbt      tokenising, the four similarities, JSON leaf paths
   search.mbt     top-k over the live entries
+  size.mbt       the UTF-8 size of a text, in bytes
 cmd/main/        command line front end
 cmd/memory/      the short-term memory, from a shell
 cmd/gui/         the proton desktop window
@@ -594,6 +595,7 @@ import {
 ```sh
 moon run cmd/memory -- "put greeting hello world" "get greeting"
 moon run cmd/memory -- --capacity 3 "put a 1" "put b 2" "put c 3" "put d 4" "keys"
+moon run cmd/memory -- --max-bytes 10 "put a 12345" "put b 12345" "put c 12345" "stats"
 moon run cmd/memory -- --manual-clock "put a x --ttl 1000" "advance 1000" "get a"
 moon run cmd/memory -- demo
 ```
@@ -636,6 +638,49 @@ key its place.
 Ties are broken by **key**, so the same sequence of operations always evicts
 the same entry. A store that evicts differently on two runs of the same program
 is a store nobody can test.
+
+### The byte budget
+
+A count of entries and a count of bytes are two different limits, and a caller
+may want both: a store of a hundred one-byte entries and a store of ten
+hundred-byte entries are the same shape to the first and not to the second.
+`with_max_bytes` sets the second, and the tighter of the two is the one that
+binds.
+
+```moonbit nocheck
+///|
+let m = @tesseract_memory.new_memory_with(
+  @tesseract_memory.default_config().with_capacity(100).with_max_bytes(65536L), // 64 KiB of values
+)
+```
+
+The budget counts **UTF-8 bytes**, and that is not a detail. `String::length`
+counts code units: `苹果` is 2 and `🍎` is 2, while in UTF-8 they are 6 and 4.
+A budget measured in code units would shrink when the content turned Chinese,
+which is not a number anybody can reason about.
+
+Two rules follow from the budget being a hard limit:
+
+- **A value larger than the whole budget is refused**, even in an empty store.
+  The budget is what the memory holds, and a value that does not fit in it
+  does not fit in it. Refusing it loudly is better than accepting it and
+  breaking the limit the caller asked for — and the refusal leaves the store
+  as it was, because a write that fails must not empty the memory on its way
+  out.
+- **A replacement can push the store over the budget, and then it makes
+  room.** Five bytes replaced by ten is ten bytes of content plus whatever
+  else is there, not five. The key being written is never the one evicted to
+  make room for itself.
+
+Lowering the budget with `set_config` does not evict on the spot: the store is
+brought back within its new limit by the next write that has to make room, and
+until then `size_bytes` honestly reports a store that is over its budget. A
+negative budget is refused, so that a number smaller than none cannot be
+mistaken for "no limit".
+
+The budget counts the **values**. The keys are bounded by the capacity, and
+the overhead of the store itself is not counted at all, so `size_bytes` is the
+size of the content a memory holds, not the size of the process holding it.
 
 ### Similarity retrieval
 
@@ -708,7 +753,7 @@ The full plan and the measurements behind it are in `LOOP3.md`.
 
 ```sh
 moon check --target all     # type-check every backend
-moon test                   # 266 tests
+moon test                   # 276 tests
 moon fmt --check            # canonical formatting
 
 node cli-smoke.mjs          # the CLIs, as real processes (builds them first)
@@ -940,10 +985,10 @@ The gate, and the result it produced for this version:
 | `moon check --target js --deny-warn` | exit 0 |
 | `moon check --target native --deny-warn` | exit 0 |
 | `moon check --target wasm-gc --deny-warn` | exit 0 |
-| `moon test --target wasm --deny-warn` | **266 passed, 0 failed** |
+| `moon test --target wasm --deny-warn` | **276 passed, 0 failed** |
 | `moon build --target wasm` | exit 0 |
 | `typos` (v1.50.3 — the version the workflow pins) | exit 0 |
-| `node cli-smoke.mjs` | **20 passed, 0 failed** |
+| `node cli-smoke.mjs` | **24 passed, 0 failed** |
 | `node gui-smoke.mjs` | **45 passed, 0 failed** |
 
 The release workflow runs the first two check targets plus the test and build; the
