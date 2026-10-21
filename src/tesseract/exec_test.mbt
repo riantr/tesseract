@@ -577,3 +577,284 @@ test "the column check refuses unknown columns and nothing else" {
     assert_true(r.success)
   }
 }
+
+///|
+/// `IS NULL` and `IS NOT NULL` were the wrong way round.
+///
+/// The executor answered `bool_value(negated)` for a null value and
+/// `bool_value(!negated)` for a value that was not null - and `negated` is
+/// true for `IS NOT NULL`, so a row that *had* a value satisfied `IS NULL`, and
+/// a row that had none satisfied `IS NOT NULL`. Both predicates were exactly
+/// backwards.
+///
+/// Nothing caught it, because the parser test only checked the *shape* of the
+/// node and no executor test asked what the predicate *answered*. A test that
+/// only checks the tree never sees the tree's meaning.
+test "IS NULL and IS NOT NULL answer the opposite of what they used to" {
+  let db = three_rows()
+  // Every row has a value, so none of them is null.
+  assert_eq(keys_of(db, "SELECT key FROM tesseract WHERE value IS NULL;"), "")
+  assert_eq(
+    keys_of(db, "SELECT key FROM tesseract WHERE value IS NOT NULL;"),
+    "zulu,alpha,mike",
+  )
+  // A bare NULL literal is the clearest case: it is null, and it stays null.
+  assert_eq(
+    keys_of(db, "SELECT key FROM tesseract WHERE NULL IS NULL;"),
+    "zulu,alpha,mike",
+  )
+  assert_eq(
+    keys_of(db, "SELECT key FROM tesseract WHERE NULL IS NOT NULL;"),
+    "",
+  )
+}
+
+///|
+/// Four rows: a document, a document that only *mentions* the field name, a row
+/// that is not JSON at all, and a document holding an integer wider than a
+/// double can hold.
+fn json_rows() -> @tesseract.Tesseract {
+  let db = fresh_engine()
+  ignore(
+    go(
+      db, "INSERT INTO tesseract (key, value) VALUES ('a', '{\"name\":\"ada\",\"score\":42,\"tags\":[\"x\",\"y\"],\"meta\":{\"city\":\"paris\"},\"a b\":7}') AT 1;",
+    ),
+  )
+  ignore(
+    go(
+      db, "INSERT INTO tesseract (key, value) VALUES ('b', '{\"other\":\"name\",\"score\":7,\"tags\":[],\"meta\":{\"city\":\"rome\"}}') AT 2;",
+    ),
+  )
+  ignore(
+    go(
+      db, "INSERT INTO tesseract (key, value) VALUES ('c', 'not json at all') AT 3;",
+    ),
+  )
+  ignore(
+    go(
+      db, "INSERT INTO tesseract (key, value) VALUES ('d', '{\"name\":\"eve\",\"big\":9007199254740993,\"f\":2.5}') AT 4;",
+    ),
+  )
+  db
+}
+
+///|
+/// The text of the first computed column of the first row of a result.
+fn computed_text(r : @tesseract.DBResponse) -> String {
+  if r.data.length() == 0 {
+    return "<no rows>"
+  }
+  if r.data[0].computed.length() == 0 {
+    return "<no computed column>"
+  }
+  r.data[0].computed[0].value
+}
+
+///|
+/// A field inside a document is reached by its path.
+///
+/// The old surface could only reach inside a document with `value LIKE
+/// '%name%'` - a substring match. That cannot tell `{"name":"x"}` from
+/// `{"other":"name"}`, cannot compare a number, and cannot follow a path.
+test "a field inside a document is reached by its path" {
+  let db = json_rows()
+  assert_eq(
+    computed_text(
+      go(
+        db, "SELECT json_extract(value, '$.name') FROM tesseract WHERE key='a';",
+      ),
+    ),
+    "ada",
+  )
+  assert_eq(
+    computed_text(
+      go(
+        db, "SELECT json_extract(value, '$.meta.city') FROM tesseract WHERE key='a';",
+      ),
+    ),
+    "paris",
+  )
+  assert_eq(
+    computed_text(
+      go(
+        db, "SELECT json_extract(value, '$.tags[1]') FROM tesseract WHERE key='a';",
+      ),
+    ),
+    "y",
+  )
+  assert_eq(
+    computed_text(
+      go(
+        db, "SELECT json_extract(value, '$.score') FROM tesseract WHERE key='a';",
+      ),
+    ),
+    "42",
+  )
+  // A key that is not an identifier has to be quoted.
+  assert_eq(
+    computed_text(
+      go(
+        db, "SELECT json_extract(value, '$[\"a b\"]') FROM tesseract WHERE key='a';",
+      ),
+    ),
+    "7",
+  )
+}
+
+///|
+/// The old substring match found a word; the path finds the field.
+///
+/// `value LIKE '%name%'` matched **three** rows: the two that have a `name`
+/// key, and the one that merely has the word "name" as a value. The path
+/// matches the two that have the key, which is the difference between finding a
+/// field and finding a word.
+test "the old substring match found a word; the path finds the field" {
+  let db = json_rows()
+  assert_eq(
+    keys_of(db, "SELECT key FROM tesseract WHERE value LIKE '%name%';"),
+    "a,b,d",
+  )
+  assert_eq(
+    keys_of(
+      db, "SELECT key FROM tesseract WHERE json_extract(value, '$.name') IS NOT NULL;",
+    ),
+    "a,d",
+  )
+  // The other direction of the same predicate, which the fix has to agree with.
+  assert_eq(
+    keys_of(
+      db, "SELECT key FROM tesseract WHERE json_extract(value, '$.name') IS NULL;",
+    ),
+    "b,c",
+  )
+}
+
+///|
+/// A row that is not JSON, or that has no such key, answers null.
+///
+/// One row holding a plain string must not take the whole query down with it,
+/// and `null` is the answer SQL already has for "not known here". The query
+/// still answers: it is the *row* that has nothing to say, not the statement.
+test "a row that is not JSON, or that has no such key, answers null" {
+  let db = json_rows()
+  // The row that is not JSON at all.
+  assert_eq(
+    computed_text(
+      go(
+        db, "SELECT json_extract(value, '$.name') FROM tesseract WHERE key='c';",
+      ),
+    ),
+    "NULL",
+  )
+  // The row that has no such key.
+  assert_eq(
+    computed_text(
+      go(
+        db, "SELECT json_extract(value, '$.name') FROM tesseract WHERE key='b';",
+      ),
+    ),
+    "NULL",
+  )
+  // An index past the end of the array.
+  assert_eq(
+    computed_text(
+      go(
+        db, "SELECT json_extract(value, '$.tags[9]') FROM tesseract WHERE key='a';",
+      ),
+    ),
+    "NULL",
+  )
+  // And the query as a whole still succeeds, with the two rows that do have a
+  // score.
+  let r = go(
+    db, "SELECT key FROM tesseract WHERE json_extract(value, '$.score') IS NOT NULL;",
+  )
+  assert_true(r.success)
+  assert_eq(r.error_code, "")
+  assert_eq(
+    keys_of(
+      db, "SELECT key FROM tesseract WHERE json_extract(value, '$.score') IS NOT NULL;",
+    ),
+    "a,b",
+  )
+}
+
+///|
+/// A malformed path is an error, and never a null.
+///
+/// The path is the same for every row, so it is not the data's business whether
+/// it is well formed. Answering null for it would be indistinguishable from a
+/// document that simply has no such field, and the writer would never learn
+/// that the statement was wrong.
+test "a malformed path is an error, and never a null" {
+  let db = json_rows()
+  let r = go(
+    db, "SELECT json_extract(value, '$.name!') FROM tesseract WHERE key='a';",
+  )
+  assert_false(r.success)
+  assert_eq(r.error_code, "INVALID_INPUT")
+  // In a WHERE it is caught before any row is read, because the filter is
+  // checked against a synthetic row.
+  assert_eq(
+    go(
+      db, "SELECT key FROM tesseract WHERE json_extract(value, '$.name!') = 'ada';",
+    ).error_code,
+    "INVALID_INPUT",
+  )
+}
+
+///|
+/// An integer wider than a double survives.
+///
+/// `9007199254740993` is one more than `2^53`, which is the first integer a
+/// double cannot hold. Reading it as a double would change it by one, silently,
+/// and the number would come out of the database as a different number.
+test "an integer wider than a double survives" {
+  let db = json_rows()
+  assert_eq(
+    computed_text(
+      go(
+        db, "SELECT json_extract(value, '$.big') FROM tesseract WHERE key='d';",
+      ),
+    ),
+    "9007199254740993",
+  )
+  // A number that is not whole stays the text it was written as.
+  assert_eq(
+    computed_text(
+      go(db, "SELECT json_extract(value, '$.f') FROM tesseract WHERE key='d';"),
+    ),
+    "2.5",
+  )
+}
+
+///|
+/// `json_extract` filters, aggregates, and composes.
+///
+/// The point of a function that reaches into a document is that the result can
+/// be used like any other value: compared, summed, and fed back in.
+test "json_extract filters, aggregates, and composes" {
+  let db = json_rows()
+  assert_eq(
+    keys_of(
+      db, "SELECT key FROM tesseract WHERE json_extract(value, '$.score') > 10;",
+    ),
+    "a",
+  )
+  // `sum` skips the rows that have no score, whose value is null.
+  assert_eq(
+    computed_text(
+      go(db, "SELECT sum(json_extract(value, '$.score')) FROM tesseract;"),
+    ),
+    "49",
+  )
+  // And a container can be fed back in.
+  assert_eq(
+    computed_text(
+      go(
+        db, "SELECT json_extract(json_extract(value, '$.meta'), '$.city') FROM tesseract WHERE key='a';",
+      ),
+    ),
+    "paris",
+  )
+}

@@ -368,8 +368,16 @@ fn eval_value(
     IsNull(a, negated) =>
       match eval_value(db, a, row, group) {
         Failed(r) => Failed(r)
-        Value(Null) => Value(bool_value(negated))
-        Value(_) => Value(bool_value(!negated))
+        // `negated` is true for `IS NOT NULL`, so the two answers are the other
+        // way round from the flag: a null value satisfies `IS NULL` and fails
+        // `IS NOT NULL`, and a value that is not null does the opposite. These
+        // two lines were the wrong way round - `Value(Null)` answered
+        // `bool_value(negated)` - and nothing caught it, because the parser test
+        // only checked the *shape* of the node and no executor test asked what
+        // the predicate answered. `IS NULL` returned every row that had a value
+        // and no row that had none, and `IS NOT NULL` did the reverse.
+        Value(Null) => Value(bool_value(!negated))
+        Value(_) => Value(bool_value(negated))
       }
     Call(name, args) => eval_call(db, lower(name), args, row, group)
   }
@@ -739,6 +747,7 @@ fn eval_call(
         }
       })
     "line" | "slab" | "peers" => geometry_predicate(db, name, args, row)
+    "json_extract" => json_extract_call(db, name, args, row, group)
     _ => Failed(err_response("INVALID_SYNTAX", "Unknown function: " + name))
   }
 }
@@ -783,6 +792,72 @@ fn text1(
     Value(Null) => Value(Null)
     Value(v) => Value(Text(f(render(v))))
   }
+}
+
+///|
+/// `json_extract(text, path)` — the value at a path inside a JSON document.
+///
+/// The first argument is any text expression, so it composes: the `value`
+/// column, a literal, or the result of another function. The second is the
+/// path, `$.a.b[0].c`.
+///
+/// The two arguments are treated differently on purpose, and the reason is
+/// where the mistake lives:
+///
+/// - A **malformed path** is an error, never an answer. The path is the same for
+///   every row, so it is not the data's business whether it is well formed. It
+///   is reported when the call is evaluated: against a probe row before any row
+///   is read in a `WHERE`, and when the first row is evaluated in a select list
+///   - the same rule the engine already applies to an unknown function and to a
+///   wrong argument count.
+/// - A **row** whose text is not JSON, or whose JSON has no such key, answers
+///   `null`. One row holding a plain string must not take the whole query down
+///   with it, and `null` is the answer SQL already has for "not known here".
+///
+/// The name matches SQLite's `json_extract` on purpose — the path syntax is the
+/// same, so the function is familiar — but nothing of SQLite is underneath.
+/// The parse is `moonbitlang/core/json`, which the package already depended on
+/// for its own `.tsr` reader.
+fn json_extract_call(
+  db : Tesseract,
+  name : String,
+  args : Array[Expr],
+  row : Record?,
+  group : Array[Record],
+) -> Eval {
+  if args.length() != 2 {
+    return Failed(
+      err_response("INVALID_SYNTAX", name + "() takes two arguments"),
+    )
+  }
+  let path_text = match eval_value(db, args[1], row, group) {
+    Failed(r) => return Failed(r)
+    Value(v) => render(v)
+  }
+  let steps = match json_path_parse(path_text) {
+    Err(message) => return Failed(err_response("INVALID_INPUT", message))
+    Ok(s) => s
+  }
+  let outcome = match eval_value(db, args[0], row, group) {
+    Failed(r) => Failed(r)
+    Value(Null) => Value(Null)
+    Value(v) => {
+      let text = render(v)
+      if !@json.valid(text) {
+        return Value(Null)
+      }
+      // `preserve_number_repr` keeps the number exactly as it was written, so
+      // an integer wider than a double survives without being rounded.
+      let doc = @json.parse(text, preserve_number_repr=true) catch {
+        _ => return Value(Null)
+      }
+      match json_walk(doc, steps) {
+        Some(found) => Value(json_to_sql(found))
+        None => Value(Null)
+      }
+    }
+  }
+  outcome
 }
 
 ///|
