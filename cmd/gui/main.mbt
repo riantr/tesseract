@@ -23,9 +23,13 @@ const DEBUG_ENV : String = "TESSERACT_DEBUG"
 ///|
 async fn main {
   let debug = @env.get_env_var(DEBUG_ENV) is Some(_)
+  // Proton 0.5 changed the configuration methods: they mutate the app and
+  // return `Unit` instead of returning the app, so the chain keeps the value
+  // with the cascade operator `..` rather than with a dot. `load_config` became
+  // a free function that returns an `AppConfig`, which `config` then takes.
   @proton.asset("Tesseract", PAGE, width=1240, height=1000, resizable=true)
-  .load_config()
-  .debug(enabled=debug)
-  .commands(fn(registrar) raise { register(registrar) })
+  ..config(@proton.load_config())
+  ..debug(enabled=debug)
+  ..commands(fn(registrar) raise { register(registrar) })
   .run_or_abort()
 }

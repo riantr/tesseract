@@ -8,7 +8,7 @@ import {
 // Values
 pub const DIM : Int64 = 4
 
-pub const MAX_LOGS : Int = 100
+pub const MAX_LOGS : Int32 = 100
 
 pub const MAX_SIDE : Int64 = 215
 
@@ -38,17 +38,17 @@ pub fn coords_of(Lattice, Int64) -> Coords?
 
 pub fn copy_digits(Array[Int64]) -> Array[Int64]
 
-pub fn cu_char(Int) -> Char
+pub fn cu_char(Int32) -> Char
 
-pub fn cu_lower(Int) -> Int
+pub fn cu_lower(Int32) -> Int32
 
-pub fn cu_upper(Int) -> Int
+pub fn cu_upper(Int32) -> Int32
 
 pub fn default_lattice() -> Lattice
 
 pub fn digit_at(Lattice, Array[Int64], Int64) -> Int64
 
-pub fn ellipsize(String, Int) -> String
+pub fn ellipsize(String, Int32) -> String
 
 pub fn empty_cell(Int64) -> GridCell
 
@@ -72,6 +72,8 @@ pub fn find_all_by_key(Tesseract, String) -> Array[Int64]
 
 pub fn find_by_key(Tesseract, String) -> Int64?
 
+pub fn fixed_clock(Int64) -> Clock
+
 pub fn format_coords(Coords) -> String
 
 pub fn format_details(Map[String, String]) -> String
@@ -82,27 +84,41 @@ pub fn format_response(DBResponse) -> String
 
 pub fn free_axis_of(Array[Coords]) -> Int64
 
-pub fn import_markdown(Tesseract, String) -> Result[Int, String]
+pub fn import_markdown(Tesseract, String) -> Result[Int32, String]
 
-pub fn import_sql(Tesseract, String) -> Result[Int, String]
+pub fn import_sql(Tesseract, String) -> Result[Int32, String]
 
 pub fn import_tsr(Tesseract, String) -> Result[Int64, String]
 
 pub fn index0(Lattice, Coords) -> Int64
 
-pub fn index_of_ci(String, String) -> Int?
+pub fn index_of_ci(String, String) -> Int32?
 
 pub fn is_solution(Lattice, Array[Int64]) -> Bool
 
-pub fn is_space(Int) -> Bool
+pub fn is_space(Int32) -> Bool
+
+pub fn iso8601_ms(Int64) -> String
 
 pub fn join(Array[String], String) -> String
+
+pub fn json_path_parse(String) -> Result[Array[JsonStep], String]
+
+pub fn json_to_sql(Json) -> SqlValue
+
+pub fn json_walk(Json, Array[JsonStep]) -> Json?
+
+pub fn json_whole_number(String) -> Int64?
 
 pub fn lattice_of(Int64) -> Result[Lattice, String]
 
 pub fn lattice_shape_text(Lattice) -> String
 
 pub fn level_name(LogLevel) -> String
+
+pub fn lex(String) -> Result[Array[Token], LexError]
+
+pub fn lex_error_message(LexError) -> String
 
 pub fn like_matches(String, String) -> Bool
 
@@ -111,6 +127,8 @@ pub fn line_key(Array[Coords]) -> String
 pub fn line_through(Lattice, Coords, Int64) -> Array[Coords]
 
 pub fn line_violations(Lattice, Array[Int64]) -> Array[String]
+
+pub fn logical_clock() -> Clock
 
 pub fn lower(String) -> String
 
@@ -122,21 +140,27 @@ pub fn new_logger(String) -> TesseractLogger
 
 pub fn no_filter() -> CoordFilter
 
-pub fn no_where() -> Where
+pub fn no_txn() -> TxnState
+
+pub fn now_ms() -> Int64
 
 pub fn ok_response(String) -> DBResponse
 
-pub fn pad_left(String, Int) -> String
+pub fn pad_left(String, Int32) -> String
 
-pub fn pad_right(String, Int) -> String
+pub fn pad_number(Int64, Int32) -> String
+
+pub fn pad_right(String, Int32) -> String
 
 pub fn parse_coords(Lattice, String) -> Coords?
 
 pub fn parse_coords_raw(String) -> Coords?
 
-pub fn parse_int(String) -> Int?
+pub fn parse_error_message(ParseError) -> String
 
-pub fn parse_where(String) -> Result[Where, DBResponse]
+pub fn parse_int(String) -> Int32?
+
+pub fn parse_statement(String) -> Result[Stmt, ParseError]
 
 pub fn peer_count(Lattice) -> Int64
 
@@ -158,9 +182,9 @@ pub fn slab_through(Lattice, Coords, Int64) -> Array[Coords]
 
 pub fn slab_violations(Lattice, Array[Int64]) -> Array[String]
 
-pub fn slice(String, Int, Int) -> String
+pub fn slice(String, Int32, Int32) -> String
 
-pub fn slot_of(Int64) -> Int
+pub fn slot_of(Int64) -> Int32
 
 pub fn solve_lattice(Lattice, Int64) -> Array[Array[Int64]]
 
@@ -169,6 +193,8 @@ pub fn split(String, String) -> Array[String]
 pub fn starts_ci(String, String) -> Bool
 
 pub fn starts_with(String, String) -> Bool
+
+pub fn system_clock() -> Clock
 
 pub fn trim_ws(String) -> String
 
@@ -179,6 +205,33 @@ pub fn with_coord(Coords, Int64, Int64) -> Coords
 // Errors
 
 // Types and methods
+pub struct Assignment {
+  column : String
+  value : Expr
+} derive(Eq, @debug.Debug)
+pub fn Assignment::equal(Self, Self) -> Bool
+pub fn Assignment::not_equal(Self, Self) -> Bool
+pub fn Assignment::to_repr(Self) -> @debug.Repr
+
+pub struct CivilDate {
+  year : Int64
+  month : Int64
+  day : Int64
+}
+
+pub enum Clock {
+  Logical
+  System
+  Fixed(Int64)
+}
+pub fn Clock::cell_stamp(Self, Int32) -> String
+pub fn Clock::stamp(Self, Int32) -> String
+
+pub struct Computed {
+  label : String
+  value : String
+}
+
 pub struct CoordFilter {
   x : Int64
   y : Int64
@@ -216,12 +269,21 @@ pub struct DBStatus {
   digit_count : Int64
 }
 
-pub enum Geometry {
-  None
-  Line(Int64, Int64)
-  Slab(Int64, Int64)
-  Peers(Int64)
-}
+pub enum Expr {
+  Literal(SqlValue)
+  Column(String)
+  Not(Expr)
+  Neg(Expr)
+  Binary(String, Expr, Expr)
+  Like(Expr, Expr)
+  In(Expr, Array[Expr])
+  IsNull(Expr, Bool)
+  Call(String, Array[Expr])
+  Star
+} derive(Eq, @debug.Debug)
+pub fn Expr::equal(Self, Self) -> Bool
+pub fn Expr::not_equal(Self, Self) -> Bool
+pub fn Expr::to_repr(Self) -> @debug.Repr
 
 pub struct GridCell {
   position : Int64
@@ -229,6 +291,11 @@ pub struct GridCell {
   value : String
   timestamp : String
   digit : Int64
+}
+
+pub enum JsonStep {
+  Key(String)
+  Index(Int32)
 }
 
 pub struct Lattice {
@@ -242,8 +309,17 @@ pub struct Lattice {
   stride_w : Int64
 }
 
+pub enum LexError {
+  UnterminatedString(Int32)
+  UnexpectedChar(Int32, Int32)
+  BadNumber(Int32)
+} derive(Eq, @debug.Debug)
+pub fn LexError::equal(Self, Self) -> Bool
+pub fn LexError::not_equal(Self, Self) -> Bool
+pub fn LexError::to_repr(Self) -> @debug.Repr
+
 pub struct LogEntry {
-  seq : Int
+  seq : Int32
   stamp : String
   level : LogLevel
   message : String
@@ -257,6 +333,23 @@ pub enum LogLevel {
   Error
 }
 
+pub struct OrderTerm {
+  expr : Expr
+  descending : Bool
+} derive(Eq, @debug.Debug)
+pub fn OrderTerm::equal(Self, Self) -> Bool
+pub fn OrderTerm::not_equal(Self, Self) -> Bool
+pub fn OrderTerm::to_repr(Self) -> @debug.Repr
+
+pub struct ParseError {
+  code : String
+  message : String
+  at : Int32
+} derive(Eq, @debug.Debug)
+pub fn ParseError::equal(Self, Self) -> Bool
+pub fn ParseError::not_equal(Self, Self) -> Bool
+pub fn ParseError::to_repr(Self) -> @debug.Repr
+
 pub struct Record {
   key : String
   value : String
@@ -264,6 +357,7 @@ pub struct Record {
   coords : Coords
   timestamp : String
   digit : Int64
+  computed : Array[Computed]
 }
 
 pub struct ResizeReport {
@@ -273,55 +367,146 @@ pub struct ResizeReport {
   dropped : Int64
 }
 
+pub struct Savepoint {
+  name : String
+  mark : Int32
+}
+
+pub struct SelectSpec {
+  star : Bool
+  distinct : Bool
+  columns : Array[Expr]
+  filter : Expr?
+  group_by : Array[Expr]
+  order_by : Array[OrderTerm]
+  limit : Expr?
+  offset : Expr?
+} derive(Eq, @debug.Debug)
+pub fn SelectSpec::equal(Self, Self) -> Bool
+pub fn SelectSpec::not_equal(Self, Self) -> Bool
+pub fn SelectSpec::to_repr(Self) -> @debug.Repr
+
+pub enum SqlValue {
+  Null
+  Int(Int64)
+  Text(String)
+} derive(Eq, @debug.Debug)
+pub fn SqlValue::equal(Self, Self) -> Bool
+pub fn SqlValue::not_equal(Self, Self) -> Bool
+pub fn SqlValue::to_repr(Self) -> @debug.Repr
+
+pub enum Stmt {
+  CreateDatabase(String)
+  Insert(Array[String], Array[Expr], Target)
+  Update(Array[Assignment], Expr?)
+  Delete(Expr?)
+  Select(SelectSpec)
+  Begin
+  Commit
+  Rollback
+  Savepoint(String)
+  RollbackTo(String)
+  Release(String)
+} derive(Eq, @debug.Debug)
+pub fn Stmt::equal(Self, Self) -> Bool
+pub fn Stmt::not_equal(Self, Self) -> Bool
+pub fn Stmt::to_repr(Self) -> @debug.Repr
+
+pub enum Target {
+  None
+  Position(Int64)
+  Coords(Array[Int64])
+} derive(Eq, @debug.Debug)
+pub fn Target::equal(Self, Self) -> Bool
+pub fn Target::not_equal(Self, Self) -> Bool
+pub fn Target::to_repr(Self) -> @debug.Repr
+
 pub struct Tesseract {
   db_name : String
   mut lattice : Lattice
   mut cells : Array[GridCell]
   mut current_position : Int64
   logger : TesseractLogger
+  txn : TxnState
 }
+pub fn Tesseract::begin(Self) -> DBResponse
 pub fn Tesseract::cell_at(Self, Int64) -> GridCell?
+pub fn Tesseract::commit(Self) -> DBResponse
 pub fn Tesseract::delete(Self, String, Int64?) -> DBResponse
 pub fn Tesseract::digit_conflict(Self, Int64, Int64) -> GridCell?
 pub fn Tesseract::digit_count(Self) -> Int64
 pub fn Tesseract::get_logger(Self) -> TesseractLogger
+pub fn Tesseract::in_transaction(Self) -> Bool
 pub fn Tesseract::insert(Self, String, String, Int64?, Int64) -> DBResponse
 pub fn Tesseract::insert_stamped(Self, String, String, Int64?, Int64, String?) -> DBResponse
+pub fn Tesseract::journal_depth(Self) -> Int32
 pub fn Tesseract::lattice_of_db(Self) -> Lattice
 pub fn Tesseract::line_query(Self, Int64, Int64) -> DBResponse
 pub fn Tesseract::occupancy(Self) -> Int64
 pub fn Tesseract::peer_query(Self, Int64) -> DBResponse
+pub fn Tesseract::release_savepoint(Self, String) -> DBResponse
+pub fn Tesseract::rollback(Self) -> DBResponse
+pub fn Tesseract::rollback_to(Self, String) -> DBResponse
+pub fn Tesseract::savepoint(Self, String) -> DBResponse
 pub fn Tesseract::select(Self, String, String, Int64?, CoordFilter, Int64?) -> DBResponse
 pub fn Tesseract::set_position(Self, Int64) -> Unit
 pub fn Tesseract::set_side(Self, Int64) -> Result[ResizeReport, String]
 pub fn Tesseract::slab_query(Self, Int64, Int64) -> DBResponse
+pub fn Tesseract::statement_abort(Self, Int32) -> Unit
+pub fn Tesseract::statement_commit(Self, Int32) -> Unit
 pub fn Tesseract::status(Self) -> DBStatus
 pub fn Tesseract::update(Self, String, String, Int64?, Int64?) -> DBResponse
+pub fn Tesseract::write_all(Self, Array[GridCell], Lattice, Int64) -> Unit
+pub fn Tesseract::write_cell(Self, Int64, GridCell) -> Unit
 
 pub struct TesseractLogger {
   name : String
   mut logs : Array[LogEntry]
-  mut seq : Int
+  mut seq : Int32
   mut echo : Bool
+  mut clock : Clock
 }
 pub fn TesseractLogger::add(Self, LogLevel, String, String) -> Unit
 pub fn TesseractLogger::clear(Self) -> Unit
-pub fn TesseractLogger::count(Self) -> Int
+pub fn TesseractLogger::clock_of(Self) -> Clock
+pub fn TesseractLogger::count(Self) -> Int32
 pub fn TesseractLogger::entries(Self) -> Array[LogEntry]
 pub fn TesseractLogger::log_debug(Self, String, Map[String, String]) -> Unit
 pub fn TesseractLogger::log_error(Self, String, Map[String, String]) -> Unit
 pub fn TesseractLogger::log_info(Self, String, Map[String, String]) -> Unit
 pub fn TesseractLogger::log_operation(Self, String, Bool, Map[String, String]) -> Unit
 pub fn TesseractLogger::log_warning(Self, String, Map[String, String]) -> Unit
+pub fn TesseractLogger::set_clock(Self, Clock) -> Unit
 pub fn TesseractLogger::set_echo(Self, Bool) -> Unit
 
-pub struct Where {
-  key : String
-  pattern : String
-  position : Int64?
-  coords : CoordFilter
-  digit : Int64?
-  geometry : Geometry
+pub struct Token {
+  kind : TokenKind
+  at : Int32
+} derive(Eq, @debug.Debug)
+pub fn Token::equal(Self, Self) -> Bool
+pub fn Token::not_equal(Self, Self) -> Bool
+pub fn Token::to_repr(Self) -> @debug.Repr
+
+pub enum TokenKind {
+  Ident(String)
+  IntLit(Int64)
+  Text(String)
+  Punct(String)
+  Eof
+} derive(Eq, @debug.Debug)
+pub fn TokenKind::equal(Self, Self) -> Bool
+pub fn TokenKind::not_equal(Self, Self) -> Bool
+pub fn TokenKind::to_repr(Self) -> @debug.Repr
+
+pub struct TxnState {
+  mut in_tx : Bool
+  mut journal : Array[Undo]
+  mut savepoints : Array[Savepoint]
+}
+
+pub enum Undo {
+  Cell(Int64, GridCell)
+  All(Array[GridCell], Lattice, Int64)
 }
 
 // Type aliases

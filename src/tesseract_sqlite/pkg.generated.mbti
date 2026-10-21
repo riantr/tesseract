@@ -12,7 +12,7 @@ pub fn ensure_schema(@sqlite3.Connection) -> Unit raise
 
 pub fn load(String, @tesseract.Tesseract) -> LoadReport raise
 
-pub fn save(String, @tesseract.Tesseract) -> Int raise
+pub fn save(String, @tesseract.Tesseract) -> Int32 raise
 
 // Errors
 
@@ -26,8 +26,8 @@ pub struct CellRow {
 }
 
 pub struct LoadReport {
-  loaded : Int
-  rejected : Int
+  loaded : Int32
+  rejected : Int32
   cursor : Int64
 } derive(Eq, @debug.Debug)
 

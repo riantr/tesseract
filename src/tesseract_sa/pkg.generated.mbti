@@ -9,27 +9,27 @@ import {
 // Values
 pub fn ensure_schema(@sqlite3.Connection) -> Unit raise
 
-pub fn latest_run(String) -> Int? raise
+pub fn latest_run(String) -> Int32? raise
 
 pub fn list_runs(String) -> Array[RunSummary] raise
 
-pub fn load(String, Int) -> ScanReport? raise
+pub fn load(String, Int32) -> ScanReport? raise
 
 pub fn parse(String) -> Result[ScanReport, String]
 
-pub fn save(String, ScanReport) -> Int raise
+pub fn save(String, ScanReport) -> Int32 raise
 
 // Errors
 
 // Types and methods
 pub struct ByKind {
   kind : String
-  files : Int
-  parsed : Int
-  defects : Int
-  notices : Int
+  files : Int32
+  parsed : Int32
+  defects : Int32
+  notices : Int32
 } derive(@debug.Debug)
-pub fn ByKind::new(String, Int, Int, Int, Int) -> Self
+pub fn ByKind::new(String, Int32, Int32, Int32, Int32) -> Self
 pub fn ByKind::to_repr(Self) -> @debug.Repr
 
 pub enum FileOutcome {
@@ -48,70 +48,70 @@ pub struct FileResult {
   kind : String
   path : String
   outcome : FileOutcome
-  defects : Int
-  notices : Int
-  shown : Int
-  read_up_to : Int
-  not_shown : Int
+  defects : Int32
+  notices : Int32
+  shown : Int32
+  read_up_to : Int32
+  not_shown : Int32
 } derive(@debug.Debug)
-pub fn FileResult::new(String, String, FileOutcome, Int, Int, Int, Int, Int) -> Self
+pub fn FileResult::new(String, String, FileOutcome, Int32, Int32, Int32, Int32, Int32) -> Self
 pub fn FileResult::to_repr(Self) -> @debug.Repr
 
 pub struct Finding {
   path : String
-  line : Int
-  column : Int
+  line : Int32
+  column : Int32
   severity : String
   family : String
   lenses : String
   message : String
 } derive(@debug.Debug)
-pub fn Finding::new(String, Int, Int, String, String, String, String) -> Self
+pub fn Finding::new(String, Int32, Int32, String, String, String, String) -> Self
 pub fn Finding::to_repr(Self) -> @debug.Repr
 
 pub struct RunSummary {
-  id : Int
+  id : Int32
   target : String
   root : String
-  files : Int
-  parsed : Int
+  files : Int32
+  parsed : Int32
   parsed_pct : String
-  partial_files : Int
-  actionable : Int
-  notices : Int
-  unreliable : Int
-  withheld : Int
-  total : Int
+  partial_files : Int32
+  actionable : Int32
+  notices : Int32
+  unreliable : Int32
+  withheld : Int32
+  total : Int32
 } derive(@debug.Debug)
-pub fn RunSummary::new(Int, String, String, Int, Int, String, Int, Int, Int, Int, Int, Int) -> Self
+pub fn RunSummary::new(Int32, String, String, Int32, Int32, String, Int32, Int32, Int32, Int32, Int32, Int32) -> Self
 pub fn RunSummary::to_repr(Self) -> @debug.Repr
 
 pub struct ScanReport {
   target : String
   root : String
-  files : Int
-  parsed : Int
+  files : Int32
+  parsed : Int32
   parsed_pct : String
-  partial_files : Int
-  actionable : Int
-  notices : Int
-  unreliable : Int
-  withheld : Int
-  total : Int
+  partial_files : Int32
+  actionable : Int32
+  notices : Int32
+  unreliable : Int32
+  withheld : Int32
+  total : Int32
   file_results : Array[FileResult]
   findings : Array[Finding]
   unparsed : Array[UnparsedGroup]
   by_kind : Array[ByKind]
 } derive(@debug.Debug)
-pub fn ScanReport::new(String, String, Int, Int, String, Int, Int, Int, Int, Int, Int, Array[FileResult], Array[Finding], Array[UnparsedGroup], Array[ByKind]) -> Self
+pub fn ScanReport::new(String, String, Int32, Int32, String, Int32, Int32, Int32, Int32, Int32, Int32, Array[FileResult], Array[Finding], Array[UnparsedGroup], Array[ByKind]) -> Self
 pub fn ScanReport::to_repr(Self) -> @debug.Repr
 
 pub struct UnparsedGroup {
   reason : String
-  count : Int
+  count : Int32
   examples : Array[String]
 } derive(@debug.Debug)
-pub fn UnparsedGroup::new(String, Int, Array[String]) -> Self
+pub fn UnparsedGroup::new(String, Int32, Array[String]) -> Self
 pub fn UnparsedGroup::to_repr(Self) -> @debug.Repr
 
 // Type aliases

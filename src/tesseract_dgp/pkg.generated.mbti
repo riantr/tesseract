@@ -13,11 +13,11 @@ pub fn decode(String) -> Observation?
 
 pub fn encode(Observation) -> String?
 
-pub fn irm_dataset(Int, Int, Double, Int) -> Dataset
+pub fn irm_dataset(Int32, Int32, Double, Int32) -> Dataset
 
-pub fn observation_key(Int) -> String
+pub fn observation_key(Int32) -> String
 
-pub fn plr_dataset(Int, Int, Double, Int) -> Dataset
+pub fn plr_dataset(Int32, Int32, Double, Int32) -> Dataset
 
 pub fn read_back(@tesseract.Tesseract, Dataset) -> Array[Observation]?
 
@@ -33,23 +33,23 @@ pub fn to_sql(Dataset) -> String
 pub struct Dataset {
   source : String
   theta : Double
-  dim_x : Int
+  dim_x : Int32
   observations : Array[Observation]
 }
-pub fn Dataset::new(String, Double, Int, Array[Observation]) -> Self
+pub fn Dataset::new(String, Double, Int32, Array[Observation]) -> Self
 
 pub struct Observation {
-  index : Int
+  index : Int32
   d : Double
   y : Double
   x : Array[Double]
 }
-pub fn Observation::new(Int, Double, Double, Array[Double]) -> Self
+pub fn Observation::new(Int32, Double, Double, Array[Double]) -> Self
 
 pub struct RecordReport {
-  recorded : Int
-  rejected : Int
-  offered : Int
+  recorded : Int32
+  rejected : Int32
+  offered : Int32
   stopped_at : Int64
 } derive(Eq, @debug.Debug)
 pub fn RecordReport::equal(Self, Self) -> Bool
