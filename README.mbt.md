@@ -15,7 +15,7 @@ same success flags, error codes, positions, coordinates and digits.
 ## Install
 
 ```sh
-moon add riantr/tesseract@0.1.5
+moon add riantr/tesseract@0.1.6
 ```
 
 The library is the package `riantr/tesseract/src/tesseract`:
@@ -30,7 +30,7 @@ import {
 `cmd/main`, `cmd/persist`, `cmd/memory`, `cmd/sa` and `cmd/gui` are the five
 executables in the same module — the command line, the file-backed store, the
 short-term memory, the scan database and the window. Registry entry:
-[mooncakes.io/docs/riantr/tesseract@0.1.5](https://mooncakes.io/docs/riantr/tesseract@0.1.5).
+[mooncakes.io/docs/riantr/tesseract@0.1.6](https://mooncakes.io/docs/riantr/tesseract@0.1.6).
 
 ### What the release was checked on
 
@@ -158,7 +158,7 @@ through all three digits.
 
 ```
 src/tesseract/
-  text.mbt       ASCII helpers: trim, case folding, integer parse, split/join
+  text.mbt       ASCII helpers: trim, case folding, integer parse, split/join, characters
   coords.mbt     the lattice: coordinates, positions, neighbours, shares_line
   lattice.mbt    lines, slabs, planes, peers
   sudoku.mbt     digits, the line rule, slab balance, backtracking solver
@@ -682,6 +682,36 @@ The budget counts the **values**. The keys are bounded by the capacity, and
 the overhead of the store itself is not counted at all, so `size_bytes` is the
 size of the content a memory holds, not the size of the process holding it.
 
+### A configuration is either usable or it is refused
+
+Two settings are not usable: a capacity of zero or less, and a negative byte
+budget. `Config::is_valid` says which:
+
+```moonbit nocheck
+///|
+if !config.is_valid() {
+  // the memory will not hold this
+}
+```
+
+The two paths differ on purpose. A **new** memory has no entries to protect,
+so the setting it cannot use is replaced — the capacity falls back to the
+default, a negative budget falls back to no budget — and the rest of the
+configuration is kept, because only the impossible setting is the caller's
+mistake. A memory that is already **running** refuses an invalid
+configuration and keeps the old one: there are entries in it, and a limit that
+changed under them would throw them away.
+
+### The store's internals are not part of the API
+
+`Memory`'s fields are private, and that is a promise rather than a detail. A
+`Map` is mutable in place, so a public field would let a caller remove an
+entry behind the store's back — and the byte total, which is a running count
+of the values, would then be counting something that is no longer there. The
+limits a memory enforces are only worth anything if the store cannot be edited
+behind its own back, so the published interface is the methods and nothing
+else.
+
 ### Similarity retrieval
 
 `search` returns the entries most like a query, best first.
@@ -732,6 +762,13 @@ when `Memory::advance` says so, so every TTL boundary in the test suite is a
 number rather than a race. `cmd/memory --manual-clock` exposes the same thing
 to a shell.
 
+The clock moves **forward**. `advance` refuses a negative interval: a clock
+that runs backwards is not a clock, and an entry would then be *older* than the
+moment it was written — which makes the recency weight larger than one and the
+search score larger than the `0.0..1.0` it is documented to be in. Reading the
+clock also purges what has expired, because reading the clock is reading the
+store.
+
 ### What it does not do
 
 - **Not SQL, and not a second query language.** The memory has a native API.
@@ -753,7 +790,7 @@ The full plan and the measurements behind it are in `LOOP3.md`.
 
 ```sh
 moon check --target all     # type-check every backend
-moon test                   # 276 tests
+moon test                   # 284 tests
 moon fmt --check            # canonical formatting
 
 node cli-smoke.mjs          # the CLIs, as real processes (builds them first)
@@ -985,10 +1022,10 @@ The gate, and the result it produced for this version:
 | `moon check --target js --deny-warn` | exit 0 |
 | `moon check --target native --deny-warn` | exit 0 |
 | `moon check --target wasm-gc --deny-warn` | exit 0 |
-| `moon test --target wasm --deny-warn` | **276 passed, 0 failed** |
+| `moon test --target wasm --deny-warn` | **284 passed, 0 failed** |
 | `moon build --target wasm` | exit 0 |
 | `typos` (v1.50.3 — the version the workflow pins) | exit 0 |
-| `node cli-smoke.mjs` | **24 passed, 0 failed** |
+| `node cli-smoke.mjs` | **26 passed, 0 failed** |
 | `node gui-smoke.mjs` | **45 passed, 0 failed** |
 
 The release workflow runs the first two check targets plus the test and build; the
@@ -1015,6 +1052,14 @@ of the gate above, and reproducing it needs the C# project alongside this one.
 
 The C# exporter's `.sql` dialect still loads: backticked `` `key` `` / `` `value` ``
 quoting is stripped and a `timestamp` column is accepted and ignored.
+
+A value keeps **every** character it went in with, including the ones that
+take two code units in the runtime's string. An emoji is one character and
+four UTF-8 bytes, and half of a character is not a character at all — so
+copying the two halves apart used to turn every emoji in a value into two
+question marks, in the `.tsr` JSON, in the `.md` table and in the `.sql` dump
+alike. The text helpers now copy characters rather than code units, which is
+what `char_at` is for.
 
 ## Deliberate departures from the C# original
 
