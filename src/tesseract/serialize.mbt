@@ -12,6 +12,10 @@
 
 ///|
 /// Escapes a string for a JSON string body.
+///
+/// A character outside the basic plane is two code units and one character, so
+/// it is copied whole: the halves are a character, and a value that went in
+/// as one has to come out as one.
 fn json_escape(s : String) -> String {
   let b = StringBuilder::StringBuilder(size_hint=s.length() + 8)
   let mut i = 0
@@ -33,7 +37,10 @@ fn json_escape(s : String) -> String {
       b.write_char(cu_char(hex.at(c / 16).to_int()))
       b.write_char(cu_char(hex.at(c % 16).to_int()))
     } else {
-      b.write_char(cu_char(c))
+      let (ch, next) = char_at(s, i)
+      b.write_char(ch)
+      i = next
+      continue
     }
     i = i + 1
   }
@@ -278,7 +285,12 @@ fn escape_markdown(s : String) -> String {
     } else if c == 13 {
       b.write_string("\\r")
     } else {
-      b.write_char(cu_char(c))
+      // A character outside the basic plane is two code units and one
+      // character, so the pair is copied whole.
+      let (ch, next) = char_at(s, i)
+      b.write_char(ch)
+      i = next
+      continue
     }
     i = i + 1
   }
@@ -296,23 +308,33 @@ fn unescape_markdown(s : String) -> String {
       let next = s.at(i + 1)
       if next == 'n' {
         b.write_char('\n')
+        i = i + 2
+        continue
       } else if next == 'r' {
         b.write_char('\r')
+        i = i + 2
+        continue
       } else if next == 't' {
         b.write_char('\t')
+        i = i + 2
+        continue
       } else {
-        b.write_char(cu_char(next.to_int()))
+        // The escaped character is copied whole: a character outside the basic
+        // plane is two code units and one character.
+        let (ch, after) = char_at(s, i + 1)
+        b.write_char(ch)
+        i = after
+        continue
       }
-      i = i + 2
-      continue
     }
     if starts_ci(slice(s, i, s.length()), "<br>") {
       b.write_char('\n')
       i = i + 4
       continue
     }
-    b.write_char(cu_char(c))
-    i = i + 1
+    let (ch, next) = char_at(s, i)
+    b.write_char(ch)
+    i = next
   }
   b.to_string()
 }
@@ -329,16 +351,22 @@ fn split_markdown_row(line : String) -> Array[String] {
   while i < line.length() {
     let c = line.at(i).to_int()
     if c == 92 && i + 1 < line.length() {
+      // The escaped character is copied whole: a character outside the basic
+      // plane is two code units and one character.
       current.write_char(cu_char(c))
-      current.write_char(cu_char(line.at(i + 1).to_int()))
-      i = i + 2
+      let (ch, after) = char_at(line, i + 1)
+      current.write_char(ch)
+      i = after
       continue
     }
     if c == 124 {
       out.push(trim_ws(current.to_string()))
       ignore(current.reset())
     } else {
-      current.write_char(cu_char(c))
+      let (ch, next) = char_at(line, i)
+      current.write_char(ch)
+      i = next
+      continue
     }
     i = i + 1
   }
@@ -555,7 +583,12 @@ fn escape_sql_literal(s : String) -> String {
     } else if c == 9 {
       b.write_string("\\t")
     } else {
-      b.write_char(cu_char(c))
+      // A character outside the basic plane is two code units and one
+      // character, so the pair is copied whole.
+      let (ch, next) = char_at(s, i)
+      b.write_char(ch)
+      i = next
+      continue
     }
     i = i + 1
   }
@@ -637,10 +670,13 @@ fn strip_sql_comments(text : String) -> String {
   while i < text.length() {
     let c = text.at(i).to_int()
     if escape {
-      out.write_char(cu_char(c))
+      // The escaped character is copied whole: a character outside the basic
+      // plane is two code units and one character.
+      let (ch, next) = char_at(text, i)
+      out.write_char(ch)
       escape = false
       line_start = c == 10
-      i = i + 1
+      i = next
       continue
     }
     if c == 92 && in_quote {
@@ -671,8 +707,11 @@ fn strip_sql_comments(text : String) -> String {
     } else if !is_space(c) {
       line_start = false
     }
-    out.write_char(cu_char(c))
-    i = i + 1
+    // A character outside the basic plane is two code units and one
+    // character, so the pair is copied whole.
+    let (ch, next) = char_at(text, i)
+    out.write_char(ch)
+    i = next
   }
   ignore(line_start)
   out.to_string()

@@ -49,6 +49,53 @@ fn db_with_three() -> @tesseract.Tesseract {
 }
 
 ///|
+/// A value with a character outside the basic plane survives the export.
+///
+/// A value is an opaque blob that has to come back as it went in, and an
+/// emoji is two code units and one character. Copying the halves apart turned
+/// every emoji in a value into two question marks — in the `.tsr` JSON, in
+/// the `.md` table and in the `.sql` dump alike.
+test "a value with a character outside the basic plane survives the export" {
+  let lat = @tesseract.default_lattice()
+  let (first, _, _) = fixture_cells(lat)
+  let db = @tesseract.new_db("tesseract", lat, @tesseract.new_logger("t"))
+  ignore(
+    @tesseract.Tesseract::insert(
+      db,
+      "emoji",
+      "🍎 and 苹果",
+      Some(first),
+      1L,
+    ),
+  )
+  // The `.tsr` JSON, which is the native format.
+  let tsr = @tesseract.export_tsr(db)
+  assert_true(tsr.contains("🍎 and 苹果"))
+  let dst = @tesseract.new_db("tesseract", lat, @tesseract.new_logger("t"))
+  assert_eq(@tesseract.import_tsr(dst, tsr), Ok(1L))
+  // The value is the same one, not a mangled copy of it.
+  let rows = @tesseract.Tesseract::select(
+    dst,
+    "",
+    "",
+    None,
+    @tesseract.no_filter(),
+    None,
+  )
+  assert_eq(rows.data[0].value, "🍎 and 苹果")
+  // The `.md` table and the `.sql` dump carry it too.
+  assert_true(@tesseract.export_markdown(db).contains("🍎 and 苹果"))
+  let sql = @tesseract.export_sql(db)
+  assert_true(sql.contains("🍎 and 苹果"))
+  let back = @tesseract.new_db("tesseract", lat, @tesseract.new_logger("t"))
+  ignore(@tesseract.import_sql(back, sql))
+  assert_eq(
+    @tesseract.Tesseract::cell_at(back, first).unwrap().value,
+    "🍎 and 苹果",
+  )
+}
+
+///|
 test "tsr round trip does not depend on how much was logged beforehand" {
   let lat = @tesseract.default_lattice()
   let src = db_with_three()

@@ -93,11 +93,16 @@ pub fn Recency::is_active(self : Recency) -> Bool {
 
 ///|
 /// The recency weight of an entry of `age_ms`, in `0.0..1.0`.
+///
+/// An age of zero or less weighs the same as an age of zero: a weight above
+/// one would push a search score outside the `0.0..1.0` range it is
+/// documented to be in, and an entry that is *newer* than it was written is
+/// not more recent than the moment it was written.
 pub fn Recency::weight(self : Recency, age_ms : Int64) -> Double {
   match self {
     None => 1.0
     Decay(half_life) =>
-      if half_life <= 0L {
+      if half_life <= 0L || age_ms <= 0L {
         1.0
       } else {
         let exponent = age_ms.to_double() / half_life.to_double()

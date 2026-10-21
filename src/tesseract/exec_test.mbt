@@ -238,6 +238,33 @@ test "the scalar functions answer" {
 }
 
 ///|
+/// A value with a character outside the basic plane is not corrupted.
+///
+/// `upper` and `lower` are applied to the *value*, and a value is an opaque
+/// blob that has to survive a round trip byte-for-byte. An emoji is two code
+/// units in the runtime's string, and half a character is not a character, so
+/// folding the value used to **delete** the emoji: `upper('🍎')` came back
+/// shorter than it went in.
+test "a value with a character outside the basic plane is not corrupted" {
+  let db = three_rows()
+  let up = go(db, "SELECT upper('a🍎b') FROM tesseract WHERE key='alpha';")
+  assert_eq(up.data[0].computed[0].value, "A🍎B")
+  let down = go(db, "SELECT lower('A🍎B') FROM tesseract WHERE key='alpha';")
+  assert_eq(down.data[0].computed[0].value, "a🍎b")
+  // And a value that goes in with an emoji comes out with it.
+  ignore(
+    go(db, "INSERT INTO tesseract (key, value) VALUES ('emoji','🍎') AT 4;"),
+  )
+  let read = go(db, "SELECT value FROM tesseract WHERE key='emoji';")
+  assert_eq(read.data[0].value, "🍎")
+  // And the value it was asked about is still there afterwards.
+  assert_eq(
+    go(db, "SELECT value FROM tesseract WHERE key='alpha';").data[0].value,
+    "A",
+  )
+}
+
+///|
 /// An aggregate answers, and `GROUP BY` decides how many rows come back.
 ///
 /// `Record` has a fixed shape, so the aggregate cannot live in one of the cell

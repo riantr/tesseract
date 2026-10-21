@@ -199,6 +199,13 @@ function main() {
 
     r = run("memory", ["put a hello", "stats"], dir);
     check("a store with no budget says so", r.out.includes("bytes     5 (no limit)"), true, r.out + r.err);
+
+    // A flag that cannot be honoured is reported, not quietly replaced.
+    r = run("memory", ["--capacity", "0", "put a 1"], dir);
+    check("a capacity of zero is refused", r.err.includes("capacity must be a positive"), true, r.out + r.err);
+
+    r = run("memory", ["--max-bytes", "-1", "put a 1"], dir);
+    check("a negative byte budget is refused", r.err.includes("budget cannot be negative"), true, r.out + r.err);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

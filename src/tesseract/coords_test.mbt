@@ -221,3 +221,33 @@ test "text helpers: split, join and slice keep empty fields" {
   assert_eq(@tesseract.slice("abc", 1, 99), "bc")
   assert_eq(@tesseract.slice("abc", 2, 2), "")
 }
+
+///|
+/// A character outside the basic plane survives the text helpers.
+///
+/// An emoji is two code units in the runtime's string and one character to a
+/// reader, and half of a character is not a character: copying code units one
+/// at a time **dropped** it. A value is an opaque blob that has to survive a
+/// round trip byte-for-byte, so an emoji that went through `lower`, `upper`
+/// or `slice` and came back shorter was a value that had been corrupted.
+test "a character outside the basic plane survives the text helpers" {
+  // The character is kept, and it is still one character.
+  assert_eq(@tesseract.lower("🍎"), "🍎")
+  assert_eq(@tesseract.upper("🍎"), "🍎")
+  assert_eq(@tesseract.slice("🍎", 0, 2), "🍎")
+  assert_eq(@tesseract.slice("a🍎b", 1, 3), "🍎")
+  assert_eq(@tesseract.slice("a🍎b", 0, 4), "a🍎b")
+  // The folding is still ASCII-only, and it does not disturb the rest.
+  assert_eq(@tesseract.lower("Ab🍎C"), "ab🍎c")
+  assert_eq(@tesseract.upper("ab🍎c"), "AB🍎C")
+  // A range that covers only one half of the character cannot keep it: there
+  // is no such thing as half a character.
+  assert_eq(@tesseract.slice("🍎", 0, 1), "")
+  // And the character is two code units wide, which is what `char_at` says.
+  let (ch, next) = @tesseract.char_at("🍎", 0)
+  assert_eq(ch.to_string(), "🍎")
+  assert_eq(next, 2)
+  let (ascii, after) = @tesseract.char_at("a", 0)
+  assert_eq(ascii.to_string(), "a")
+  assert_eq(after, 1)
+}

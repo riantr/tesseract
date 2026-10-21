@@ -324,6 +324,18 @@ fn main {
     print_help()
     return
   }
+  // A capacity of zero or less cannot be honoured, and a negative budget
+  // would read as the one value that means no limit at all. The library
+  // replaces a setting it cannot use, but a person who typed a flag deserves
+  // to be told, not to be given a different memory than they asked for.
+  if capacity <= 0 {
+    warn("the capacity must be a positive number of entries")
+    return
+  }
+  if max_bytes < 0L {
+    warn("the byte budget cannot be negative (0 means no budget)")
+    return
+  }
   let config = @tesseract_memory.default_config()
     .with_capacity(capacity)
     .with_max_bytes(max_bytes)

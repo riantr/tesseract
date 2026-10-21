@@ -13,6 +13,11 @@
 ///   the difference between "these two Chinese sentences share the words 苹果
 ///   and 手机" and "these two sentences are both empty".
 ///
+/// A character outside the basic plane — an emoji — is two code units in the
+/// runtime's string and one character to a reader, and it is one word here
+/// too. The two halves are put back together before the word is cut, so
+/// `🍎` is a word and not two, and not none.
+///
 /// The text is lowercased first, so `Apple` and `apple` are the same word.
 pub fn tokenize(text : String) -> Array[String] {
   let lowered = @tesseract.lower(text)
@@ -33,7 +38,12 @@ pub fn tokenize(text : String) -> Array[String] {
         out.push(@tesseract.slice(lowered, start, i))
         start = -1
       }
-      out.push(@tesseract.slice(lowered, i, i + 1))
+      // A character outside the basic plane is two code units and one
+      // character, so it is one word and the walk steps over both halves.
+      let (ch, next) = @tesseract.char_at(lowered, i)
+      out.push(ch.to_string())
+      i = next
+      continue
     } else if start >= 0 {
       out.push(@tesseract.slice(lowered, start, i))
       start = -1

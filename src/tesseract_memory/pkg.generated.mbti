@@ -69,6 +69,7 @@ pub struct Config {
   similarity : Similarity
   recency : Recency
 }
+pub fn Config::is_valid(Self) -> Bool
 pub fn Config::with_capacity(Self, Int32) -> Self
 pub fn Config::with_default_ttl(Self, Ttl) -> Self
 pub fn Config::with_eviction(Self, EvictionPolicy) -> Self
@@ -110,11 +111,7 @@ pub fn Hit::score(Self) -> Double
 pub fn Hit::value(Self) -> String
 
 pub struct Memory {
-  entries : Map[String, Entry]
-  mut bytes : Int64
-  mut clock : MemoryClock
-  mut config : Config
-  stats : Stats
+  // private fields
 }
 pub fn Memory::advance(Self, Int64) -> Bool
 pub fn Memory::capacity(Self) -> Int32

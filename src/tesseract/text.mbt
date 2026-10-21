@@ -3,9 +3,10 @@
 ///
 /// The bundled `String` API in this toolchain has no case folding and no
 /// integer parsing, and the SQL surface needs both. Rather than take a
-/// dependency for four functions they live here. ASCII-only on purpose: SQL
-/// keywords are ASCII, and Tesseract values are opaque JSON blobs that must
-/// survive a round trip byte-for-byte.
+/// dependency for four functions they live here. The *folding* is ASCII-only
+/// on purpose: SQL keywords are ASCII, and Tesseract values are opaque JSON
+/// blobs that must survive a round trip byte-for-byte — so the copying keeps
+/// every character, including the ones that take two code units.
 
 ///|
 /// True for the ASCII whitespace Tesseract trims around SQL tokens.
@@ -43,14 +44,74 @@ fn write_cu(b : StringBuilder, c : Int32) -> Unit {
 }
 
 ///|
+/// True for the first half of a surrogate pair.
+fn is_high_surrogate(c : Int32) -> Bool {
+  c >= 55296 && c <= 56319
+}
+
+///|
+/// True for the second half of a surrogate pair.
+fn is_low_surrogate(c : Int32) -> Bool {
+  c >= 56320 && c <= 57343
+}
+
+///|
+/// The character at `s[i]`, and the index just past it.
+///
+/// A character outside the basic plane is two code units in the runtime's
+/// string and one character to a reader, so a walk that stops at code units
+/// has to be told where the character ends. Copying the two halves apart
+/// **destroys** the character: `Int32::to_char` refuses a surrogate, so half a
+/// character is not a character at all, and an emoji that went through a text
+/// helper used to come back as two question marks.
+///
+/// A half-character — one half of a pair with no other half — is not a
+/// character and comes back as a question mark, which is the only thing that
+/// can be done with it.
+pub fn char_at(s : String, i : Int32) -> (Char, Int32) {
+  let c = s.at(i).to_int()
+  if is_high_surrogate(c) && i + 1 < s.length() {
+    let low = s.at(i + 1).to_int()
+    if is_low_surrogate(low) {
+      let cp = 0x10000 + (c - 55296) * 1024 + (low - 56320)
+      match Int32::to_char(cp) {
+        Some(ch) => return (ch, i + 2)
+        None => ()
+      }
+    }
+  }
+  match Int32::to_char(c) {
+    Some(ch) => (ch, i + 1)
+    None => ('?', i + 1)
+  }
+}
+
+///|
 /// Copies `s[start, end)` into a fresh string, clamped to `s.length()`.
+///
+/// The range is in **code units**, the same unit it has always been, and a
+/// character is copied whole or not at all: a range that holds both halves of
+/// a surrogate pair keeps the character, and a range that cuts one in half
+/// does not, because there is no such thing as half a character.
 pub fn slice(s : String, start : Int32, end : Int32) -> String {
   let hi = if end > s.length() { s.length() } else { end }
   let b = StringBuilder::StringBuilder()
   let mut i = start
   while i < hi {
-    write_cu(b, s.at(i).to_int())
-    i = i + 1
+    if is_high_surrogate(s.at(i).to_int()) {
+      if i + 1 < hi && is_low_surrogate(s.at(i + 1).to_int()) {
+        let (ch, next) = char_at(s, i)
+        b.write_char(ch)
+        i = next
+      } else {
+        // The range cuts the character in half, so it is not included.
+        i = i + 1
+      }
+    } else {
+      let (ch, next) = char_at(s, i)
+      b.write_char(ch)
+      i = next
+    }
   }
   b.to_string()
 }
@@ -66,24 +127,46 @@ pub fn cu_char(c : Int32) -> Char {
 
 ///|
 /// ASCII upper-cases the whole string.
+///
+/// The folding is ASCII-only on purpose — a case rule for a character outside
+/// ASCII is a much bigger question than a SQL keyword needs — but the
+/// characters themselves are all kept, including the ones that take two code
+/// units.
 pub fn upper(s : String) -> String {
   let b = StringBuilder::StringBuilder(size_hint=s.length())
   let mut i = 0
   while i < s.length() {
-    write_cu(b, cu_upper(s.at(i).to_int()))
-    i = i + 1
+    let c = s.at(i).to_int()
+    if c < 128 {
+      write_cu(b, cu_upper(c))
+      i = i + 1
+    } else {
+      let (ch, next) = char_at(s, i)
+      b.write_char(ch)
+      i = next
+    }
   }
   b.to_string()
 }
 
 ///|
 /// ASCII lower-case of the whole string.
+///
+/// The folding is ASCII-only on purpose, and the characters are all kept — see
+/// `upper`.
 pub fn lower(s : String) -> String {
   let b = StringBuilder::StringBuilder(size_hint=s.length())
   let mut i = 0
   while i < s.length() {
-    write_cu(b, cu_lower(s.at(i).to_int()))
-    i = i + 1
+    let c = s.at(i).to_int()
+    if c < 128 {
+      write_cu(b, cu_lower(c))
+      i = i + 1
+    } else {
+      let (ch, next) = char_at(s, i)
+      b.write_char(ch)
+      i = next
+    }
   }
   b.to_string()
 }

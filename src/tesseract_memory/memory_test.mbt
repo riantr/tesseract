@@ -380,6 +380,28 @@ test "a word outside ASCII is a word of its own" {
 }
 
 ///|
+/// A character outside the basic plane is one word, not two.
+///
+/// An emoji is one character and four UTF-8 bytes, but it is two code units in
+/// the runtime's string. The tokenizer steps over the string a code unit at a
+/// time, so it has to put the pair back together — otherwise one character
+/// becomes two words, and two *different* emoji that share a half would be
+/// treated as alike.
+test "a character outside the basic plane is one word, not two" {
+  let tokens = @tesseract_memory.tokenize("🍎")
+  assert_eq(tokens.length(), 1)
+  assert_eq(tokens[0], "🍎")
+  // And it does not split a run of ASCII around itself.
+  let mixed = @tesseract_memory.tokenize("a🍎b")
+  assert_eq(mixed.join(","), "a,🍎,b")
+  // Two identical texts are alike, which they were not when the character was
+  // dropped on the way in: the two of them tokenized to nothing at all.
+  assert_eq(score_of(@tesseract_memory.jaccard("🍎", "🍎")), "1.000")
+  // Two different emoji share a high surrogate and must not be alike.
+  assert_eq(score_of(@tesseract_memory.jaccard("🍎", "🍏")), "0.000")
+}
+
+///|
 /// The search returns the best matches, best first, and only the ones that match.
 test "the search returns the best matches, best first, and only the ones that match" {
   let m = memory_at(0L)
@@ -457,10 +479,102 @@ test "a recency weight can make an older match lose to a newer one" {
 test "a search does not count as a use" {
   let m = memory_at(0L)
   ignore(m.put("a", "cat"))
+  let before = m.entry("a").unwrap()
   ignore(m.search("cat", 10))
+  let after = m.entry("a").unwrap()
+  // The entry was not touched: not read, not counted, and not refreshed. A
+  // test that only looked at the counters would pass even if the search
+  // refreshed every entry, because a search does not count as a *get* either
+  // way.
+  assert_eq(after.last_seen, before.last_seen)
+  assert_eq(after.hits, before.hits)
   assert_eq(m.stats().gets, 0L)
   assert_eq(m.get("a"), Some("cat"))
   assert_eq(m.stats().gets, 1L)
+}
+
+///|
+/// A memory built with an impossible configuration is given a workable one.
+///
+/// A capacity of zero or less is a memory that cannot hold anything, and a
+/// negative budget is a mistake that would otherwise read as the one value
+/// that means no limit at all. A **new** memory has no entries to protect, so
+/// the setting it cannot use is replaced; a running one refuses instead.
+test "a memory built with an impossible configuration is given a workable one" {
+  let impossible = @tesseract_memory.default_config()
+    .with_capacity(0)
+    .with_max_bytes(-1L)
+  assert_false(impossible.is_valid())
+  let m = @tesseract_memory.new_memory_with(impossible)
+  assert_true(m.capacity() > 0)
+  assert_eq(m.max_bytes(), 0L)
+  // And the memory works.
+  assert_true(m.put("a", "1"))
+  assert_eq(m.size(), 1)
+}
+
+///|
+/// The byte total counts the UTF-8 bytes of a multibyte value.
+///
+/// A byte budget is only worth having if the bytes it counts are the bytes the
+/// text takes up: a value of two Chinese characters is six bytes, not two.
+test "the byte total counts the UTF-8 bytes of a multibyte value" {
+  let m = @tesseract_memory.new_memory_with_clock(
+    @tesseract_memory.default_config().with_max_bytes(1000L),
+    @tesseract_memory.memory_clock_manual(0L),
+  )
+  ignore(m.put("a", "苹果"))
+  assert_eq(m.size_bytes(), 6L)
+  ignore(m.put("b", "🍎"))
+  assert_eq(m.size_bytes(), 10L)
+  // And the total is the sum over the live entries, which is what the store
+  // says it is: a total that drifts is a total nobody can trust. The entries
+  // themselves are not reachable from outside the package — the map is
+  // private — so the total can only drift if this package drifts it.
+  ignore(m.delete("a"))
+  assert_eq(m.size_bytes(), 4L)
+  ignore(m.put("a", "苹果"))
+  assert_eq(m.size_bytes(), 10L)
+}
+
+///|
+/// A search score is never above one.
+///
+/// The recency weight is a fraction, and a score is a weight times a
+/// similarity, so a score cannot leave `0.0..1.0`. A clock that ran backwards
+/// would make an entry older than the moment it was written, and the weight
+/// larger than one — which is why a backwards clock is refused.
+test "a search score is never above one" {
+  let m = @tesseract_memory.new_memory_with_clock(
+    @tesseract_memory.default_config()
+    .with_capacity(10)
+    .with_recency(@tesseract_memory.recency_decay(1000L)),
+    @tesseract_memory.memory_clock_manual(0L),
+  )
+  ignore(m.put("a", "cat"))
+  // The clock does not run backwards.
+  assert_false(m.advance(-1000L))
+  assert_eq(m.now(), 0L)
+  let hits = m.search("cat", 5)
+  assert_eq(hits.length(), 1)
+  assert_true(hits[0].score <= 1.0)
+  assert_eq(score_of(hits[0].score), "1.000")
+}
+
+///|
+/// Reading the clock purges what has expired.
+///
+/// Expiry is eager, and reading the clock is reading the store, so the
+/// entries that are already gone are gone when the clock is read. The counter
+/// is what makes that visible: a store that had not purged would still be
+/// holding the entry.
+test "reading the clock purges what has expired" {
+  let m = memory_at(0L)
+  ignore(m.put_with_ttl("a", "x", @tesseract_memory.ttl_absolute(1000L)))
+  assert_eq(m.stats().expirations, 0L)
+  ignore(m.advance(1000L))
+  ignore(m.now())
+  assert_eq(m.stats().expirations, 1L)
 }
 
 ///|

@@ -7,41 +7,32 @@
 /// language of the text — and a memory whose budget shrinks when the content
 /// is in Chinese is a memory nobody can reason about.
 ///
-/// The walk follows the UTF-16 code units the runtime hands out:
+/// The walk goes a **character** at a time rather than a code unit at a time,
+/// and a character's own code point says how many bytes it takes:
 ///
-/// | code unit | bytes |
+/// | code point | bytes |
 /// |---|---|
 /// | below `0x80` | 1 |
 /// | below `0x800` | 2 |
-/// | a surrogate pair | 4 |
-/// | anything else | 3 |
+/// | below `0x10000` | 3 |
+/// | anything else | 4 |
 pub fn utf8_bytes(text : String) -> Int64 {
   let n = text.length()
   let mut bytes = 0L
   let mut i = 0
   while i < n {
-    let u = text.at(i).to_int()
-    if u < 128 {
+    let (ch, next) = @tesseract.char_at(text, i)
+    let cp = ch.to_int()
+    if cp < 128 {
       bytes = bytes + 1L
-      i = i + 1
-    } else if u < 2048 {
+    } else if cp < 2048 {
       bytes = bytes + 2L
-      i = i + 1
-    } else if u >= 55296 && u <= 56319 && i + 1 < n {
-      // A high surrogate followed by a low one is one character, and it is
-      // four bytes in UTF-8.
-      let low = text.at(i + 1).to_int()
-      if low >= 56320 && low <= 57343 {
-        bytes = bytes + 4L
-        i = i + 2
-      } else {
-        bytes = bytes + 3L
-        i = i + 1
-      }
-    } else {
+    } else if cp < 65536 {
       bytes = bytes + 3L
-      i = i + 1
+    } else {
+      bytes = bytes + 4L
     }
+    i = next
   }
   bytes
 }

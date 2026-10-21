@@ -21,12 +21,18 @@
 /// The clock is a value, not a call, for the reason the core's clock is: a test
 /// that reads the host clock cannot assert that something has not happened yet.
 /// `Manual` only moves when the caller says so.
+///
+/// The fields are **private**. A `Map` is mutable in place, so a public field
+/// would let a caller remove an entry behind the store's back — and the byte
+/// total, which is a running count of the values, would then be counting
+/// something that is no longer there. The limits a memory enforces are only
+/// worth anything if the store cannot be edited behind its own back.
 pub struct Memory {
-  entries : Map[String, Entry]
-  mut bytes : Int64
-  mut clock : MemoryClock
-  mut config : Config
-  stats : Stats
+  priv entries : Map[String, Entry]
+  priv mut bytes : Int64
+  priv mut clock : MemoryClock
+  priv mut config : Config
+  priv stats : Stats
 }
 
 ///|
@@ -101,6 +107,47 @@ pub fn Config::with_max_bytes(self : Config, max_bytes : Int64) -> Config {
 }
 
 ///|
+/// True when this configuration is one a memory can honour.
+///
+/// Two settings are not: a capacity of zero or less, and a negative byte
+/// budget. A memory that can hold nothing is not a memory, and a negative
+/// budget is a mistake that would otherwise read as the one value that means
+/// no limit at all.
+pub fn Config::is_valid(self : Config) -> Bool {
+  self.capacity > 0 && self.max_bytes >= 0L
+}
+
+///|
+/// The configuration a memory can actually hold.
+///
+/// A setting the memory cannot honour is replaced — a capacity of zero or
+/// less falls back to the default capacity, and a negative budget falls back
+/// to no budget — and the rest of the configuration is kept, because only the
+/// impossible setting is the caller's mistake.
+///
+/// A **new** memory sanitises rather than refuses, because it has no entries
+/// to protect: a memory that silently became unable to hold anything would
+/// lose nothing, since there is nothing in it yet. A memory that is already
+/// running **refuses** an invalid configuration and keeps the old one, for
+/// the same reason: there are entries in it, and a limit that changed under
+/// them would throw them away.
+fn usable(config : Config) -> Config {
+  {
+    ..config,
+    capacity: if config.capacity > 0 {
+      config.capacity
+    } else {
+      default_config().capacity
+    },
+    max_bytes: if config.max_bytes >= 0L {
+      config.max_bytes
+    } else {
+      0L
+    },
+  }
+}
+
+///|
 /// The same configuration with a different default TTL.
 pub fn Config::with_default_ttl(self : Config, ttl : Ttl) -> Config {
   { ..self, default_ttl: ttl, }
@@ -138,12 +185,23 @@ pub fn new_memory(capacity : Int32) -> Memory {
 
 ///|
 /// A memory with a full configuration, on the host clock.
+///
+/// A setting the memory cannot honour is replaced rather than refused — see
+/// `usable`. `Config::is_valid` says whether a configuration is one a memory
+/// can hold, and the memory's own `capacity` and `max_bytes` say what it
+/// ended up with.
 pub fn new_memory_with(config : Config) -> Memory {
+  new_memory_with_clock(config, memory_clock_system())
+}
+
+///|
+/// A memory with a full configuration, on a clock the caller controls.
+pub fn new_memory_with_clock(config : Config, clock : MemoryClock) -> Memory {
   {
     entries: Map([]),
     bytes: 0L,
-    clock: memory_clock_system(),
-    config,
+    clock,
+    config: usable(config),
     stats: {
       puts: 0L,
       updates: 0L,
@@ -155,14 +213,6 @@ pub fn new_memory_with(config : Config) -> Memory {
       expirations: 0L,
     },
   }
-}
-
-///|
-/// A memory with a full configuration, on a clock the caller controls.
-pub fn new_memory_with_clock(config : Config, clock : MemoryClock) -> Memory {
-  let m = new_memory_with(config)
-  m.clock = clock
-  m
 }
 
 ///|
@@ -206,7 +256,12 @@ pub fn Memory::clock(self : Memory) -> MemoryClock {
 
 ///|
 /// The current instant, in milliseconds since the Unix epoch.
+///
+/// Reading the clock is reading the store's state, so this removes what has
+/// expired first: the instant is reported, and the store is not holding
+/// anything that is already gone.
 pub fn Memory::now(self : Memory) -> Int64 {
+  ignore(self.expire_due())
   self.clock.read()
 }
 
@@ -216,7 +271,15 @@ pub fn Memory::now(self : Memory) -> Int64 {
 /// Returns false for a `System` clock, which does not move because it is the
 /// host's. Moving it by hand would make the memory's idea of time disagree
 /// with the timestamps it writes.
+///
+/// A negative interval is refused as well. A clock that runs backwards is not
+/// a clock, and an entry would then be *older* than the moment it was
+/// written — which makes the recency weight larger than one, and the search
+/// score larger than the `0.0..1.0` it is documented to be in.
 pub fn Memory::advance(self : Memory, ms : Int64) -> Bool {
+  if ms < 0L {
+    return false
+  }
   match self.clock {
     System => false
     Manual(now) => {
@@ -537,8 +600,12 @@ pub fn Memory::stats(self : Memory) -> Stats {
 
 ///|
 /// Remove every entry whose time is up, and say how many went.
+///
+/// The clock is read directly rather than through `now`, which removes what
+/// has expired — a call that swept the store from inside the sweep would
+/// never end.
 fn Memory::expire_due(self : Memory) -> Int64 {
-  let now = self.now()
+  let now = self.clock.read()
   let dead : Array[String] = []
   for (k, entry) in self.entries.iter() {
     if entry.expired(now) {

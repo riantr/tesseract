@@ -173,22 +173,32 @@ fn punct2_of(a : Int32, b : Int32) -> String? {
 /// generic rule the C# parser used. The two spellings of an embedded quote,
 /// `\'` and `''`, both produce `'`, and a dump written by either engine has to
 /// read back through this.
-fn read_escape(s : String, i : Int32) -> (Char, Int32) {
+///
+/// The text is a string and not a character because a character outside the
+/// basic plane is two code units and one character: an escape may name one,
+/// and half of it is not a character.
+fn read_escape(s : String, i : Int32) -> (String, Int32) {
   let c = cu_at(s, i + 1)
   if c == 110 {
-    ('\n', i + 2)
+    ("\n", i + 2)
   } else if c == 114 {
-    ('\r', i + 2)
+    ("\r", i + 2)
   } else if c == 116 {
-    ('\t', i + 2)
+    ("\t", i + 2)
   } else {
-    (cu_char(c), i + 2)
+    let (ch, next) = char_at(s, i + 1)
+    (ch.to_string(), next)
   }
 }
 
 ///|
 /// Scans the single-quoted literal that opens at `open`, returning its unescaped
 /// text and the offset just past the closing quote.
+///
+/// A character outside the basic plane is two code units and one character,
+/// and the literal is a value: it has to come out the way it went in, so the
+/// pair is copied whole. Copying the halves apart turned every emoji in a
+/// literal into two question marks.
 fn scan_text(s : String, open : Int32) -> Result[(String, Int32), LexError] {
   let b = StringBuilder::StringBuilder()
   let mut i = open + 1
@@ -201,8 +211,8 @@ fn scan_text(s : String, open : Int32) -> Result[(String, Int32), LexError] {
       return Err(UnterminatedString(open))
     }
     if c == 92 {
-      let (ch, next) = read_escape(s, i)
-      b.write_char(ch)
+      let (text, next) = read_escape(s, i)
+      b.write_string(text)
       i = next
       continue
     }
@@ -216,8 +226,9 @@ fn scan_text(s : String, open : Int32) -> Result[(String, Int32), LexError] {
       }
       return Ok((b.to_string(), i + 1))
     }
-    b.write_char(cu_char(c))
-    i = i + 1
+    let (ch, next) = char_at(s, i)
+    b.write_char(ch)
+    i = next
   }
   Err(UnterminatedString(open))
 }
@@ -345,8 +356,11 @@ pub fn lex(sql : String) -> Result[Array[Token], LexError] {
           closed = true
           break
         }
-        body.write_char(sql.at(j).unsafe_to_char())
-        j = j + 1
+        // A character outside the basic plane is two code units and one
+        // character, so the pair is copied whole.
+        let (ch, next) = char_at(sql, j)
+        body.write_char(ch)
+        j = next
       }
       if !closed {
         return Err(UnterminatedString(i))
