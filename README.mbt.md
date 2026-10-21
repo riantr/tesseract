@@ -15,7 +15,7 @@ same success flags, error codes, positions, coordinates and digits.
 ## Install
 
 ```sh
-moon add riantr/tesseract@0.1.2
+moon add riantr/tesseract@0.1.3
 ```
 
 The library is the package `riantr/tesseract/src/tesseract`:
@@ -29,11 +29,11 @@ import {
 
 `cmd/main`, `cmd/persist` and `cmd/gui` are the three executables in the same
 module — the command line, the file-backed store, and the window. Registry entry:
-[mooncakes.io/docs/riantr/tesseract@0.1.2](https://mooncakes.io/docs/riantr/tesseract@0.1.2).
+[mooncakes.io/docs/riantr/tesseract@0.1.3](https://mooncakes.io/docs/riantr/tesseract@0.1.3).
 
 ### What the release was checked on
 
-`moon 0.1.20261012` — the toolchain the release workflow installs, and the one
+`moon 0.1.20261016` — the toolchain the release workflow installs, and the one
 every number in this file was measured on. That is the toolchain this release
 was **verified** against, not a tested **minimum**: no older toolchain has been
 exercised here, and quoting a lower bound nobody ran would be a claim, not a fact.
@@ -168,6 +168,7 @@ src/tesseract/
   ast.mbt        the parsed shape of a statement
   parser.mbt     recursive descent, precedence climbing
   exec.mbt       the executor: expressions, aggregates, ordering, transactions
+  jsonpath.mbt   the JSON path: parsing it, walking it, reading a number from text
   serialize.mbt  .tsr JSON, .md table, .sql dump, lattice rendering
 cmd/main/        command line front end
 cmd/gui/         the proton desktop window
@@ -181,13 +182,14 @@ gui-smoke.mjs         end-to-end smoke test driven through Chromium DevTools
 
 The library has **no external dependencies**: the core library in this toolchain
 carries no file I/O and no stdin reader, so what the package needs is implemented
-here rather than pulled in. `cmd/main` inherits that. It does carry a clock —
-`@env.now()` from `moonbitlang/core/env`, which is the toolchain rather than a
-mooncakes import — so the wall clock cost one line of `moon.pkg`, not a
+here rather than pulled in. `cmd/main` inherits that. It does carry two core
+packages — `@env.now()` from `moonbitlang/core/env` and `@json.parse` from
+`moonbitlang/core/json` — which are the toolchain rather than mooncakes imports,
+so the wall clock and the JSON parser cost two lines of `moon.pkg`, not a
 dependency.
 
 `cmd/gui` is the one exception, and only because it needs a window: it depends on
-`moonbit-community/proton@0.3.4`. Proton is native-only, so that package declares
+`moonbit-community/proton@0.5.1`. Proton is native-only, so that package declares
 `supported_targets = "native"` and the rest of the module stays target-agnostic.
 
 ## The window
@@ -306,16 +308,17 @@ asked is worse than a filter that fails, so nothing here can fail that way.
 | statements | `CREATE DATABASE`, `INSERT`, `UPDATE`, `DELETE`, `SELECT`, transaction control |
 | columns | `key` `value` `position` `grid_position` `digit` `timestamp` `x` `y` `z` `w` `side` |
 | expressions | arithmetic, comparison, `AND` / `OR` / `NOT`, `LIKE`, parentheses |
-| functions | `length` `upper` `lower` `abs` `coords` `digits`; geometry `line` `slab` `peers`; aggregates `count` `sum` `min` `max` `avg` |
+| functions | `length` `upper` `lower` `abs` `coords` `digits` `json_extract`; geometry `line` `slab` `peers`; aggregates `count` `sum` `min` `max` `avg` |
 | clauses | `WHERE` `GROUP BY` `ORDER BY` `LIMIT` `OFFSET` `DISTINCT` |
 | three-valued logic | `null` is unknown; only `WHERE` folds it to false, everything else carries it |
-| **not supported** | joins, subqueries, window functions, `UNION`, CTEs, DDL beyond `CREATE DATABASE`, and reading *inside* the `value` JSON — there is no `json_extract`, so a value is opaque text and `value LIKE` is the only way to match part of one |
+| **not supported** | joins, subqueries, window functions, `UNION`, CTEs, and DDL beyond `CREATE DATABASE` |
 
 Two limits worth stating plainly, both measured rather than inferred:
 
 - The column list **is** the cell anatomy and it is fixed. There is no
   `CREATE TABLE`, so a record's own attributes are never queryable as columns —
-  only the eleven above, plus the whole `value` as opaque text.
+  only the eleven above, plus the whole `value`, which is text and is queryable
+  *inside* with `json_extract`.
 - A column name is checked against that list in **every** clause — `WHERE`,
   `GROUP BY`, `ORDER BY` and the select list — before a row is read, so an unknown
   column is an error whether or not the table has anything in it. It was not, and
@@ -387,14 +390,103 @@ row is kept only on a known true. `WHERE digit = NULL` is therefore not `digit =
 0` — it matches nothing, which is the difference between "no digit" and "digit
 zero".
 
+`IS NULL` and `IS NOT NULL` follow the same rule: `IS NULL` is true exactly when
+the value is unknown, and `IS NOT NULL` is true exactly when it is known. They
+were the other way round until 0.1.3 — a row that *had* a value satisfied `IS
+NULL`, and a row that had none satisfied `IS NOT NULL`. Nothing caught it,
+because the parser test only checked the shape of the node and no executor test
+asked what the predicate answered.
+
 Columns are `key`, `value`, `position` (or `grid_position`), `digit`, `timestamp`,
 `x`, `y`, `z`, `w` and `side`. An unknown one is `INVALID_COLUMNS`, **including on
 an empty table** — whether the table has data is not a fact that decides whether a
 statement is well formed, and a filter evaluated against no rows used to make an
 unknown column look acceptable.
 
-Functions: `length`, `upper`, `lower`, `abs`, `coords`, `digits`, the three
-geometry predicates, and the aggregates `count`, `sum`, `min`, `max`, `avg`.
+Functions: `length`, `upper`, `lower`, `abs`, `coords`, `digits`, `json_extract`,
+the three geometry predicates, and the aggregates `count`, `sum`, `min`, `max`,
+`avg`.
+
+### Reading inside a JSON value
+
+`value` is text, and it usually holds JSON. `json_extract(value, '$.a.b[0]')`
+reads a path inside it:
+
+```sql
+SELECT json_extract(value, '$.name') FROM tesseract WHERE key = 'user_001';
+SELECT key FROM tesseract WHERE json_extract(value, '$.age') > 30;
+SELECT sum(json_extract(value, '$.amount')) FROM tesseract;
+```
+
+The path grammar is deliberately small — `$` for the root, `.name` for an object
+key, `[n]` for an array index, and `["name"]` for a key that is not a plain
+identifier:
+
+```
+$            the whole document
+$.name       a key
+$.a.b        a key inside a key
+$.tags[1]    the second element of an array
+$["a b"]     a key that is not an identifier
+```
+
+The name matches SQLite's `json_extract` on purpose — the path syntax is the
+same, so the function is familiar — but nothing of SQLite is underneath. The
+parse is `moonbitlang/core/json`, which this package already depended on for
+its own `.tsr` reader.
+
+Two rules, and they are different rules because the mistakes live in different
+places:
+
+- **The path belongs to the statement.** A malformed path is an error
+  (`INVALID_INPUT`), never a null: the path is the same for every row, so it is
+  not the data's business whether it is well formed. Answering null for it
+  would be indistinguishable from a document that simply has no such field.
+- **The value belongs to the row.** A row whose text is not JSON, or whose JSON
+  has no such key, answers `null`. One row holding a plain string must not take
+  the whole query down with it.
+
+Both arguments are ordinary expressions, so the path can be a literal or a
+column holding one. A malformed path is an error whichever way it was spelled;
+in a `WHERE` the call is checked against a synthetic row before any row is read,
+and in a select list it is evaluated when the first row is — the same rule the
+engine already applies to an unknown function and to a wrong argument count.
+
+What a path can land on, and what it answers:
+
+| lands on | answers |
+|---|---|
+| a whole number | the integer, at full 64-bit width |
+| a number that is not a whole number | its own text, unrounded — `2.5` stays `2.5` |
+| a string | the string |
+| `true` / `false` | `1` / `0` |
+| `null` | `null` |
+| an object or an array | its JSON text, so it can be fed back in |
+| nothing there | `null` |
+
+A number is read from the **text** of the document rather than from a parsed
+double, because a double cannot hold a 64-bit integer exactly:
+`9007199254740993` is one more than `2^53`, and reading it as a double would
+change it by one without saying so. `SqlValue` has no floating-point variant
+either, so a number that is not a whole number keeps the text it was written as
+rather than being rounded to something the engine can hold.
+
+This is what `value LIKE '%name%'` could not do. The substring match found the
+*word* "name" — it matched a document whose only mention of it was
+`{"other":"name"}` — and it could neither compare a number nor follow a path:
+
+```sql
+-- matched every row that mentioned the word, including one with no such key
+SELECT key FROM tesseract WHERE value LIKE '%name%';
+
+-- matched the rows that have the key
+SELECT key FROM tesseract WHERE json_extract(value, '$.name') IS NOT NULL;
+```
+
+Not supported, and deliberately so: path wildcards (`$.a.*`), the `->` and `->>`
+operators, and the mutating and table-valued JSON functions (`json_set`,
+`json_array`, `json_each`). This is one function that reads a path, not a second
+query language.
 
 ### Grouping, ordering, limits
 
@@ -471,7 +563,7 @@ reachable and nothing outside it is produced.
 
 ```sh
 moon check --target all     # type-check every backend
-moon test                   # 220 tests
+moon test                   # 240 tests
 moon fmt --check            # canonical formatting
 
 node cli-smoke.mjs          # both CLIs, as real processes (builds them first)
@@ -644,7 +736,7 @@ the CEF runtime once:
 
 ```sh
 moon update                                        # refresh the registry index
-moon install moonbit-community/proton_cli@0.3.4   # match the library version
+moon install moonbit-community/proton_cli@0.5.1   # match the library version
 proton_cli cef setup                               # CEF runtime + subprocess helper
 
 proton_cli doctor                  # identity, toolchain and runtime
@@ -698,7 +790,7 @@ The gate, and the result it produced for this version:
 | `moon check --target js --deny-warn` | exit 0 |
 | `moon check --target native --deny-warn` | exit 0 |
 | `moon check --target wasm-gc --deny-warn` | exit 0 |
-| `moon test --target wasm --deny-warn` | **227 passed, 0 failed** |
+| `moon test --target wasm --deny-warn` | **240 passed, 0 failed** |
 | `moon build --target wasm` | exit 0 |
 | `typos` (v1.50.3 — the version the workflow pins) | exit 0 |
 | `node cli-smoke.mjs` | **14 passed, 0 failed** |
@@ -802,12 +894,14 @@ Stated plainly, because "it has a SQL surface" invites the wrong assumption.
   dressed up. The grid, the sudoku digit rule and the solver are the reason the
   package exists, and dropping them would leave a much smaller program.
 - **The window is Proton, not a native GUI toolkit.** `cmd/gui` depends on
-  `moonbit-community/proton@0.3.4` and is therefore native-only. The library and
+  `moonbit-community/proton@0.5.1` and is therefore native-only. The library and
   `cmd/main` do not depend on it.
 - **The core library has no third-party dependencies.** File I/O and stdin are
   not in this toolchain's core, so what the package needs is implemented here. The
-  one addition is `@env.now()` from `moonbitlang/core/env`, which is the
-  toolchain rather than a mooncakes import.
+  additions are `@env.now()` from `moonbitlang/core/env` and `@json.parse` from
+  `moonbitlang/core/json` — both are the toolchain rather than mooncakes imports,
+  and both were already here: the clock for the timestamps and the JSON parser
+  for the `.tsr` reader.
 
 Apache-2.0. Provenance of the ported behaviour is in
 [Deliberate departures](#deliberate-departures-from-the-c-original) below, which
