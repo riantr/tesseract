@@ -51,3 +51,45 @@ You can browse and install extra skills here:
   scientific computations), prefer assertion tests. You can use
   `moon coverage analyze > uncovered.log` to see which parts of your code are
   not covered by tests.
+
+## Releasing
+
+- **The README is a symlink.** `README.md` points at `README.mbt.md`, which
+  holds the real content and is the file `moon.mod` names as `readme`. Edit
+  `README.mbt.md`. Writing to `README.md` replaces the symlink with a regular
+  file, and the two then drift apart.
+
+- **Move the dependency pins by hand.** `moon update` refreshes the registry
+  index; it does not move the `import` block in `moon.mod`. Edit that block,
+  then run the whole gate **under the new pins** — being green under the old
+  ones does not count.
+
+- **The gate**, in the order it is run:
+
+  ```
+  moon fmt --check
+  moon check --target wasm --deny-warn
+  moon check --target js --deny-warn
+  moon check --target native --deny-warn
+  moon check --target wasm-gc --deny-warn
+  moon test --target wasm --deny-warn
+  moon build --target wasm
+  typos
+  node cli-smoke.mjs
+  node gui-smoke.mjs
+  ```
+
+  `gui-smoke.mjs` starts `proton_cli dev` itself, and `proton_cli` inherits the
+  working directory and looks for `proton.project.json` there — so it has to be
+  run **from the repository root** or the app never starts.
+
+- **The order of a release is fixed.** Update the dependencies, get the gate
+  green, *then* update the README, and only then cut the tag. A README that
+  describes a version the registry does not carry is worse than a stale one.
+
+- **gitee is the daily remote; github is the release remote.** Push master and
+  the tag to gitee first, then to github. The tag push to github is what
+  triggers `.github/workflows/publish.yml`, which is the only supported way to
+  publish — never `moon publish` by hand. `moon.mod`'s `version` must equal the
+  tag without its `v`; the workflow checks that and fails the release if they
+  disagree.
