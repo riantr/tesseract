@@ -90,9 +90,10 @@ function stamp_after(later, earlier) {
 }
 
 function main() {
-  log("building cmd/main and cmd/persist for native...");
+  log("building cmd/main, cmd/persist and cmd/memory for native...");
   moon(["build", "cmd/main", "--target", "native"]);
   moon(["build", "cmd/persist", "--target", "native"]);
+  moon(["build", "cmd/memory", "--target", "native"]);
 
   // A scratch directory this script owns outright, so it can clean up after
   // itself without touching anything of yours.
@@ -155,6 +156,36 @@ function main() {
     // The perturbation check: if B's own stamp had not actually moved past the
     // saved one, the line above would hold for the wrong reason.
     check("B's stamp really had moved past the saved one", stamp_after(markerB, stampedA), true, "A=" + stampedA + " B=" + markerB);
+
+    // ---- cmd/memory: the short-term memory tier ----
+    // The library's own tests cover the rules; this covers the *shell* around
+    // them, which is where a memory's problems actually show up: an argument
+    // that arrives mangled, a flag that is swallowed by a value, and a command
+    // that has to run against one shared store.
+    //
+    // The arguments go through `run` as their own argv entries, the way a
+    // shell splits them. A JSON value with quotes in it is the interesting
+    // case: it is exactly what a shell is worst at, and it is the case that
+    // would silently store the wrong text.
+    r = run("memory", ["--manual-clock", "put a {\"name\":\"ada\",\"age\":36}", "get a"], dir);
+    check("a JSON value reaches the store intact", r.out.includes('{"name":"ada","age":36}'), true, r.out + r.err);
+
+    r = run("memory", ["--manual-clock", "put a hello --ttl 1000", "get a", "advance 1000", "get a"], dir);
+    check("a value is there before its TTL is up", r.out.includes("a -> hello"), true, r.out + r.err);
+    check("and gone after", r.out.includes("a -> (nothing)"), true, r.out + r.err);
+
+    // A flag must not end up inside the value.
+    r = run("memory", ["put greeting hello world --ttl 1000", "get greeting"], dir);
+    check("a flag is not part of the value", r.out.includes("greeting -> hello world"), true, r.out + r.err);
+
+    r = run("memory", ["--capacity", "2", "put a 1", "put b 2", "put c 3", "keys"], dir);
+    check("the store stays at its capacity", r.out.includes("b, c"), true, r.out + r.err);
+
+    r = run("memory", ["--by", "structure", 'put a {"name":"ada","age":36}', 'put b {"name":"alan"}', 'search {"name":"x"}'], dir);
+    check("a search ranks by the similarity it was told to use", r.out.includes("b  1.000"), true, r.out + r.err);
+
+    r = run("memory", ["frobnicate"], dir);
+    check("an unknown command is reported, not ignored", r.err.includes("unknown command"), true, r.out + r.err);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

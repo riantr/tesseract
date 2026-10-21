@@ -1,0 +1,11 @@
+import {
+  "riantr/tesseract/src/tesseract",
+  "riantr/tesseract/src/tesseract_memory",
+  "moonbitlang/core/env",
+}
+
+/// The memory tier builds on every backend the core does, so this one does too.
+
+supported_targets = "native+wasm+wasm-gc+js"
+
+pkgtype(kind: "executable")

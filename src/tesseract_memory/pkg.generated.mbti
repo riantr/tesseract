@@ -1,0 +1,184 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "riantr/tesseract/src/tesseract_memory"
+
+// Values
+pub fn containment(String, String) -> Double
+
+pub fn cosine(String, String) -> Double
+
+pub fn default_config() -> Config
+
+pub fn evict_lfu() -> EvictionPolicy
+
+pub fn evict_lru() -> EvictionPolicy
+
+pub fn evict_oldest() -> EvictionPolicy
+
+pub fn evict_soonest_expiry() -> EvictionPolicy
+
+pub fn jaccard(String, String) -> Double
+
+pub fn memory_clock_manual(Int64) -> MemoryClock
+
+pub fn memory_clock_system() -> MemoryClock
+
+pub fn new_memory(Int32) -> Memory
+
+pub fn new_memory_with(Config) -> Memory
+
+pub fn new_memory_with_clock(Config, MemoryClock) -> Memory
+
+pub fn recency_decay(Int64) -> Recency
+
+pub fn recency_none() -> Recency
+
+pub fn similarity_containment() -> Similarity
+
+pub fn similarity_cosine() -> Similarity
+
+pub fn similarity_jaccard() -> Similarity
+
+pub fn similarity_score(String, String, Similarity) -> Double
+
+pub fn similarity_structure() -> Similarity
+
+pub fn structure_paths(String) -> Array[String]
+
+pub fn structure_similarity(String, String) -> Double
+
+pub fn token_set(String) -> Array[String]
+
+pub fn tokenize(String) -> Array[String]
+
+pub fn ttl_absolute(Int64) -> Ttl
+
+pub fn ttl_never() -> Ttl
+
+pub fn ttl_sliding(Int64) -> Ttl
+
+// Errors
+
+// Types and methods
+pub struct Config {
+  capacity : Int32
+  default_ttl : Ttl
+  eviction : EvictionPolicy
+  similarity : Similarity
+  recency : Recency
+}
+pub fn Config::with_capacity(Self, Int32) -> Self
+pub fn Config::with_default_ttl(Self, Ttl) -> Self
+pub fn Config::with_eviction(Self, EvictionPolicy) -> Self
+pub fn Config::with_recency(Self, Recency) -> Self
+pub fn Config::with_similarity(Self, Similarity) -> Self
+
+pub struct Entry {
+  key : String
+  value : String
+  added_at : Int64
+  deadline : Int64
+  window_ms : Int64
+  sliding : Bool
+  last_seen : Int64
+  hits : Int64
+}
+pub fn Entry::age_ms(Self, Int64) -> Int64
+pub fn Entry::describe(Self, Int64) -> String
+pub fn Entry::expired(Self, Int64) -> Bool
+pub fn Entry::idle_ms(Self, Int64) -> Int64
+pub fn Entry::touched(Self, Int64) -> Self
+
+pub enum EvictionPolicy {
+  LeastRecentlyUsed
+  LeastFrequentlyUsed
+  SoonestExpiry
+  OldestFirst
+}
+pub fn EvictionPolicy::name(Self) -> String
+
+pub struct Hit {
+  key : String
+  value : String
+  score : Double
+}
+pub fn Hit::key(Self) -> String
+pub fn Hit::score(Self) -> Double
+pub fn Hit::value(Self) -> String
+
+pub struct Memory {
+  entries : Map[String, Entry]
+  mut clock : MemoryClock
+  mut config : Config
+  stats : Stats
+}
+pub fn Memory::advance(Self, Int64) -> Bool
+pub fn Memory::capacity(Self) -> Int32
+pub fn Memory::clear(Self) -> Unit
+pub fn Memory::clock(Self) -> MemoryClock
+pub fn Memory::config(Self) -> Config
+pub fn Memory::contains(Self, String) -> Bool
+pub fn Memory::delete(Self, String) -> Bool
+pub fn Memory::entries(Self) -> Array[Entry]
+pub fn Memory::entry(Self, String) -> Entry?
+pub fn Memory::get(Self, String) -> String?
+pub fn Memory::keys(Self) -> Array[String]
+pub fn Memory::now(Self) -> Int64
+pub fn Memory::put(Self, String, String) -> Bool
+pub fn Memory::put_with_ttl(Self, String, String, Ttl) -> Bool
+pub fn Memory::search(Self, String, Int32) -> Array[Hit]
+pub fn Memory::search_keys(Self, String, Int32) -> Array[String]
+pub fn Memory::set_config(Self, Config) -> Bool
+pub fn Memory::size(Self) -> Int32
+pub fn Memory::stats(Self) -> Stats
+pub fn Memory::sweep(Self) -> Int64
+pub fn Memory::touch(Self, String) -> Bool
+
+pub enum MemoryClock {
+  System
+  Manual(Int64)
+}
+pub fn MemoryClock::is_manual(Self) -> Bool
+pub fn MemoryClock::name(Self) -> String
+pub fn MemoryClock::read(Self) -> Int64
+
+pub enum Recency {
+  None
+  Decay(Int64)
+}
+pub fn Recency::is_active(Self) -> Bool
+pub fn Recency::name(Self) -> String
+pub fn Recency::weight(Self, Int64) -> Double
+
+pub enum Similarity {
+  Jaccard
+  Cosine
+  Containment
+  Structure
+}
+pub fn Similarity::name(Self) -> String
+
+pub struct Stats {
+  mut puts : Int64
+  mut updates : Int64
+  mut gets : Int64
+  mut hits : Int64
+  mut misses : Int64
+  mut deletes : Int64
+  mut evictions : Int64
+  mut expirations : Int64
+}
+
+pub enum Ttl {
+  Never
+  Absolute(Int64)
+  Sliding(Int64)
+}
+pub fn Ttl::deadline(Self, Int64) -> (Int64, Bool)
+pub fn Ttl::is_never(Self) -> Bool
+pub fn Ttl::is_sliding(Self) -> Bool
+pub fn Ttl::name(Self) -> String
+pub fn Ttl::window_ms(Self) -> Int64
+
+// Type aliases
+
+// Traits

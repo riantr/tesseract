@@ -1,0 +1,14 @@
+import {
+  "riantr/tesseract/src/tesseract",
+  "moonbitlang/core/json",
+  "moonbitlang/core/math",
+}
+
+/// A short-term memory tier: entries that expire, a capacity the caller sets,
+/// and retrieval by similarity.
+///
+/// It depends on the core for the wall clock and the ASCII text helpers, and on
+/// `core/json` for the structure comparison. Nothing here is mooncakes-imported
+/// beyond the core package, so the tier builds on every backend the core does.
+
+supported_targets = "native+wasm+wasm-gc+js"
