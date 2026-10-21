@@ -186,6 +186,19 @@ function main() {
 
     r = run("memory", ["frobnicate"], dir);
     check("an unknown command is reported, not ignored", r.err.includes("unknown command"), true, r.out + r.err);
+
+    // The byte budget, from the shell. The library's tests cover the rules;
+    // this covers the flag reaching the store and the refusal reaching the
+    // terminal, which are the two things a caller sees.
+    r = run("memory", ["--max-bytes", "10", "put a 12345", "put b 12345", "put c 12345", "keys", "stats"], dir);
+    check("a byte budget evicts to stay inside it", r.out.includes("b, c"), true, r.out + r.err);
+    check("and the budget is reported", r.out.includes("bytes     10 of 10"), true, r.out + r.err);
+
+    r = run("memory", ["--max-bytes", "10", "put big 12345678901"], dir);
+    check("a value too large for the budget is refused", r.err.includes("could not store big"), true, r.out + r.err);
+
+    r = run("memory", ["put a hello", "stats"], dir);
+    check("a store with no budget says so", r.out.includes("bytes     5 (no limit)"), true, r.out + r.err);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

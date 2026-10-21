@@ -23,6 +23,7 @@
 /// `Manual` only moves when the caller says so.
 pub struct Memory {
   entries : Map[String, Entry]
+  mut bytes : Int64
   mut clock : MemoryClock
   mut config : Config
   stats : Stats
@@ -41,9 +42,10 @@ const NEVER_EXPIRES : Int64 = 9223372036854775807L
 /// How a memory behaves.
 ///
 /// Built with the `with_*` methods rather than by filling in fields, because a
-/// `Config` has five settings and every one of them has a sensible default.
+/// `Config` has six settings and every one of them has a sensible default.
 pub struct Config {
   capacity : Int32
+  max_bytes : Int64
   default_ttl : Ttl
   eviction : EvictionPolicy
   similarity : Similarity
@@ -69,11 +71,12 @@ pub struct Stats {
 }
 
 ///|
-/// The default configuration: a hundred entries, no expiry, LRU eviction,
-/// Jaccard similarity, and no recency weighting.
+/// The default configuration: a hundred entries, no byte budget, no expiry,
+/// LRU eviction, Jaccard similarity, and no recency weighting.
 pub fn default_config() -> Config {
   {
     capacity: 100,
+    max_bytes: 0L,
     default_ttl: ttl_never(),
     eviction: evict_lru(),
     similarity: similarity_jaccard(),
@@ -85,6 +88,16 @@ pub fn default_config() -> Config {
 /// The same configuration with a different capacity.
 pub fn Config::with_capacity(self : Config, capacity : Int32) -> Config {
   { ..self, capacity, }
+}
+
+///|
+/// The same configuration with a different byte budget.
+///
+/// A budget of zero means no limit. The budget counts the **values** in UTF-8
+/// bytes, so it is the size of what the memory holds rather than the number of
+/// things it holds — the two are different limits and a caller may want both.
+pub fn Config::with_max_bytes(self : Config, max_bytes : Int64) -> Config {
+  { ..self, max_bytes, }
 }
 
 ///|
@@ -128,6 +141,7 @@ pub fn new_memory(capacity : Int32) -> Memory {
 pub fn new_memory_with(config : Config) -> Memory {
   {
     entries: Map([]),
+    bytes: 0L,
     clock: memory_clock_system(),
     config,
     stats: {
@@ -163,8 +177,21 @@ pub fn Memory::config(self : Memory) -> Config {
 /// A capacity of zero or less is refused and the old configuration is kept: a
 /// memory that cannot hold anything is not a memory, and silently becoming one
 /// would lose the caller's entries on the next write.
+///
+/// A negative byte budget is refused for the same reason. Zero is the way to
+/// say "no budget", and a negative number is a mistake that would otherwise
+/// read as the one value that means no limit at all — so it is turned away
+/// rather than taken as permission to keep everything.
+///
+/// Lowering a limit does **not** evict on the spot. The store is brought back
+/// within its new limits by the next write that has to make room; until then
+/// `size_bytes` can be larger than `max_bytes`, and that is the honest report
+/// of a store that is over its budget.
 pub fn Memory::set_config(self : Memory, config : Config) -> Bool {
   if config.capacity <= 0 {
+    return false
+  }
+  if config.max_bytes < 0L {
     return false
   }
   self.config = config
@@ -240,7 +267,14 @@ pub fn Memory::put(self : Memory, key : String, value : String) -> Bool {
 /// Write a value under a key, with a TTL of this entry's own.
 ///
 /// A key that is already there is replaced in place, and only a *new* key can
-/// push the store over its capacity.
+/// push the store over its **capacity**: overwriting one replaces a value and
+/// does not grow the number of entries.
+///
+/// The byte budget is a different limit, and a replacement can push the store
+/// over it — a five-byte value replaced by a two-hundred-byte one is two
+/// hundred and five bytes of content, not five. So a replacement makes room
+/// too, when it has to, and it evicts **other** entries: the key being written
+/// is never the one thrown away to make room for itself.
 pub fn Memory::put_with_ttl(
   self : Memory,
   key : String,
@@ -251,17 +285,18 @@ pub fn Memory::put_with_ttl(
   let now = self.now()
   let (deadline, sliding) = ttl.deadline(now)
   let window = ttl.window_ms()
-  let already = self.entries.contains(key)
-  if !already && self.entries.length() >= self.config.capacity {
-    match self.pick_victim() {
-      Some(victim) => {
-        self.entries.remove(victim)
-        self.stats.evictions = self.stats.evictions + 1L
-      }
-      None => return false
-    }
+  let value_bytes = utf8_bytes(value)
+  // A value that cannot fit in an *empty* store is refused here, before
+  // anything is evicted. Refusing it later would cost the caller every entry
+  // it already has, and a write that fails should not empty the memory.
+  if self.config.max_bytes > 0L && value_bytes > self.config.max_bytes {
+    return false
   }
-  self.entries.set(key, {
+  let already = self.entries.contains(key)
+  if !self.make_room(key, value_bytes, !already) {
+    return false
+  }
+  self.write(key, {
     key,
     value,
     added_at: now,
@@ -279,6 +314,118 @@ pub fn Memory::put_with_ttl(
 }
 
 ///|
+/// How many bytes the stored values take up.
+///
+/// UTF-8 bytes, because that is the unit a budget is stated in. The keys are
+/// not counted: the budget is about the content, and the number of keys is
+/// bounded by the capacity.
+pub fn Memory::size_bytes(self : Memory) -> Int64 {
+  ignore(self.expire_due())
+  self.bytes
+}
+
+///|
+/// The byte budget in force. Zero means no limit.
+pub fn Memory::max_bytes(self : Memory) -> Int64 {
+  self.config.max_bytes
+}
+
+///|
+/// Evicts until a write of `value_bytes` would fit, or reports that it cannot.
+///
+/// Two limits, and the store has to satisfy **both**: at most `capacity`
+/// entries, and at most `max_bytes` of values. A caller who sets both gets
+/// the smaller of the two, which is the point of setting both.
+///
+/// The question is asked of the store as it will be **after** the write, not
+/// as it is now: the key's own old value is subtracted, because the write
+/// replaces it. Asking about the present would make every replacement look
+/// like an addition, and a store that evicts on a replacement is a store that
+/// throws away a memory the caller did not ask to lose.
+///
+/// The key being written is **never** the victim. Evicting it to make room
+/// for itself would be work done twice — the entry would be thrown away and
+/// then written again — and it would take the store's byte total with it, so
+/// the arithmetic would be counting a value that is no longer there.
+fn Memory::make_room(
+  self : Memory,
+  key : String,
+  value_bytes : Int64,
+  new_key : Bool,
+) -> Bool {
+  let mut ok = true
+  while self.over_capacity_after(key, value_bytes, new_key) {
+    let exclude : String? = if new_key { None } else { Some(key) }
+    match self.pick_victim(exclude) {
+      Some(victim) => {
+        ignore(self.forget(victim))
+        self.stats.evictions = self.stats.evictions + 1L
+      }
+      None => {
+        ok = false
+        break
+      }
+    }
+  }
+  ok
+}
+
+///|
+/// True when the store, as it will be after this write, is over either limit.
+///
+/// The count only grows for a new key, so only a new key can be over the
+/// capacity. The byte total grows for a replacement too, and the question
+/// there is whether the store will fit **after** the old value is gone and
+/// the new one is in.
+fn Memory::over_capacity_after(
+  self : Memory,
+  key : String,
+  value_bytes : Int64,
+  new_key : Bool,
+) -> Bool {
+  if new_key && self.entries.length() + 1 > self.config.capacity {
+    return true
+  }
+  if self.config.max_bytes > 0L {
+    let final_bytes = match self.entries.get(key) {
+      Some(old) => self.bytes - utf8_bytes(old.value) + value_bytes
+      None => self.bytes + value_bytes
+    }
+    if final_bytes > self.config.max_bytes {
+      return true
+    }
+  }
+  false
+}
+
+///|
+/// Writes an entry, keeping the byte total right.
+///
+/// Every write goes through here, and so does every removal, so the total
+/// cannot drift: a write subtracts whatever the key was holding before and
+/// adds what it holds now, and a removal subtracts what it held.
+fn Memory::write(self : Memory, key : String, entry : Entry) -> Unit {
+  match self.entries.get(key) {
+    Some(old) => self.bytes = self.bytes - utf8_bytes(old.value)
+    None => ()
+  }
+  self.entries.set(key, entry)
+  self.bytes = self.bytes + utf8_bytes(entry.value)
+}
+
+///|
+/// Removes an entry, keeping the byte total right.
+fn Memory::forget(self : Memory, key : String) -> Bool {
+  match self.entries.remove_and_get(key) {
+    None => false
+    Some(entry) => {
+      self.bytes = self.bytes - utf8_bytes(entry.value)
+      true
+    }
+  }
+}
+
+///|
 /// Read a value, and count it as a use.
 ///
 /// A hit touches the entry: the idle clock restarts, the hit count goes up,
@@ -293,7 +440,7 @@ pub fn Memory::get(self : Memory, key : String) -> String? {
       None
     }
     Some(entry) => {
-      self.entries.set(key, entry.touched(self.now()))
+      self.write(key, entry.touched(self.now()))
       self.stats.hits = self.stats.hits + 1L
       Some(entry.value)
     }
@@ -321,7 +468,7 @@ pub fn Memory::touch(self : Memory, key : String) -> Bool {
   match self.entries.get(key) {
     None => false
     Some(entry) => {
-      self.entries.set(key, entry.touched(self.now()))
+      self.write(key, entry.touched(self.now()))
       true
     }
   }
@@ -333,13 +480,11 @@ pub fn Memory::touch(self : Memory, key : String) -> Bool {
 /// Returns false when there was nothing to forget.
 pub fn Memory::delete(self : Memory, key : String) -> Bool {
   ignore(self.expire_due())
-  let removed = self.entries.remove_and_get(key)
-  match removed {
-    None => false
-    Some(_) => {
-      self.stats.deletes = self.stats.deletes + 1L
-      true
-    }
+  if self.forget(key) {
+    self.stats.deletes = self.stats.deletes + 1L
+    true
+  } else {
+    false
   }
 }
 
@@ -381,6 +526,7 @@ pub fn Memory::entry(self : Memory, key : String) -> Entry? {
 /// requests and was then cleared has still served two thousand requests.
 pub fn Memory::clear(self : Memory) -> Unit {
   self.entries.clear()
+  self.bytes = 0L
 }
 
 ///|
@@ -401,8 +547,9 @@ fn Memory::expire_due(self : Memory) -> Int64 {
   }
   let mut gone = 0L
   for k in dead {
-    self.entries.remove(k)
-    gone = gone + 1L
+    if self.forget(k) {
+      gone = gone + 1L
+    }
   }
   self.stats.expirations = self.stats.expirations + gone
   gone
@@ -414,10 +561,21 @@ fn Memory::expire_due(self : Memory) -> Int64 {
 /// The tie-break is the key, so the same sequence of operations always evicts
 /// the same entry. A store that evicts differently on two runs of the same
 /// program is a store nobody can test.
-fn Memory::pick_victim(self : Memory) -> String? {
+///
+/// `exclude` is the key being written, when there is one. It is never the
+/// victim: an entry is not evicted to make room for the value that is about
+/// to replace it.
+fn Memory::pick_victim(self : Memory, exclude : String?) -> String? {
   let mut best : String? = None
   let mut best_rank = 0L
   for (k, entry) in self.entries.iter() {
+    let skip = match exclude {
+      Some(x) => k == x
+      None => false
+    }
+    if skip {
+      continue
+    }
     let rank = match self.config.eviction {
       LeastRecentlyUsed => entry.last_seen
       LeastFrequentlyUsed => entry.hits

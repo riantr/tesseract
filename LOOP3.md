@@ -65,7 +65,7 @@ the difference is not cosmetic:
 
 | | durable store (`src/tesseract`) | short-term memory (`src/tesseract_memory`) |
 |---|---|---|
-| bound | the lattice, `side^4` cells | a capacity the caller sets |
+| bound | the lattice, `side^4` cells | a capacity the caller sets — entries and bytes |
 | key | not unique; one key per cell | one entry per key |
 | lifetime | forever | a TTL, absolute or sliding |
 | over capacity | `INVALID_POSITION` | an eviction, by a named policy |
@@ -112,6 +112,11 @@ Which one is a policy, and the policies are the ones people actually mean:
 Ties are broken by key, so the same sequence of operations always evicts the
 same entry. A store that evicts differently on two runs of the same program is
 a store nobody can test.
+
+The capacity is **two** limits, not one: how many entries, and how many bytes of
+values. A count of entries is not a bound on memory — a hundred one-byte
+entries and ten hundred-byte entries are the same shape to the count and not to
+the bytes — so both are in force and the tighter one binds.
 
 **Similarity retrieval.** Find the entries most like this text, ranked. Four
 ways to mean "like", and they answer different questions:
@@ -163,11 +168,19 @@ at `now == D`. Expiry is **eager**: any operation that observes the clock first
 purges what has expired, so the store never holds a dead entry and `size` is
 the number of live entries.
 
-### Step 3 — capacity eviction
+### Step 3 — capacity eviction, and a byte budget
 
 `put` of a **new** key when the store is full evicts one entry by the policy
 and then inserts. `put` of an **existing** key replaces it in place and evicts
 nothing — overwriting a key must not cost another key its place.
+
+That second rule is about the **count**. A second limit was added afterwards:
+`max_bytes`, a budget on the values in UTF-8 bytes, because a count of entries
+is not a bound on memory and a caller who says "capacity" usually means one of
+the two without saying which. Both limits are in force at once and the tighter
+one binds. A replacement can grow the byte total even though it does not grow
+the count, so a replacement makes room when it has to — and never by evicting
+the key being written.
 
 ### Step 4 — similarity
 
@@ -266,18 +279,70 @@ cannot assert anything about time.
 the CLI matches on `Ttl` to work out a window — and construction is what is
 refused.
 
+### A byte budget, because "capacity" reads as a size
+
+The memory bounded itself by **entry count**, and that is a bound on the number
+of things rather than on the amount of memory. A caller who says "capacity"
+usually means one of the two without saying which, so a second limit was
+added: `max_bytes`, a budget on the **values**, and the tighter of the two is
+the one that binds.
+
+The unit is not a detail. `String::length` counts **code units**: `苹果` is 2
+and `🍎` is 2, while in UTF-8 they are 6 and 4. A budget in code units would
+shrink when the content turned Chinese, so the number would move under the
+caller's feet depending on the language of the text — and a memory whose
+budget changes with the language of what it holds is a memory nobody can reason
+about. `utf8_bytes` walks the code units and counts the UTF-8 bytes instead:
+1 below `0x80`, 2 below `0x800`, 4 for a surrogate pair, 3 otherwise.
+
+### The first version of the budget had two holes, and both were on one path
+
+The rule v0.1.4 already had is "overwriting a key evicts nothing", because
+overwriting a key must not cost another key its place. That rule is about the
+**count**. It is wrong for a **byte** budget, and the first implementation
+carried it over unchanged: a replacement skipped the room-making altogether.
+
+| | what the first version did | what it does now |
+|---|---|---|
+| a 5-byte value replaced by a 10-byte one, in a 10-byte store | the store held **15** bytes | the store holds 10 |
+| a value too large for the whole budget | every entry was evicted, and *then* the write was refused | the write is refused and the store is untouched |
+
+Both failures are one failure: **the budget was enforced on one path and not
+the other**. The entry count and the byte total are two different limits, and
+the code treated them as though they behaved the same way.
+
+The fix asks the question once, of the store as it will be **after** the write:
+the key's own old value is subtracted, because the write replaces it, and the
+answer is whether *that* fits. A replacement therefore makes room when it has
+to — and the key being written is never the entry evicted to make room for
+itself, because evicting it would be throwing the value away and then writing
+it again, and the byte total would be counting a value that is no longer
+there.
+
+The second hole was the same mistake from the other side. A value too large
+for the whole budget was refused *after* the room-making had run, so the store
+was emptied on the way to a refusal. A write that fails must not cost the
+caller the entries it already has, so "can this ever fit?" is now asked
+**before** anything is evicted.
+
+Both holes were found by writing the tests first and then putting the old
+behaviour back to see whether they failed: `15 != 10` for the broken budget,
+`0 != 2` for the emptied store. A regression test that passes on the code it
+was written against is not a regression test.
+
 ### The gates
 
 ```
 fmt 0   check 0 (wasm, js, native, wasm-gc)
-moon test   266 passed / 0 failed   (was 240 before this LOOP)
-cli-smoke.mjs   20 PASS / 0 FAIL   (was 14)
+moon test   276 passed / 0 failed   (was 240 before this LOOP)
+cli-smoke.mjs   24 PASS / 0 FAIL   (was 14)
 ```
 
-`memory_test.mbt` holds 26 tests, one per rule rather than one per method, and
+`memory_test.mbt` holds 36 tests, one per rule rather than one per method, and
 each names the behaviour it protects: the TTL boundary, the two kinds of
 deadline, the four eviction policies, the tie-break, the four similarities, the
-recency weight, and the fact that a search is not a use.
+recency weight, the fact that a search is not a use, and the two limits on
+size — the entry count and the byte budget — which are two limits and not one.
 
 ---
 

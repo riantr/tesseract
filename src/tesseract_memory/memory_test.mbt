@@ -520,3 +520,206 @@ test "the capacity is reported, and the store never exceeds it" {
   assert_eq(m.size(), 3)
   assert_eq(m.capacity(), 3)
 }
+
+///|
+/// A text is measured in UTF-8 bytes, not in code units.
+///
+/// `String::length` counts code units: `苹果` is 2 and `🍎` is 2, while in
+/// UTF-8 they are 6 and 4. A budget measured in code units would shrink when
+/// the content turned Chinese, which is not a number anybody can reason about.
+test "a text is measured in UTF-8 bytes, not in code units" {
+  assert_eq(@tesseract_memory.utf8_bytes(""), 0L)
+  assert_eq(@tesseract_memory.utf8_bytes("abc"), 3L)
+  assert_eq(@tesseract_memory.utf8_bytes("café"), 5L)
+  assert_eq(@tesseract_memory.utf8_bytes("苹果"), 6L)
+  assert_eq(@tesseract_memory.utf8_bytes("🍎"), 4L)
+}
+
+///|
+/// A byte budget evicts until the store fits.
+///
+/// The capacity limit counts entries and the byte limit counts content, and
+/// they are different limits: a store of a hundred one-byte entries and a
+/// store of ten hundred-byte entries are the same shape to the first and not
+/// to the second.
+test "a byte budget evicts until the store fits" {
+  let m = @tesseract_memory.new_memory_with_clock(
+    @tesseract_memory.default_config().with_max_bytes(10L),
+    @tesseract_memory.memory_clock_manual(0L),
+  )
+  ignore(m.put("a", "12345"))
+  assert_eq(m.size_bytes(), 5L)
+  ignore(m.put("b", "12345"))
+  assert_eq(m.size_bytes(), 10L)
+  // The next one does not fit, so the least recently used goes.
+  ignore(m.put("c", "12345"))
+  assert_eq(m.size_bytes(), 10L)
+  assert_eq(m.size(), 2)
+  assert_eq(keys_of(m), "b,c")
+  assert_eq(m.stats().evictions, 1L)
+}
+
+///|
+/// A value larger than the whole budget is refused.
+///
+/// The budget is what the memory holds. A value that does not fit in it does
+/// not fit in it, and refusing it loudly is better than accepting it and
+/// breaking the limit the caller asked for.
+test "a value larger than the whole budget is refused" {
+  let m = @tesseract_memory.new_memory_with_clock(
+    @tesseract_memory.default_config().with_max_bytes(10L),
+    @tesseract_memory.memory_clock_manual(0L),
+  )
+  assert_false(m.put("big", "12345678901"))
+  assert_eq(m.size(), 0)
+  assert_eq(m.size_bytes(), 0L)
+  // A value that does fit is taken.
+  assert_true(m.put("small", "12345"))
+  assert_eq(m.size_bytes(), 5L)
+}
+
+///|
+/// The byte total is right after everything that can change it.
+///
+/// A total that drifts is worse than no total: the budget stops meaning
+/// anything, and the drift only shows up as an eviction that happens too
+/// early or too late.
+test "the byte total is right after everything that can change it" {
+  let m = @tesseract_memory.new_memory_with_clock(
+    @tesseract_memory.default_config().with_max_bytes(1000L),
+    @tesseract_memory.memory_clock_manual(0L),
+  )
+  ignore(m.put("a", "12345"))
+  assert_eq(m.size_bytes(), 5L)
+  // Replacing a value with a longer one.
+  ignore(m.put("a", "1234567890"))
+  assert_eq(m.size_bytes(), 10L)
+  // Replacing it with a shorter one.
+  ignore(m.put("a", "xy"))
+  assert_eq(m.size_bytes(), 2L)
+  // Reading it does not change its size.
+  ignore(m.get("a"))
+  assert_eq(m.size_bytes(), 2L)
+  // Forgetting it.
+  ignore(m.delete("a"))
+  assert_eq(m.size_bytes(), 0L)
+  // And an expiry.
+  ignore(m.put_with_ttl("b", "123", @tesseract_memory.ttl_absolute(1000L)))
+  assert_eq(m.size_bytes(), 3L)
+  ignore(m.advance(1000L))
+  assert_eq(m.size_bytes(), 0L)
+}
+
+///|
+/// The two limits work together, and the smaller one is the one that binds.
+test "the two limits work together, and the smaller one is the one that binds" {
+  let m = @tesseract_memory.new_memory_with_clock(
+    @tesseract_memory.default_config().with_capacity(2).with_max_bytes(1000L),
+    @tesseract_memory.memory_clock_manual(0L),
+  )
+  ignore(m.put("a", "1"))
+  ignore(m.put("b", "2"))
+  ignore(m.put("c", "3"))
+  // The entry limit binds: three entries would be over a capacity of two.
+  assert_eq(m.size(), 2)
+  assert_eq(m.size_bytes(), 2L)
+}
+
+///|
+/// Clearing the store empties the byte total too.
+test "clearing the store empties the byte total too" {
+  let m = @tesseract_memory.new_memory_with_clock(
+    @tesseract_memory.default_config().with_max_bytes(1000L),
+    @tesseract_memory.memory_clock_manual(0L),
+  )
+  ignore(m.put("a", "12345"))
+  ignore(m.put("b", "67890"))
+  assert_eq(m.size_bytes(), 10L)
+  m.clear()
+  assert_eq(m.size_bytes(), 0L)
+  assert_eq(m.size(), 0)
+}
+
+///|
+/// Replacing a value with a bigger one makes room, and does not evict itself.
+///
+/// The capacity counts entries, so a replacement never grows it. The byte
+/// budget counts content, and a replacement can grow that: five bytes replaced
+/// by ten is ten bytes of content plus whatever else is there, not five. So a
+/// replacement makes room too — and the key being written is never the one
+/// that goes, because evicting it would be throwing the value away and then
+/// writing it again.
+test "replacing a value with a bigger one makes room, and does not evict itself" {
+  let m = @tesseract_memory.new_memory_with_clock(
+    @tesseract_memory.default_config().with_max_bytes(10L),
+    @tesseract_memory.memory_clock_manual(0L),
+  )
+  ignore(m.put("a", "12345"))
+  ignore(m.put("b", "12345"))
+  assert_eq(m.size_bytes(), 10L)
+  // `a` grows from five bytes to ten. The store would hold fifteen, so `b` goes.
+  assert_true(m.put("a", "1234567890"))
+  assert_eq(m.size_bytes(), 10L)
+  assert_eq(keys_of(m), "a")
+  assert_eq(m.get("a"), Some("1234567890"))
+  // One eviction and not two: the key being written was not thrown away and
+  // written again.
+  assert_eq(m.stats().evictions, 1L)
+}
+
+///|
+/// A refused write leaves the store as it was.
+///
+/// A value too large for the whole budget is turned away. Turning it away must
+/// not cost the caller the entries it already had: a write that fails should
+/// leave the memory alone, not empty it on the way out.
+test "a refused write leaves the store as it was" {
+  let m = @tesseract_memory.new_memory_with_clock(
+    @tesseract_memory.default_config().with_max_bytes(10L),
+    @tesseract_memory.memory_clock_manual(0L),
+  )
+  ignore(m.put("a", "12345"))
+  ignore(m.put("b", "12345"))
+  assert_false(m.put("big", "12345678901"))
+  assert_eq(m.size(), 2)
+  assert_eq(keys_of(m), "a,b")
+  assert_eq(m.size_bytes(), 10L)
+  assert_eq(m.stats().evictions, 0L)
+}
+
+///|
+/// A negative byte budget is refused rather than read as no budget at all.
+///
+/// Zero is how a caller says "no budget". A negative number is a mistake, and
+/// the one value that should not mean "keep everything" is a number that is
+/// smaller than none.
+test "a negative byte budget is refused rather than read as no budget at all" {
+  let m = memory_at(0L)
+  assert_false(
+    m.set_config(@tesseract_memory.default_config().with_max_bytes(-1L)),
+  )
+  assert_eq(m.max_bytes(), 0L)
+}
+
+///|
+/// Lowering the budget does not evict on the spot.
+///
+/// The store is brought back within a new limit by the next write that has to
+/// make room. Until then the honest report is a store that is over its
+/// budget, rather than one that has quietly thrown something away.
+test "lowering the budget does not evict on the spot" {
+  let m = @tesseract_memory.new_memory_with_clock(
+    @tesseract_memory.default_config().with_max_bytes(1000L),
+    @tesseract_memory.memory_clock_manual(0L),
+  )
+  ignore(m.put("a", "12345"))
+  assert_true(
+    m.set_config(@tesseract_memory.default_config().with_max_bytes(1L)),
+  )
+  assert_eq(m.size_bytes(), 5L)
+  assert_eq(m.max_bytes(), 1L)
+  // And the next write brings it back within the budget.
+  ignore(m.put("b", "1"))
+  assert_eq(m.size_bytes(), 1L)
+  assert_eq(keys_of(m), "b")
+}

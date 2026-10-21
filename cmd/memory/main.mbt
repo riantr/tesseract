@@ -18,6 +18,7 @@
 /// | option | meaning |
 /// |---|---|
 /// | `--capacity N` | how many entries the memory holds (default 100) |
+/// | `--max-bytes N` | a budget for the stored values, in UTF-8 bytes (0: none) |
 /// | `--ttl MS` | the default lifetime of a `put` (default: never) |
 /// | `--evict NAME` | `lru`, `lfu`, `expiry` or `oldest` |
 /// | `--by NAME` | `jaccard`, `cosine`, `containment` or `structure` |
@@ -109,6 +110,9 @@ fn print_help() -> Unit {
   out("options:")
   out(
     "  --capacity N              how many entries the memory holds (default 100)",
+  )
+  out(
+    "  --max-bytes N             a budget for the stored values, in UTF-8 bytes (0: none)",
   )
   out(
     "  --ttl MS                  the default lifetime of a put (default: never)",
@@ -218,6 +222,7 @@ fn demo(m : @tesseract_memory.Memory) -> Unit {
   out(
     "   size      " + m.size().to_string() + " of " + m.capacity().to_string(),
   )
+  out(bytes_line(m, "   "))
   out("   puts      " + s.puts.to_string())
   out("   gets      " + s.gets.to_string())
   out("   hits      " + s.hits.to_string())
@@ -243,10 +248,26 @@ fn format_score(score : Double) -> String {
 }
 
 ///|
+/// The byte total, and the budget it is measured against.
+///
+/// A budget of zero is no budget, and "of 0" would read like a store that is
+/// over its limit by everything it holds. So the limit says what it is.
+fn bytes_line(m : @tesseract_memory.Memory, indent : String) -> String {
+  let used = m.size_bytes().to_string()
+  let limit = m.max_bytes()
+  if limit == 0L {
+    indent + "bytes     " + used + " (no limit)"
+  } else {
+    indent + "bytes     " + used + " of " + limit.to_string()
+  }
+}
+
+///|
 fn main {
   let all = @env.args()
   let argv = if all.length() > 0 { all[1:] } else { all }
   let mut capacity = 100
+  let mut max_bytes = 0L
   let mut default_ttl = @tesseract_memory.ttl_never()
   let mut eviction = @tesseract_memory.evict_lru()
   let mut similarity = @tesseract_memory.similarity_jaccard()
@@ -258,6 +279,11 @@ fn main {
     let a = argv[i]
     if a == "--capacity" && i + 1 < argv.length() {
       capacity = @tesseract.parse_int(argv[i + 1]).unwrap_or(100)
+      i = i + 2
+      continue
+    }
+    if a == "--max-bytes" && i + 1 < argv.length() {
+      max_bytes = @tesseract.parse_int(argv[i + 1]).unwrap_or(0).to_int64()
       i = i + 2
       continue
     }
@@ -300,6 +326,7 @@ fn main {
   }
   let config = @tesseract_memory.default_config()
     .with_capacity(capacity)
+    .with_max_bytes(max_bytes)
     .with_default_ttl(default_ttl)
     .with_eviction(eviction)
     .with_similarity(similarity)
@@ -416,6 +443,7 @@ fn run(m : @tesseract_memory.Memory, command : String) -> Unit {
   if verb == "stats" {
     let s = m.stats()
     out("size      " + m.size().to_string() + " of " + m.capacity().to_string())
+    out(bytes_line(m, ""))
     out("puts      " + s.puts.to_string())
     out("updates   " + s.updates.to_string())
     out("gets      " + s.gets.to_string())

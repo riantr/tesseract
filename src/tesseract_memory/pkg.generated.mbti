@@ -56,11 +56,14 @@ pub fn ttl_never() -> Ttl
 
 pub fn ttl_sliding(Int64) -> Ttl
 
+pub fn utf8_bytes(String) -> Int64
+
 // Errors
 
 // Types and methods
 pub struct Config {
   capacity : Int32
+  max_bytes : Int64
   default_ttl : Ttl
   eviction : EvictionPolicy
   similarity : Similarity
@@ -69,6 +72,7 @@ pub struct Config {
 pub fn Config::with_capacity(Self, Int32) -> Self
 pub fn Config::with_default_ttl(Self, Ttl) -> Self
 pub fn Config::with_eviction(Self, EvictionPolicy) -> Self
+pub fn Config::with_max_bytes(Self, Int64) -> Self
 pub fn Config::with_recency(Self, Recency) -> Self
 pub fn Config::with_similarity(Self, Similarity) -> Self
 
@@ -107,6 +111,7 @@ pub fn Hit::value(Self) -> String
 
 pub struct Memory {
   entries : Map[String, Entry]
+  mut bytes : Int64
   mut clock : MemoryClock
   mut config : Config
   stats : Stats
@@ -122,6 +127,7 @@ pub fn Memory::entries(Self) -> Array[Entry]
 pub fn Memory::entry(Self, String) -> Entry?
 pub fn Memory::get(Self, String) -> String?
 pub fn Memory::keys(Self) -> Array[String]
+pub fn Memory::max_bytes(Self) -> Int64
 pub fn Memory::now(Self) -> Int64
 pub fn Memory::put(Self, String, String) -> Bool
 pub fn Memory::put_with_ttl(Self, String, String, Ttl) -> Bool
@@ -129,6 +135,7 @@ pub fn Memory::search(Self, String, Int32) -> Array[Hit]
 pub fn Memory::search_keys(Self, String, Int32) -> Array[String]
 pub fn Memory::set_config(Self, Config) -> Bool
 pub fn Memory::size(Self) -> Int32
+pub fn Memory::size_bytes(Self) -> Int64
 pub fn Memory::stats(Self) -> Stats
 pub fn Memory::sweep(Self) -> Int64
 pub fn Memory::touch(Self, String) -> Bool
