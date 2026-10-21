@@ -15,7 +15,7 @@ same success flags, error codes, positions, coordinates and digits.
 ## Install
 
 ```sh
-moon add riantr/tesseract@0.1.3
+moon add riantr/tesseract@0.1.4
 ```
 
 The library is the package `riantr/tesseract/src/tesseract`:
@@ -27,9 +27,10 @@ import {
 }
 ```
 
-`cmd/main`, `cmd/persist` and `cmd/gui` are the three executables in the same
-module — the command line, the file-backed store, and the window. Registry entry:
-[mooncakes.io/docs/riantr/tesseract@0.1.3](https://mooncakes.io/docs/riantr/tesseract@0.1.3).
+`cmd/main`, `cmd/persist`, `cmd/memory`, `cmd/sa` and `cmd/gui` are the five
+executables in the same module — the command line, the file-backed store, the
+short-term memory, the scan database and the window. Registry entry:
+[mooncakes.io/docs/riantr/tesseract@0.1.4](https://mooncakes.io/docs/riantr/tesseract@0.1.4).
 
 ### What the release was checked on
 
@@ -43,10 +44,12 @@ exercised here, and quoting a lower bound nobody ran would be a claim, not a fac
 | Package | Kind | Native | Wasm | Wasm-GC | JS |
 |---|---|---:|---:|---:|---:|
 | `riantr/tesseract/src/tesseract` | library | yes | yes | yes | yes |
+| `riantr/tesseract/src/tesseract_memory` | library | yes | yes | yes | yes |
 | `riantr/tesseract/src/tesseract_dgp` | library | yes | yes | yes | yes |
 | `riantr/tesseract/src/tesseract_sqlite` | library | yes | yes | — | — |
 | `riantr/tesseract/src/tesseract_sa` | library | yes | yes | — | — |
 | `cmd/main` | executable | yes | yes | yes | yes |
+| `cmd/memory` | executable | yes | yes | yes | yes |
 | `cmd/persist` | executable | yes | yes | — | — |
 | `cmd/sa` | executable | yes | yes | — | — |
 | `cmd/gui` | executable | yes | — | — | — |
@@ -170,7 +173,17 @@ src/tesseract/
   exec.mbt       the executor: expressions, aggregates, ordering, transactions
   jsonpath.mbt   the JSON path: parsing it, walking it, reading a number from text
   serialize.mbt  .tsr JSON, .md table, .sql dump, lattice rendering
+src/tesseract_memory/
+  memory.mbt     the memory: put, get, capacity, the statistics
+  entry.mbt      one remembered thing, and when its time is up
+  ttl.mbt        Never / Absolute / Sliding, and the deadline arithmetic
+  clock.mbt      the injected clock, system or manual
+  evict.mbt      LRU, LFU, soonest-expiry, oldest
+  similar.mbt    the similarity policies and the recency weight
+  score.mbt      tokenising, the four similarities, JSON leaf paths
+  search.mbt     top-k over the live entries
 cmd/main/        command line front end
+cmd/memory/      the short-term memory, from a shell
 cmd/gui/         the proton desktop window
   main.mbt       the App: entry point, page asset, command registration
   state.mbt      the store the window drives, and its JSON projections
@@ -186,7 +199,8 @@ here rather than pulled in. `cmd/main` inherits that. It does carry two core
 packages — `@env.now()` from `moonbitlang/core/env` and `@json.parse` from
 `moonbitlang/core/json` — which are the toolchain rather than mooncakes imports,
 so the wall clock and the JSON parser cost two lines of `moon.pkg`, not a
-dependency.
+dependency. The memory tier adds `@math.pow` from `moonbitlang/core/math`, for
+the same reason.
 
 `cmd/gui` is the one exception, and only because it needs a window: it depends on
 `moonbit-community/proton@0.5.1`. Proton is native-only, so that package declares
@@ -557,16 +571,147 @@ Error codes: `INVALID_INPUT`, `INVALID_DIGIT`, `INVALID_POSITION`,
 `EMPTY_SQL`. That list is the complete set this port emits — every code in it is
 reachable and nothing outside it is produced.
 
+## The short-term memory
+
+`riantr/tesseract/src/tesseract_memory` is a **second store**, in its own
+package: entries that expire, a capacity the caller sets, and retrieval by
+similarity rather than by equality.
+
+It is a separate tier rather than a feature of the core because the two are
+different shapes of store. The core is durable — a cell keeps its record until
+somebody deletes it, the lattice's cell count is the bound, and overfilling it
+is an `INVALID_POSITION` error. A memory is the tier *above* that: an entry has
+a deadline, the bound is a number the caller sets, and going over it evicts an
+entry by a named policy rather than refusing the write.
+
+```moonbit nocheck
+///|
+import {
+  "riantr/tesseract/src/tesseract_memory",
+}
+```
+
+```sh
+moon run cmd/memory -- "put greeting hello world" "get greeting"
+moon run cmd/memory -- --capacity 3 "put a 1" "put b 2" "put c 3" "put d 4" "keys"
+moon run cmd/memory -- --manual-clock "put a x --ttl 1000" "advance 1000" "get a"
+moon run cmd/memory -- demo
+```
+
+### TTL
+
+An entry has a deadline, and there are two kinds, because the difference
+between them is the difference between a cache and a memory:
+
+| | expires |
+|---|---|
+| `ttl_absolute(ms)` | `ms` after it was **written** |
+| `ttl_sliding(ms)` | `ms` after it was **last read** |
+| `ttl_never()` | never |
+
+The boundary is exact: an entry with deadline `D` is live while `now < D` and
+gone at `now == D`, so a 1000ms TTL is 1000 milliseconds of life and not one
+more.
+
+Expiry is **eager** — every operation that observes the clock first removes
+what has expired — so the store never holds a dead entry, `size` is the number
+of *live* entries, and a key that has expired is gone from `get`, `contains`,
+`keys` and `search` alike. An entry that is gone from one view and present in
+another is a store that answers two different questions.
+
+### Capacity and eviction
+
+The memory holds at most `capacity` entries. A `put` of a **new** key when it
+is full evicts one entry; a `put` of a key that is already there replaces it in
+place and evicts **nothing**, because overwriting a key must not cost another
+key its place.
+
+| policy | evicts |
+|---|---|
+| `evict_lru()` | the entry nobody has touched for longest |
+| `evict_lfu()` | the entry nobody has read |
+| `evict_soonest_expiry()` | the entry closest to expiring — an entry that never expires goes last |
+| `evict_oldest()` | the entry written longest ago |
+
+Ties are broken by **key**, so the same sequence of operations always evicts
+the same entry. A store that evicts differently on two runs of the same program
+is a store nobody can test.
+
+### Similarity retrieval
+
+`search` returns the entries most like a query, best first.
+
+| policy | asks |
+|---|---|
+| `similarity_jaccard()` | how much they share, as a share of their whole vocabulary |
+| `similarity_cosine()` | how similar they are as documents — a repeated word counts more |
+| `similarity_containment()` | how much of the **query** the entry covers |
+| `similarity_structure()` | whether two JSON documents have the same shape |
+
+`Containment` is the one that answers a search: a two-word query should match
+a long document that contains both words, and a symmetric measure punishes that
+document for being long. `Structure` is the one a JSON store should have: two
+records with the same keys are alike even when every value differs, and no
+amount of word-matching will ever say so.
+
+Every score is in `0.0..1.0` and every one of them is **exact** — the same two
+texts always give the same score, with no model to drift.
+
+Words are ASCII runs of letters and digits, **plus any character outside ASCII
+as a word of its own**. Chinese has no spaces, so an ASCII-only tokenizer would
+reduce a whole sentence to nothing and every Chinese document would score zero
+against every other one.
+
+### Recency weighting
+
+On top of the similarity, a recency weight multiplies the score by
+`0.5 ^ (age / half_life)`, so an entry written more than one half-life ago
+carries half the weight. This is the rule that makes a short-term memory prefer
+what just happened — and it can overturn a better match, which is the point:
+
+```moonbit nocheck
+///|
+let m = @tesseract_memory.new_memory_with(
+  @tesseract_memory.default_config()
+  .with_capacity(100)
+  .with_recency(@tesseract_memory.recency_decay(3600000L)), // one hour
+)
+```
+
+### The clock is injected
+
+The memory's clock is a **value**, for the same reason the core's is: a test
+that reads the host clock cannot assert that something has not happened yet.
+`memory_clock_system()` reads the host; `memory_clock_manual(ms)` only moves
+when `Memory::advance` says so, so every TTL boundary in the test suite is a
+number rather than a race. `cmd/memory --manual-clock` exposes the same thing
+to a shell.
+
+### What it does not do
+
+- **Not SQL, and not a second query language.** The memory has a native API.
+  Putting it behind the core's SQL would mean the core's executor learned about
+  a tier it does not own.
+- **Not embeddings.** A semantic similarity needs a model, and a model is a
+  dependency and a download.
+- **Not persistent.** A short-term memory is the tier above the durable store,
+  not a replacement for it. What is worth keeping is what the durable store is
+  for.
+- **Not thread-safe**, for the same reason the core is not: the runtime is
+  single-threaded, and the store is mutated in place.
+
+The full plan and the measurements behind it are in `LOOP3.md`.
+
 ## Running it
 
 ### Command line
 
 ```sh
 moon check --target all     # type-check every backend
-moon test                   # 240 tests
+moon test                   # 266 tests
 moon fmt --check            # canonical formatting
 
-node cli-smoke.mjs          # both CLIs, as real processes (builds them first)
+node cli-smoke.mjs          # the CLIs, as real processes (builds them first)
 node gui-smoke.mjs          # the window, over CDP (needs `proton_cli dev` running)
 
 moon run cmd/main -- .help
@@ -575,6 +720,11 @@ moon run cmd/main -- .demo
 moon run cmd/main -- .solve .verify
 moon run cmd/main -- "INSERT INTO tesseract (key,value) VALUES ('a','1') AT 5;" "SELECT * FROM tesseract;"
 moon run cmd/main -- .export tsr > dump.tsr
+
+# the short-term memory
+moon run cmd/memory -- .help
+moon run cmd/memory -- "put greeting hello world" "get greeting"
+moon run cmd/memory -- demo
 
 # 256 cells, digits 1..4
 moon run cmd/main -- --side 4 .status
@@ -790,17 +940,18 @@ The gate, and the result it produced for this version:
 | `moon check --target js --deny-warn` | exit 0 |
 | `moon check --target native --deny-warn` | exit 0 |
 | `moon check --target wasm-gc --deny-warn` | exit 0 |
-| `moon test --target wasm --deny-warn` | **240 passed, 0 failed** |
+| `moon test --target wasm --deny-warn` | **266 passed, 0 failed** |
 | `moon build --target wasm` | exit 0 |
 | `typos` (v1.50.3 — the version the workflow pins) | exit 0 |
-| `node cli-smoke.mjs` | **14 passed, 0 failed** |
+| `node cli-smoke.mjs` | **20 passed, 0 failed** |
 | `node gui-smoke.mjs` | **45 passed, 0 failed** |
 
 The release workflow runs the first two check targets plus the test and build; the
 `native` and `wasm-gc` checks and the two smoke tests were run here as well, and
 are listed because they were run, not because CI depends on them.
 
-`cli-smoke.mjs` drives both CLIs as real processes against a built database.
+`cli-smoke.mjs` drives the CLIs as real processes against a built database —
+`cmd/main`, `cmd/persist` and `cmd/memory`.
 `gui-smoke.mjs` drives the window over the Chromium DevTools protocol and needs
 `proton_cli dev` running.
 
@@ -893,6 +1044,9 @@ Stated plainly, because "it has a SQL surface" invites the wrong assumption.
 - **It is not a wrapper around an existing store.** There is no KV core being
   dressed up. The grid, the sudoku digit rule and the solver are the reason the
   package exists, and dropping them would leave a much smaller program.
+- **It is not a vector database.** The memory's similarity is lexical and
+  structural, computed at query time, and exact — the same two texts always
+  give the same score. There is no embedding, no index, and no model to drift.
 - **The window is Proton, not a native GUI toolkit.** `cmd/gui` depends on
   `moonbit-community/proton@0.5.1` and is therefore native-only. The library and
   `cmd/main` do not depend on it.
@@ -901,7 +1055,8 @@ Stated plainly, because "it has a SQL surface" invites the wrong assumption.
   additions are `@env.now()` from `moonbitlang/core/env` and `@json.parse` from
   `moonbitlang/core/json` — both are the toolchain rather than mooncakes imports,
   and both were already here: the clock for the timestamps and the JSON parser
-  for the `.tsr` reader.
+  for the `.tsr` reader. The memory tier adds `@math.pow` from
+  `moonbitlang/core/math`, also the toolchain.
 
 Apache-2.0. Provenance of the ported behaviour is in
 [Deliberate departures](#deliberate-departures-from-the-c-original) below, which
