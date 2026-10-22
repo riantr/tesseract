@@ -4,7 +4,13 @@
 /// The fields are public so a caller can read them, and the memory owns the
 /// lifecycle: an entry is written, touched, and eventually removed. Nothing
 /// outside this package writes one.
+///
+/// The entry says which **scope** it is in, because a key is unique only
+/// within a scope: the key `todo` in `default` and the key `todo` in `notes`
+/// are two entries, and an entry that did not say where it lived could not be
+/// told from the other.
 pub struct Entry {
+  scope : String
   key : String
   value : String
   added_at : Int64
@@ -53,6 +59,7 @@ pub fn Entry::idle_ms(self : Entry, now_ms : Int64) -> Int64 {
 /// which is the whole difference between it and an absolute one.
 pub fn Entry::touched(self : Entry, now_ms : Int64) -> Entry {
   {
+    scope: self.scope,
     key: self.key,
     value: self.value,
     added_at: self.added_at,

@@ -87,6 +87,45 @@ pub fn char_at(s : String, i : Int32) -> (Char, Int32) {
 }
 
 ///|
+/// Orders two texts by their characters.
+///
+/// The runtime's own `String::compare` is **not** a lexicographic order: it
+/// compares the lengths first, so `"work"` sorts *before* `"default"` — the
+/// shorter text wins whatever its letters say. A store that promises its keys
+/// "in order", and that breaks a tie "by key", has to say which order it
+/// means, and the one a reader expects is the order of the letters. So the
+/// order is written out here rather than borrowed.
+///
+/// The comparison is by **character** and not by code unit, so a character
+/// outside the basic plane is one thing to compare rather than two halves of
+/// one thing. The shorter text comes first when one of them is a prefix of the
+/// other, and two equal texts compare equal.
+pub fn compare_text(a : String, b : String) -> Int32 {
+  let mut i = 0
+  let mut j = 0
+  while i < a.length() && j < b.length() {
+    let (ca, next_a) = char_at(a, i)
+    let (cb, next_b) = char_at(b, j)
+    let x = ca.to_int()
+    let y = cb.to_int()
+    if x != y {
+      return if x < y { -1 } else { 1 }
+    }
+    i = next_a
+    j = next_b
+  }
+  let left = a.length() - i
+  let right = b.length() - j
+  if left == right {
+    0
+  } else if left < right {
+    -1
+  } else {
+    1
+  }
+}
+
+///|
 /// Copies `s[start, end)` into a fresh string, clamped to `s.length()`.
 ///
 /// The range is in **code units**, the same unit it has always been, and a

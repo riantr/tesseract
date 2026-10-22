@@ -223,6 +223,33 @@ test "text helpers: split, join and slice keep empty fields" {
 }
 
 ///|
+/// Texts are ordered by their letters, not by their length.
+///
+/// The runtime's own `String::compare` compares the lengths first, so "work"
+/// comes **before** "default" — the shorter text wins whatever its letters
+/// say. A store that promises its keys "in order" has to mean the order of the
+/// letters, or the promise is not the one a reader reads.
+test "texts are ordered by their letters, not by their length" {
+  assert_true(@tesseract.compare_text("default", "work") < 0)
+  assert_true(@tesseract.compare_text("work", "default") > 0)
+  assert_true(@tesseract.compare_text("cat", "cow") < 0)
+  assert_true(@tesseract.compare_text("cow", "cat") > 0)
+  assert_eq(@tesseract.compare_text("same", "same"), 0)
+  // A prefix comes first.
+  assert_true(@tesseract.compare_text("apple", "apples") < 0)
+  assert_true(@tesseract.compare_text("apples", "apple") > 0)
+  // And a character outside the basic plane is one thing to compare, not two
+  // halves of one thing.
+  assert_true(@tesseract.compare_text("a", "🍎") < 0)
+  assert_true(@tesseract.compare_text("🍎", "a") > 0)
+  // The order is antisymmetric: one way is the other way backwards.
+  assert_eq(
+    @tesseract.compare_text("default", "work"),
+    -@tesseract.compare_text("work", "default"),
+  )
+}
+
+///|
 /// A character outside the basic plane survives the text helpers.
 ///
 /// An emoji is two code units in the runtime's string and one character to a

@@ -26,6 +26,8 @@ pub fn cell_is_empty(GridCell) -> Bool
 
 pub fn char_at(String, Int32) -> (Char, Int32)
 
+pub fn compare_text(String, String) -> Int32
+
 pub fn contains_ci(String, String) -> Bool
 
 pub fn coord_at(Coords, Int64) -> Int64?

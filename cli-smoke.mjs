@@ -206,6 +206,41 @@ function main() {
 
     r = run("memory", ["--max-bytes", "-1", "put a 1"], dir);
     check("a negative byte budget is refused", r.err.includes("budget cannot be negative"), true, r.out + r.err);
+
+    // ---- cmd/memory: the scopes ----
+    // A scope is a partition of the keyspace and the limits are the store's.
+    // The check that matters is the last one: a write into one scope took an
+    // entry out of another, which is what "the budget is the store's" means.
+    // The output is compared line by line, because a `put` echoes the key it
+    // stored and "k1" in the echo is not "k1" in the key list.
+    const lines = (s) => (s || "").trim().split(/\r?\n/);
+    const lastLine = (s) => lines(s).pop();
+
+    r = run("memory", ["put k1 the cat sat", "scope work", "put k2 the cat sat on the mat", "keys"], dir);
+    check("a scope holds its own keys", lines(r.out).includes("k2"), true, r.out + r.err);
+    check("another scope's keys are not here", lines(r.out).includes("k1"), false, r.out + r.err);
+
+    r = run("memory", ["put k1 the cat sat", "scope work", "put k2 the cat sat on the mat", "scopes"], dir);
+    check("the scopes are listed", lastLine(r.out), "default, work");
+
+    r = run("memory", ["--scope", "work", "put k1 the cat sat", "scopes"], dir);
+    check("--scope picks the scope to work in", lastLine(r.out), "work");
+
+    r = run("memory", ["put k1 the cat sat", "scope work", "put k2 the cat sat on the mat", "search-all cat"], dir);
+    check("a search across the store says which scope a hit is in", r.out.includes("default  k1"), true, r.out + r.err);
+    check("...and the other scope's hit too", r.out.includes("work  k2"), true, r.out + r.err);
+
+    // The capacity is the store's: the third entry does not fit, and the room
+    // is made by taking an entry out of the *other* scope.
+    r = run("memory", ["--capacity", "2", "put k1 aaa", "scope work", "put k2 bbb", "scope notes", "put k3 ccc", "scopes", "stats"], dir);
+    check("a write in one scope can evict an entry in another", lines(r.out).includes("notes, work"), true, r.out + r.err);
+    check("...and the eviction is counted", r.out.includes("evictions 1"), true, r.out + r.err);
+
+    // Clearing one scope leaves the others alone; clearing the store does not.
+    r = run("memory", ["put k1 aaa", "scope work", "put k2 bbb", "clear", "scopes"], dir);
+    check("clear forgets this scope only", lastLine(r.out), "default");
+    r = run("memory", ["put k1 aaa", "scope work", "put k2 bbb", "clear-all", "scopes"], dir);
+    check("clear-all forgets every scope", lastLine(r.out), "(no scopes hold anything)");
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

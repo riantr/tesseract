@@ -8,6 +8,8 @@ pub fn cosine(String, String) -> Double
 
 pub fn default_config() -> Config
 
+pub fn default_scope_name() -> String
+
 pub fn evict_lfu() -> EvictionPolicy
 
 pub fn evict_lru() -> EvictionPolicy
@@ -78,6 +80,7 @@ pub fn Config::with_recency(Self, Recency) -> Self
 pub fn Config::with_similarity(Self, Similarity) -> Self
 
 pub struct Entry {
+  scope : String
   key : String
   value : String
   added_at : Int64
@@ -102,11 +105,13 @@ pub enum EvictionPolicy {
 pub fn EvictionPolicy::name(Self) -> String
 
 pub struct Hit {
+  scope : String
   key : String
   value : String
   score : Double
 }
 pub fn Hit::key(Self) -> String
+pub fn Hit::scope(Self) -> String
 pub fn Hit::score(Self) -> Double
 pub fn Hit::value(Self) -> String
 
@@ -119,6 +124,7 @@ pub fn Memory::clear(Self) -> Unit
 pub fn Memory::clock(Self) -> MemoryClock
 pub fn Memory::config(Self) -> Config
 pub fn Memory::contains(Self, String) -> Bool
+pub fn Memory::default_scope(Self) -> Scope
 pub fn Memory::delete(Self, String) -> Bool
 pub fn Memory::entries(Self) -> Array[Entry]
 pub fn Memory::entry(Self, String) -> Entry?
@@ -128,7 +134,11 @@ pub fn Memory::max_bytes(Self) -> Int64
 pub fn Memory::now(Self) -> Int64
 pub fn Memory::put(Self, String, String) -> Bool
 pub fn Memory::put_with_ttl(Self, String, String, Ttl) -> Bool
+pub fn Memory::scope(Self, String) -> Scope
+pub fn Memory::scopes(Self) -> Array[String]
 pub fn Memory::search(Self, String, Int32) -> Array[Hit]
+pub fn Memory::search_all(Self, String, Int32) -> Array[Hit]
+pub fn Memory::search_all_keys(Self, String, Int32) -> Array[String]
 pub fn Memory::search_keys(Self, String, Int32) -> Array[String]
 pub fn Memory::set_config(Self, Config) -> Bool
 pub fn Memory::size(Self) -> Int32
@@ -152,6 +162,26 @@ pub enum Recency {
 pub fn Recency::is_active(Self) -> Bool
 pub fn Recency::name(Self) -> String
 pub fn Recency::weight(Self, Int64) -> Double
+
+pub struct Scope {
+  // private fields
+}
+pub fn Scope::clear(Self) -> Unit
+pub fn Scope::contains(Self, String) -> Bool
+pub fn Scope::default_ttl(Self) -> Ttl
+pub fn Scope::delete(Self, String) -> Bool
+pub fn Scope::entries(Self) -> Array[Entry]
+pub fn Scope::entry(Self, String) -> Entry?
+pub fn Scope::get(Self, String) -> String?
+pub fn Scope::keys(Self) -> Array[String]
+pub fn Scope::name(Self) -> String
+pub fn Scope::put(Self, String, String) -> Bool
+pub fn Scope::put_with_ttl(Self, String, String, Ttl) -> Bool
+pub fn Scope::search(Self, String, Int32) -> Array[Hit]
+pub fn Scope::search_keys(Self, String, Int32) -> Array[String]
+pub fn Scope::size(Self) -> Int32
+pub fn Scope::size_bytes(Self) -> Int64
+pub fn Scope::touch(Self, String) -> Bool
 
 pub enum Similarity {
   Jaccard

@@ -9,14 +9,21 @@
 /// bound is a number the caller sets, and going over it evicts an entry by a
 /// named policy rather than refusing the write.
 ///
-/// The two rules that everything else follows from:
+/// The three rules that everything else follows from:
 ///
-/// - **The path belongs to the statement** — nothing. That rule was about SQL;
-///   here the rules are about who owns time and who owns space.
 /// - **Expiry is eager.** Every operation that observes the clock first
 ///   removes what has expired, so the store never holds a dead entry, `size`
 ///   is the number of *live* entries, and a caller never has to wonder
 ///   whether a zero it read was a missing key or an expired one.
+/// - **The keys live in scopes.** A scope is a named partition of the
+///   keyspace, and a key belongs to exactly one of them: `default` and
+///   `notes` can both hold a key called `todo` without either of them seeing
+///   the other's entry. The scopes of one memory share its clock, its budget
+///   and its statistics.
+/// - **The limits are the store's, not a scope's.** The capacity and the byte
+///   budget are spent across every scope, and the eviction that follows a
+///   write can take an entry from any of them. A scope is a partition of one
+///   pool, not a pool of its own.
 ///
 /// The clock is a value, not a call, for the reason the core's clock is: a test
 /// that reads the host clock cannot assert that something has not happened yet.
@@ -28,11 +35,21 @@
 /// something that is no longer there. The limits a memory enforces are only
 /// worth anything if the store cannot be edited behind its own back.
 pub struct Memory {
-  priv entries : Map[String, Entry]
+  priv entries : Map[String, Map[String, Entry]]
   priv mut bytes : Int64
   priv mut clock : MemoryClock
   priv mut config : Config
   priv stats : Stats
+}
+
+///|
+/// The name of the scope a memory's own methods address.
+///
+/// A memory that is never told about scopes still has one — this one — and
+/// everything written through the memory itself lands there. A caller that
+/// wants a partition asks for it by name.
+pub fn default_scope_name() -> String {
+  "default"
 }
 
 ///|
@@ -65,6 +82,9 @@ pub struct Config {
 /// can see; these are. `hits` and `misses` say what the store was asked for
 /// and what it had, `evictions` says what it gave up to make room, and
 /// `expirations` says what it dropped because its time was up.
+///
+/// The counters are the **store's**: a write into one scope and a read out of
+/// another are both counted here, because there is one store behind them.
 pub struct Stats {
   mut puts : Int64
   mut updates : Int64
@@ -102,6 +122,9 @@ pub fn Config::with_capacity(self : Config, capacity : Int32) -> Config {
 /// A budget of zero means no limit. The budget counts the **values** in UTF-8
 /// bytes, so it is the size of what the memory holds rather than the number of
 /// things it holds — the two are different limits and a caller may want both.
+///
+/// The budget is the **store's**: it covers the values of every scope, so a
+/// write into one scope can be refused for the room another scope is taking.
 pub fn Config::with_max_bytes(self : Config, max_bytes : Int64) -> Config {
   { ..self, max_bytes, }
 }
@@ -290,7 +313,7 @@ pub fn Memory::advance(self : Memory, ms : Int64) -> Bool {
 }
 
 ///|
-/// Remove every entry whose time is up, and say how many went.
+/// Remove every entry whose time is up, in every scope, and say how many went.
 ///
 /// Expiry is eager, so this is normally already done by the time it is called;
 /// it is here so a caller can ask, and so the count lands in the statistics on
@@ -300,13 +323,20 @@ pub fn Memory::sweep(self : Memory) -> Int64 {
 }
 
 ///|
-/// How many entries are live.
+/// How many entries are live, in every scope.
 ///
 /// Expired entries do not count: they are gone the moment their time is up,
 /// whether or not anything has swept for them yet.
+///
+/// This is the **store's** count, and it is the one to compare with
+/// `capacity`: the capacity is spent across the scopes, so the store is full
+/// when this reaches it. `Scope::size` is the count of one scope, and
+/// `Memory::keys` lists the **default** scope's keys — so the store's count
+/// and the default scope's key list are not the same number once a second
+/// scope holds something.
 pub fn Memory::size(self : Memory) -> Int32 {
   ignore(self.expire_due())
-  self.entries.length()
+  self.entry_count()
 }
 
 ///|
@@ -317,6 +347,9 @@ pub fn Memory::capacity(self : Memory) -> Int32 {
 
 ///|
 /// Write a value under a key, with the default TTL.
+///
+/// The key goes into the **default scope**, so `put` and `get` on the memory
+/// itself are the same scope talking to itself.
 ///
 /// A `put` of a key that is already there replaces the value **in place** and
 /// evicts nothing — overwriting a key must not cost another key its place.
@@ -338,50 +371,27 @@ pub fn Memory::put(self : Memory, key : String, value : String) -> Bool {
 /// hundred and five bytes of content, not five. So a replacement makes room
 /// too, when it has to, and it evicts **other** entries: the key being written
 /// is never the one thrown away to make room for itself.
+///
+/// The room it makes is made out of the **store**, not out of this scope: the
+/// eviction that follows can take an entry from any scope.
 pub fn Memory::put_with_ttl(
   self : Memory,
   key : String,
   value : String,
   ttl : Ttl,
 ) -> Bool {
-  ignore(self.expire_due())
-  let now = self.now()
-  let (deadline, sliding) = ttl.deadline(now)
-  let window = ttl.window_ms()
-  let value_bytes = utf8_bytes(value)
-  // A value that cannot fit in an *empty* store is refused here, before
-  // anything is evicted. Refusing it later would cost the caller every entry
-  // it already has, and a write that fails should not empty the memory.
-  if self.config.max_bytes > 0L && value_bytes > self.config.max_bytes {
-    return false
-  }
-  let already = self.entries.contains(key)
-  if !self.make_room(key, value_bytes, !already) {
-    return false
-  }
-  self.write(key, {
-    key,
-    value,
-    added_at: now,
-    deadline,
-    window_ms: window,
-    sliding,
-    last_seen: now,
-    hits: 0L,
-  })
-  self.stats.puts = self.stats.puts + 1L
-  if already {
-    self.stats.updates = self.stats.updates + 1L
-  }
-  true
+  self.put_in(default_scope_name(), key, value, ttl)
 }
 
 ///|
-/// How many bytes the stored values take up.
+/// How many bytes the stored values take up, in every scope.
 ///
 /// UTF-8 bytes, because that is the unit a budget is stated in. The keys are
 /// not counted: the budget is about the content, and the number of keys is
 /// bounded by the capacity.
+///
+/// This is the **store's** total, because the budget is the store's — it is
+/// the number to compare with `max_bytes`.
 pub fn Memory::size_bytes(self : Memory) -> Int64 {
   ignore(self.expire_due())
   self.bytes
@@ -412,16 +422,16 @@ pub fn Memory::max_bytes(self : Memory) -> Int64 {
 /// the arithmetic would be counting a value that is no longer there.
 fn Memory::make_room(
   self : Memory,
+  scope : String,
   key : String,
   value_bytes : Int64,
   new_key : Bool,
 ) -> Bool {
   let mut ok = true
-  while self.over_capacity_after(key, value_bytes, new_key) {
-    let exclude : String? = if new_key { None } else { Some(key) }
-    match self.pick_victim(exclude) {
+  while self.over_capacity_after(scope, key, value_bytes, new_key) {
+    match self.pick_victim(scope, key) {
       Some(victim) => {
-        ignore(self.forget(victim))
+        ignore(self.forget(victim.0, victim.1))
         self.stats.evictions = self.stats.evictions + 1L
       }
       None => {
@@ -442,15 +452,16 @@ fn Memory::make_room(
 /// the new one is in.
 fn Memory::over_capacity_after(
   self : Memory,
+  scope : String,
   key : String,
   value_bytes : Int64,
   new_key : Bool,
 ) -> Bool {
-  if new_key && self.entries.length() + 1 > self.config.capacity {
+  if new_key && self.entry_count() + 1 > self.config.capacity {
     return true
   }
   if self.config.max_bytes > 0L {
-    let final_bytes = match self.entries.get(key) {
+    let final_bytes = match self.lookup(scope, key) {
       Some(old) => self.bytes - utf8_bytes(old.value) + value_bytes
       None => self.bytes + value_bytes
     }
@@ -462,29 +473,73 @@ fn Memory::over_capacity_after(
 }
 
 ///|
+/// The number of live entries, over every scope.
+fn Memory::entry_count(self : Memory) -> Int32 {
+  let mut total = 0
+  for (_, inner) in self.entries.iter() {
+    total = total + inner.length()
+  }
+  total
+}
+
+///|
 /// Writes an entry, keeping the byte total right.
 ///
 /// Every write goes through here, and so does every removal, so the total
 /// cannot drift: a write subtracts whatever the key was holding before and
 /// adds what it holds now, and a removal subtracts what it held.
-fn Memory::write(self : Memory, key : String, entry : Entry) -> Unit {
-  match self.entries.get(key) {
-    Some(old) => self.bytes = self.bytes - utf8_bytes(old.value)
-    None => ()
+fn Memory::write(
+  self : Memory,
+  scope : String,
+  key : String,
+  entry : Entry,
+) -> Unit {
+  match self.entries.get(scope) {
+    Some(inner) => {
+      match inner.get(key) {
+        Some(old) => self.bytes = self.bytes - utf8_bytes(old.value)
+        None => ()
+      }
+      inner.set(key, entry)
+      self.bytes = self.bytes + utf8_bytes(entry.value)
+    }
+    None => {
+      let inner : Map[String, Entry] = Map([])
+      inner.set(key, entry)
+      self.entries.set(scope, inner)
+      self.bytes = self.bytes + utf8_bytes(entry.value)
+    }
   }
-  self.entries.set(key, entry)
-  self.bytes = self.bytes + utf8_bytes(entry.value)
 }
 
 ///|
 /// Removes an entry, keeping the byte total right.
-fn Memory::forget(self : Memory, key : String) -> Bool {
-  match self.entries.remove_and_get(key) {
+///
+/// A scope whose last entry goes is dropped with it, so a scope that holds
+/// nothing is not a scope the store still knows about.
+fn Memory::forget(self : Memory, scope : String, key : String) -> Bool {
+  match self.entries.get(scope) {
     None => false
-    Some(entry) => {
-      self.bytes = self.bytes - utf8_bytes(entry.value)
-      true
-    }
+    Some(inner) =>
+      match inner.remove_and_get(key) {
+        None => false
+        Some(entry) => {
+          self.bytes = self.bytes - utf8_bytes(entry.value)
+          if inner.length() == 0 {
+            ignore(self.entries.remove_and_get(scope))
+          }
+          true
+        }
+      }
+  }
+}
+
+///|
+/// The entry stored under a key in a scope, or `None`.
+fn Memory::lookup(self : Memory, scope : String, key : String) -> Entry? {
+  match self.entries.get(scope) {
+    Some(inner) => inner.get(key)
+    None => None
   }
 }
 
@@ -495,19 +550,7 @@ fn Memory::forget(self : Memory, key : String) -> Bool {
 /// and a sliding entry's deadline moves forward. A miss counts as a miss and
 /// touches nothing.
 pub fn Memory::get(self : Memory, key : String) -> String? {
-  ignore(self.expire_due())
-  self.stats.gets = self.stats.gets + 1L
-  match self.entries.get(key) {
-    None => {
-      self.stats.misses = self.stats.misses + 1L
-      None
-    }
-    Some(entry) => {
-      self.write(key, entry.touched(self.now()))
-      self.stats.hits = self.stats.hits + 1L
-      Some(entry.value)
-    }
-  }
+  self.get_in(default_scope_name(), key)
 }
 
 ///|
@@ -516,8 +559,7 @@ pub fn Memory::get(self : Memory, key : String) -> String? {
 /// An expired key is not present, and saying otherwise would make `contains`
 /// and `get` disagree.
 pub fn Memory::contains(self : Memory, key : String) -> Bool {
-  ignore(self.expire_due())
-  self.entries.contains(key)
+  self.contains_in(default_scope_name(), key)
 }
 
 ///|
@@ -527,14 +569,7 @@ pub fn Memory::contains(self : Memory, key : String) -> Bool {
 /// still relevant" about something it did not read. Returns false when the key
 /// is not there.
 pub fn Memory::touch(self : Memory, key : String) -> Bool {
-  ignore(self.expire_due())
-  match self.entries.get(key) {
-    None => false
-    Some(entry) => {
-      self.write(key, entry.touched(self.now()))
-      true
-    }
-  }
+  self.touch_in(default_scope_name(), key)
 }
 
 ///|
@@ -542,51 +577,35 @@ pub fn Memory::touch(self : Memory, key : String) -> Bool {
 ///
 /// Returns false when there was nothing to forget.
 pub fn Memory::delete(self : Memory, key : String) -> Bool {
-  ignore(self.expire_due())
-  if self.forget(key) {
-    self.stats.deletes = self.stats.deletes + 1L
-    true
-  } else {
-    false
-  }
+  self.delete_in(default_scope_name(), key)
 }
 
 ///|
-/// The live keys, in order.
+/// The live keys of the default scope, in order.
 pub fn Memory::keys(self : Memory) -> Array[String] {
-  ignore(self.expire_due())
-  let out : Array[String] = []
-  for k in self.entries.keys() {
-    out.push(k)
-  }
-  sort_strings(out)
-  out
+  self.keys_in(default_scope_name())
 }
 
 ///|
-/// The live entries, in key order.
+/// The live entries of the default scope, in key order.
 pub fn Memory::entries(self : Memory) -> Array[Entry] {
-  ignore(self.expire_due())
-  let out : Array[Entry] = []
-  for (_, entry) in self.entries.iter() {
-    out.push(entry)
-  }
-  out.sort_by(fn(a, b) { String::compare(a.key, b.key) })
-  out
+  self.entries_in(default_scope_name())
 }
 
 ///|
-/// One entry, by key.
+/// One entry, by key, from the default scope.
 pub fn Memory::entry(self : Memory, key : String) -> Entry? {
-  ignore(self.expire_due())
-  self.entries.get(key)
+  self.entry_in(default_scope_name(), key)
 }
 
 ///|
-/// Forget everything.
+/// Forget everything, in every scope.
 ///
 /// The statistics are not reset: a memory that has served two thousand
 /// requests and was then cleared has still served two thousand requests.
+///
+/// This is the **store's** reset, not a scope's: `Scope::clear` forgets one
+/// scope and leaves the others alone.
 pub fn Memory::clear(self : Memory) -> Unit {
   self.entries.clear()
   self.bytes = 0L
@@ -599,6 +618,155 @@ pub fn Memory::stats(self : Memory) -> Stats {
 }
 
 ///|
+/// Write a value under a key, in a scope.
+///
+/// The scope-aware form of `put_with_ttl`, and the only place a write
+/// actually happens.
+fn Memory::put_in(
+  self : Memory,
+  scope : String,
+  key : String,
+  value : String,
+  ttl : Ttl,
+) -> Bool {
+  ignore(self.expire_due())
+  let now = self.now()
+  let (deadline, sliding) = ttl.deadline(now)
+  let window = ttl.window_ms()
+  let value_bytes = utf8_bytes(value)
+  // A value that cannot fit in an *empty* store is refused here, before
+  // anything is evicted. Refusing it later would cost the caller every entry
+  // it already has, and a write that fails should not empty the memory.
+  if self.config.max_bytes > 0L && value_bytes > self.config.max_bytes {
+    return false
+  }
+  let already = self.lookup(scope, key) is Some(_)
+  if !self.make_room(scope, key, value_bytes, !already) {
+    return false
+  }
+  self.write(scope, key, {
+    scope,
+    key,
+    value,
+    added_at: now,
+    deadline,
+    window_ms: window,
+    sliding,
+    last_seen: now,
+    hits: 0L,
+  })
+  self.stats.puts = self.stats.puts + 1L
+  if already {
+    self.stats.updates = self.stats.updates + 1L
+  }
+  true
+}
+
+///|
+/// Read a value from a scope, and count it as a use.
+fn Memory::get_in(self : Memory, scope : String, key : String) -> String? {
+  ignore(self.expire_due())
+  self.stats.gets = self.stats.gets + 1L
+  match self.lookup(scope, key) {
+    None => {
+      self.stats.misses = self.stats.misses + 1L
+      None
+    }
+    Some(entry) => {
+      self.write(scope, key, entry.touched(self.now()))
+      self.stats.hits = self.stats.hits + 1L
+      Some(entry.value)
+    }
+  }
+}
+
+///|
+/// Whether a key is live, in a scope.
+fn Memory::contains_in(self : Memory, scope : String, key : String) -> Bool {
+  ignore(self.expire_due())
+  self.lookup(scope, key) is Some(_)
+}
+
+///|
+/// Refresh an entry in a scope, without reading it.
+fn Memory::touch_in(self : Memory, scope : String, key : String) -> Bool {
+  ignore(self.expire_due())
+  match self.lookup(scope, key) {
+    None => false
+    Some(entry) => {
+      self.write(scope, key, entry.touched(self.now()))
+      true
+    }
+  }
+}
+
+///|
+/// Forget a key in a scope.
+fn Memory::delete_in(self : Memory, scope : String, key : String) -> Bool {
+  ignore(self.expire_due())
+  if self.forget(scope, key) {
+    self.stats.deletes = self.stats.deletes + 1L
+    true
+  } else {
+    false
+  }
+}
+
+///|
+/// One entry, by key, in a scope.
+fn Memory::entry_in(self : Memory, scope : String, key : String) -> Entry? {
+  ignore(self.expire_due())
+  self.lookup(scope, key)
+}
+
+///|
+/// The live keys of a scope, in order.
+fn Memory::keys_in(self : Memory, scope : String) -> Array[String] {
+  ignore(self.expire_due())
+  let out : Array[String] = []
+  match self.entries.get(scope) {
+    Some(inner) =>
+      for k in inner.keys() {
+        out.push(k)
+      }
+    None => ()
+  }
+  sort_strings(out)
+  out
+}
+
+///|
+/// The live entries of a scope, in key order.
+fn Memory::entries_in(self : Memory, scope : String) -> Array[Entry] {
+  ignore(self.expire_due())
+  let out : Array[Entry] = []
+  match self.entries.get(scope) {
+    Some(inner) =>
+      for (_, entry) in inner.iter() {
+        out.push(entry)
+      }
+    None => ()
+  }
+  out.sort_by(fn(a, b) { @tesseract.compare_text(a.key, b.key) })
+  out
+}
+
+///|
+/// Forget everything in one scope.
+fn Memory::clear_in(self : Memory, scope : String) -> Unit {
+  ignore(self.expire_due())
+  match self.entries.get(scope) {
+    None => ()
+    Some(inner) => {
+      for (_, entry) in inner.iter() {
+        self.bytes = self.bytes - utf8_bytes(entry.value)
+      }
+      ignore(self.entries.remove_and_get(scope))
+    }
+  }
+}
+
+///|
 /// Remove every entry whose time is up, and say how many went.
 ///
 /// The clock is read directly rather than through `now`, which removes what
@@ -606,15 +774,17 @@ pub fn Memory::stats(self : Memory) -> Stats {
 /// never end.
 fn Memory::expire_due(self : Memory) -> Int64 {
   let now = self.clock.read()
-  let dead : Array[String] = []
-  for (k, entry) in self.entries.iter() {
-    if entry.expired(now) {
-      dead.push(k)
+  let dead : Array[(String, String)] = []
+  for (scope, inner) in self.entries.iter() {
+    for (key, entry) in inner.iter() {
+      if entry.expired(now) {
+        dead.push((scope, key))
+      }
     }
   }
   let mut gone = 0L
-  for k in dead {
-    if self.forget(k) {
+  for d in dead {
+    if self.forget(d.0, d.1) {
       gone = gone + 1L
     }
   }
@@ -625,53 +795,83 @@ fn Memory::expire_due(self : Memory) -> Int64 {
 ///|
 /// The entry the policy would evict, or `None` when there is nothing to evict.
 ///
-/// The tie-break is the key, so the same sequence of operations always evicts
-/// the same entry. A store that evicts differently on two runs of the same
-/// program is a store nobody can test.
+/// The tie-break is the scope and then the key, so the same sequence of
+/// operations always evicts the same entry. A store that evicts differently on
+/// two runs of the same program is a store nobody can test.
 ///
-/// `exclude` is the key being written, when there is one. It is never the
-/// victim: an entry is not evicted to make room for the value that is about
-/// to replace it.
-fn Memory::pick_victim(self : Memory, exclude : String?) -> String? {
-  let mut best : String? = None
+/// The excluded pair is the key being written. It is never the victim: an
+/// entry is not evicted to make room for the value that is about to replace
+/// it. An entry that is not there cannot be a victim anyway, so the exclusion
+/// is the same whether the key is new or not.
+fn Memory::pick_victim(
+  self : Memory,
+  exclude_scope : String,
+  exclude_key : String,
+) -> (String, String)? {
+  let mut best : (String, String)? = None
   let mut best_rank = 0L
-  for (k, entry) in self.entries.iter() {
-    let skip = match exclude {
-      Some(x) => k == x
-      None => false
-    }
-    if skip {
-      continue
-    }
-    let rank = match self.config.eviction {
-      LeastRecentlyUsed => entry.last_seen
-      LeastFrequentlyUsed => entry.hits
-      SoonestExpiry =>
-        if entry.deadline == 0L {
-          NEVER_EXPIRES
-        } else {
-          entry.deadline
-        }
-      OldestFirst => entry.added_at
-    }
-    match best {
-      None => {
-        best = Some(k)
-        best_rank = rank
+  for (scope, inner) in self.entries.iter() {
+    for (key, entry) in inner.iter() {
+      if scope == exclude_scope && key == exclude_key {
+        continue
       }
-      Some(current) =>
-        if rank < best_rank ||
-          (rank == best_rank && String::compare(k, current) < 0) {
-          best = Some(k)
+      let rank = match self.config.eviction {
+        LeastRecentlyUsed => entry.last_seen
+        LeastFrequentlyUsed => entry.hits
+        SoonestExpiry =>
+          if entry.deadline == 0L {
+            NEVER_EXPIRES
+          } else {
+            entry.deadline
+          }
+        OldestFirst => entry.added_at
+      }
+      match best {
+        None => {
+          best = Some((scope, key))
           best_rank = rank
         }
+        Some(current) =>
+          if rank < best_rank ||
+            (
+              rank == best_rank &&
+              scope_key_compare(scope, key, current.0, current.1) < 0
+            ) {
+            best = Some((scope, key))
+            best_rank = rank
+          }
+      }
     }
   }
   best
 }
 
 ///|
-/// Sort strings by their byte order.
+/// Sort strings by their letters.
 fn sort_strings(items : Array[String]) -> Unit {
-  items.sort_by(fn(a, b) { String::compare(a, b) })
+  items.sort_by(fn(a, b) { @tesseract.compare_text(a, b) })
+}
+
+///|
+/// Compare a scope and a key against another scope and a key.
+///
+/// The scope comes first, so the eviction order does not depend on the order
+/// the scopes or the entries happened to be written in: two entries that tie
+/// on the policy are separated by where they live, and then by their key.
+///
+/// The order is by **letters** — `compare_text`, not the runtime's
+/// `String::compare`, which compares the lengths first and would make the
+/// scope called "work" come before the scope called "default".
+fn scope_key_compare(
+  scope : String,
+  key : String,
+  other_scope : String,
+  other_key : String,
+) -> Int32 {
+  let by_scope = @tesseract.compare_text(scope, other_scope)
+  if by_scope != 0 {
+    by_scope
+  } else {
+    @tesseract.compare_text(key, other_key)
+  }
 }

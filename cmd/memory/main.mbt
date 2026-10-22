@@ -10,6 +10,7 @@
 /// moon run cmd/memory -- "put greeting hello world" "get greeting"
 /// moon run cmd/memory -- --capacity 3 "put a 1" "put b 2" "put c 3" "put d 4" "keys"
 /// moon run cmd/memory -- --manual-clock "put a x --ttl 1000" "advance 1000" "get a"
+/// moon run cmd/memory -- --scope work "put a 1" "put b 2" "scopes"
 /// moon run cmd/memory -- demo
 /// ```
 ///
@@ -24,9 +25,17 @@
 /// | `--by NAME` | `jaccard`, `cosine`, `containment` or `structure` |
 /// | `--half-life MS` | halve the weight of an entry every MS (0: no decay) |
 /// | `--manual-clock` | a clock that only `advance` moves |
+/// | `--scope NAME` | the scope the commands work in (default: `default`) |
 ///
 /// `--manual-clock` is what makes the TTL visible: nothing expires until the
 /// clock is moved, so the demo shows the boundary rather than a race.
+///
+/// `--scope` picks the **partition** of the keyspace the commands work in.
+/// The scopes of one memory share its clock, its budget and its statistics:
+/// the capacity and the byte budget are the store's, so a write into one
+/// scope can evict an entry from another. `scopes` lists the ones that hold
+/// something, `scope <name>` switches to another one, and `search-all` looks
+/// in all of them at once.
 
 ///|
 /// Everything the commands report goes to stdout; the banner and every failure
@@ -123,6 +132,9 @@ fn print_help() -> Unit {
     "  --half-life MS            halve an entry's weight every MS (0: no decay)",
   )
   out("  --manual-clock            a clock that only the advance command moves")
+  out(
+    "  --scope NAME              the scope the commands work in (default: default)",
+  )
   out("")
   out("commands:")
   out("  put <key> <value...>      remember a value")
@@ -133,10 +145,14 @@ fn print_help() -> Unit {
   out("  keys                      the live keys")
   out("  entries                   the live entries, with their ages")
   out("  search <query...> [-k N] the entries most like the query")
+  out("  search-all <query...>     the same, over every scope")
+  out("  scopes                    the scopes that hold something")
+  out("  scope <name>              work in another scope from here on")
   out("  sweep                     drop what has expired")
   out("  stats                     what the memory has done")
   out("  advance <ms>              move a manual clock forward")
-  out("  clear                     forget everything")
+  out("  clear                     forget everything in this scope")
+  out("  clear-all                 forget everything in every scope")
   out("  demo                      a short tour")
   out("")
 }
@@ -217,7 +233,18 @@ fn demo(m : @tesseract_memory.Memory) -> Unit {
     "   (first was read, so second went)",
   )
   out("")
-  out("7. the store, and what it did")
+  out("7. a scope is a partition of the keyspace, not a second store")
+  ignore(m.scope("work").put("todo", "ship 0.1.7"))
+  ignore(m.scope("work").put("greeting", "hello from the work scope"))
+  out("   scopes    -> " + m.scopes().join(", "))
+  out(
+    "   work keys -> " +
+    m.scope("work").keys().join(", ") +
+    "   (the default scope cannot see them)",
+  )
+  out("   the default scope still has: " + m.keys().join(", "))
+  out("")
+  out("8. the store, and what it did")
   let s = m.stats()
   out(
     "   size      " + m.size().to_string() + " of " + m.capacity().to_string(),
@@ -252,6 +279,9 @@ fn format_score(score : Double) -> String {
 ///
 /// A budget of zero is no budget, and "of 0" would read like a store that is
 /// over its limit by everything it holds. So the limit says what it is.
+///
+/// The total is the **store's**: the budget is spent across every scope, so
+/// this is the number of the whole pool and not of one partition of it.
 fn bytes_line(m : @tesseract_memory.Memory, indent : String) -> String {
   let used = m.size_bytes().to_string()
   let limit = m.max_bytes()
@@ -273,6 +303,7 @@ fn main {
   let mut similarity = @tesseract_memory.similarity_jaccard()
   let mut recency = @tesseract_memory.recency_none()
   let mut manual = false
+  let mut scope_name = @tesseract_memory.default_scope_name()
   let commands : Array[String] = []
   let mut i = 0
   while i < argv.length() {
@@ -317,6 +348,11 @@ fn main {
       i = i + 1
       continue
     }
+    if a == "--scope" && i + 1 < argv.length() {
+      scope_name = argv[i + 1]
+      i = i + 2
+      continue
+    }
     commands.push(a)
     i = i + 1
   }
@@ -351,20 +387,49 @@ fn main {
   } else {
     @tesseract_memory.new_memory_with(config)
   }
+  let mut scope = m.scope(scope_name)
   let mut k = 0
   while k < commands.length() {
-    run(m, commands[k])
+    scope = run(m, scope, commands[k])
     k = k + 1
   }
 }
 
 ///|
 /// One command.
-fn run(m : @tesseract_memory.Memory, command : String) -> Unit {
-  let words = split_ws(command)
+///
+/// Returns the scope the **next** command works in: the `scope` command
+/// changes it, and every other command leaves it alone.
+fn run(
+  m : @tesseract_memory.Memory,
+  scope : @tesseract_memory.Scope,
+  text : String,
+) -> @tesseract_memory.Scope {
+  let words = split_ws(text)
   if words.length() == 0 {
-    return
+    return scope
   }
+  let verb = words[0]
+  if verb == "scope" {
+    if words.length() < 2 {
+      out(scope.name())
+      return scope
+    }
+    let next = m.scope(words[1])
+    out("scope -> " + next.name())
+    return next
+  }
+  command(m, scope, words)
+  scope
+}
+
+///|
+/// One action, against one scope.
+fn command(
+  m : @tesseract_memory.Memory,
+  scope : @tesseract_memory.Scope,
+  words : Array[String],
+) -> Unit {
   let verb = words[0]
   if verb == "help" || verb == "--help" || verb == "-h" {
     print_help()
@@ -375,7 +440,7 @@ fn run(m : @tesseract_memory.Memory, command : String) -> Unit {
     return
   }
   if verb == "put" {
-    put(m, words)
+    put(scope, words)
     return
   }
   if verb == "get" {
@@ -383,7 +448,7 @@ fn run(m : @tesseract_memory.Memory, command : String) -> Unit {
       warn("get needs a key")
       return
     }
-    let value = m.get(words[1])
+    let value = scope.get(words[1])
     match value {
       None => out(words[1] + " -> (nothing)")
       Some(v) => out(words[1] + " -> " + v)
@@ -395,7 +460,7 @@ fn run(m : @tesseract_memory.Memory, command : String) -> Unit {
       warn("del needs a key")
       return
     }
-    if m.delete(words[1]) {
+    if scope.delete(words[1]) {
       out("forgot " + words[1])
     } else {
       out(words[1] + " -> (nothing to forget)")
@@ -407,7 +472,7 @@ fn run(m : @tesseract_memory.Memory, command : String) -> Unit {
       warn("touch needs a key")
       return
     }
-    if m.touch(words[1]) {
+    if scope.touch(words[1]) {
       out("refreshed " + words[1])
     } else {
       out(words[1] + " -> (nothing to refresh)")
@@ -415,18 +480,31 @@ fn run(m : @tesseract_memory.Memory, command : String) -> Unit {
     return
   }
   if verb == "keys" {
-    out(m.keys().join(", "))
+    out(scope.keys().join(", "))
     return
   }
   if verb == "entries" {
     let now = m.now()
-    for entry in m.entries() {
+    for entry in scope.entries() {
       out("  " + entry.describe(now))
     }
     return
   }
   if verb == "search" {
-    search(m, words)
+    search(scope, words)
+    return
+  }
+  if verb == "search-all" {
+    search_all(m, words)
+    return
+  }
+  if verb == "scopes" {
+    let names = m.scopes()
+    if names.length() == 0 {
+      out("(no scopes hold anything)")
+      return
+    }
+    out(names.join(", "))
     return
   }
   if verb == "sweep" {
@@ -448,13 +526,20 @@ fn run(m : @tesseract_memory.Memory, command : String) -> Unit {
     return
   }
   if verb == "clear" {
+    scope.clear()
+    out("forgotten everything in " + scope.name())
+    return
+  }
+  if verb == "clear-all" {
     m.clear()
-    out("forgotten everything")
+    out("forgotten everything, in every scope")
     return
   }
   if verb == "stats" {
     let s = m.stats()
-    out("size      " + m.size().to_string() + " of " + m.capacity().to_string())
+    out("scope     " + scope.name())
+    out("size      " + scope.size().to_string())
+    out("total     " + m.size().to_string() + " of " + m.capacity().to_string())
     out(bytes_line(m, ""))
     out("puts      " + s.puts.to_string())
     out("updates   " + s.updates.to_string())
@@ -474,7 +559,7 @@ fn run(m : @tesseract_memory.Memory, command : String) -> Unit {
 ///
 /// The value is the rest of the line with the flags taken out, so
 /// `put greeting hello world --ttl 1000` stores `hello world`.
-fn put(m : @tesseract_memory.Memory, words : Array[String]) -> Unit {
+fn put(scope : @tesseract_memory.Scope, words : Array[String]) -> Unit {
   if words.length() < 2 {
     warn("put needs a key and a value")
     return
@@ -497,7 +582,7 @@ fn put(m : @tesseract_memory.Memory, words : Array[String]) -> Unit {
     }
     i = i + 1
   }
-  let configured = m.config().default_ttl
+  let configured = scope.default_ttl()
   let ttl = match explicit_ms {
     Some(ms) =>
       if sliding {
@@ -519,7 +604,7 @@ fn put(m : @tesseract_memory.Memory, words : Array[String]) -> Unit {
       }
   }
   let value = value_parts.join(" ")
-  if m.put_with_ttl(key, value, ttl) {
+  if scope.put_with_ttl(key, value, ttl) {
     out(key + " -> " + value)
   } else {
     warn("could not store " + key)
@@ -531,11 +616,58 @@ fn put(m : @tesseract_memory.Memory, words : Array[String]) -> Unit {
 ///
 /// The query is the rest of the line, so `search red apple` looks for those
 /// two words together rather than for the word "red".
-fn search(m : @tesseract_memory.Memory, words : Array[String]) -> Unit {
+fn search(scope : @tesseract_memory.Scope, words : Array[String]) -> Unit {
   if words.length() < 2 {
     warn("search needs a query")
     return
   }
+  let (query, k) = query_and_k(words)
+  let hits = scope.search(query, k)
+  if hits.length() == 0 {
+    out("(nothing like that)")
+    return
+  }
+  for hit in hits {
+    out(hit.key + "  " + format_score(hit.score) + "  " + hit.value)
+  }
+}
+
+///|
+/// `search-all <query...> [-k N]`
+///
+/// The same search over every scope, so each hit says which scope it is in —
+/// a key is unique only within a scope, and without the scope the answer
+/// cannot say which entry it found.
+fn search_all(m : @tesseract_memory.Memory, words : Array[String]) -> Unit {
+  if words.length() < 2 {
+    warn("search-all needs a query")
+    return
+  }
+  let (query, k) = query_and_k(words)
+  let hits = m.search_all(query, k)
+  if hits.length() == 0 {
+    out("(nothing like that)")
+    return
+  }
+  for hit in hits {
+    out(
+      hit.scope +
+      "  " +
+      hit.key +
+      "  " +
+      format_score(hit.score) +
+      "  " +
+      hit.value,
+    )
+  }
+}
+
+///|
+/// The query and the limit from the words of a search command.
+///
+/// The query is the rest of the line, so `search red apple` looks for those
+/// two words together rather than for the word "red".
+fn query_and_k(words : Array[String]) -> (String, Int32) {
   let mut k = 3
   let query_parts : Array[String] = []
   let mut i = 1
@@ -548,13 +680,5 @@ fn search(m : @tesseract_memory.Memory, words : Array[String]) -> Unit {
     }
     i = i + 1
   }
-  let query = query_parts.join(" ")
-  let hits = m.search(query, k)
-  if hits.length() == 0 {
-    out("(nothing like that)")
-    return
-  }
-  for hit in hits {
-    out(hit.key + "  " + format_score(hit.score) + "  " + hit.value)
-  }
+  (query_parts.join(" "), k)
 }
