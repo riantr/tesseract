@@ -15,7 +15,7 @@ same success flags, error codes, positions, coordinates and digits.
 ## Install
 
 ```sh
-moon add riantr/tesseract@0.1.9
+moon add riantr/tesseract@0.1.10
 ```
 
 The library is the package `riantr/tesseract/src/tesseract`:
@@ -30,7 +30,7 @@ import {
 `cmd/main`, `cmd/persist`, `cmd/memory`, `cmd/sa` and `cmd/gui` are the five
 executables in the same module — the command line, the file-backed store, the
 short-term memory, the scan database and the window. Registry entry:
-[mooncakes.io/docs/riantr/tesseract@0.1.9](https://mooncakes.io/docs/riantr/tesseract@0.1.9).
+[mooncakes.io/docs/riantr/tesseract@0.1.10](https://mooncakes.io/docs/riantr/tesseract@0.1.10).
 
 ### What the release was checked on
 
@@ -601,6 +601,7 @@ moon run cmd/memory -- --capacity 3 "put a 1" "put b 2" "put c 3" "put d 4" "key
 moon run cmd/memory -- --max-bytes 10 "put a 12345" "put b 12345" "put c 12345" "stats"
 moon run cmd/memory -- --manual-clock "put a x --ttl 1000" "advance 1000" "get a"
 moon run cmd/memory -- "put a x --meta kind=note" "entries --where kind=note"
+moon run cmd/memory -- --capacity 2 "put keep kept --pinned" "put other dropped" "put new new" "keys"
 moon run cmd/memory -- demo
 ```
 
@@ -659,6 +660,63 @@ runs of the same program is a store nobody can test. The scope comes first
 because a key is only unique within a scope, and both are compared **by their
 letters** — see [the order of keys](#the-order-of-keys-is-by-their-letters).
 
+### A pinned entry is never thrown away
+
+Some entries must not be lost to make room for something else. A **pinned**
+entry is not a candidate for eviction at all: not the oldest, not the least
+used, not the one whose time is up soonest.
+
+```moonbit nocheck
+///|
+let m = @tesseract_memory.new_memory(100)
+ignore(
+  m.put_spec(
+    "keep",
+    "the thing that must not be lost",
+    @tesseract_memory.default_spec().with_pinned(true),
+  ),
+)
+```
+
+The pin is **absolute** rather than a preference. A store that broke a pin
+when it had to would make the promise depend on the state of the store, and a
+caller who pinned an entry could not tell from the answer whether the entry
+had survived. So a store that cannot make room for a write without evicting a
+pinned entry **refuses the write**, and the refusal leaves the store exactly
+as it was.
+
+That last part is the one that is easy to get wrong, and the store does it
+explicitly: the room is **planned before it is taken**. If even throwing away
+every entry that could be thrown away would not make room, the write is
+refused and *nothing* is evicted. A refused write that had already thrown
+something away would cost the caller an entry it did not ask to lose — and
+the caller would never hear about it, because the write was refused.
+
+The pin says nothing else:
+
+- A pinned entry still **expires** when its lifetime is up. "Do not evict me"
+  and "never die" are two different promises.
+- A pinned entry is still **found** by a search, and its score is unchanged.
+- A pinned entry still **takes up room**: it is counted against the capacity
+  and the byte budget like any other.
+- The pin belongs to the **entry**, so it survives a read and a touch, and it
+  is the store's eviction that respects it, not the scope's.
+
+| | |
+|---|---|
+| `with_pinned(true)` | write an entry that is never evicted |
+| `Memory::pin(key)` / `unpin(key)` | change the pin of an entry that is there |
+| `Scope::pin(key)` / `unpin(key)` | the same, in one scope |
+| `Entry::pinned()` | whether the entry is pinned |
+
+`pin` and `unpin` change **only** the pin: the entry keeps its age, its hit
+count, its deadline and its labels, because pinning something is not the
+same as reading it. Writing the key again replaces the entry, and so replaces
+the pin with whatever the new write asked for.
+
+From a shell: `put <key> <value...> --pinned`, and the `pin` and `unpin`
+commands.
+
 ### The byte budget
 
 A count of entries and a count of bytes are two different limits, and a caller
@@ -714,10 +772,10 @@ to exactly one of them.
 ///|
 let m = @tesseract_memory.new_memory(100)
 let work = m.scope("work")
-ignore(work.put("todo", "ship 0.1.9"))
+ignore(work.put("todo", "ship 0.1.10"))
 ignore(m.scope("notes").put("todo", "buy milk"))
 // Two entries, one key.
-assert_eq(work.get("todo"), Some("ship 0.1.9"))
+assert_eq(work.get("todo"), Some("ship 0.1.10"))
 assert_eq(m.scope("notes").get("todo"), Some("buy milk"))
 ```
 
@@ -766,7 +824,7 @@ place where there is nothing to find.
 From a shell, the scope is the partition the commands work in:
 
 ```sh
-moon run cmd/memory -- --scope work "put todo ship 0.1.9" "keys"
+moon run cmd/memory -- --scope work "put todo ship 0.1.10" "keys"
 moon run cmd/memory -- "put a the cat sat" "scope work" "put a the cat sat on the mat" "scopes"
 moon run cmd/memory -- "put a the cat sat" "scope work" "put a the cat sat on the mat" "search-all cat"
 ```
@@ -905,15 +963,16 @@ Both ends of the range are **refused** rather than clamped:
 - **Above one** would carry the score past the `0.0..1.0` it is documented to
   be in.
 
-The three settings an entry is written with travel together in an `EntrySpec`,
+The four settings an entry is written with travel together in an `EntrySpec`,
 because they are written together:
 
 | | |
 |---|---|
-| `default_spec()` | never expires, counts fully, carries no labels |
+| `default_spec()` | never expires, counts fully, carries no labels, is not pinned |
 | `with_ttl(ttl)` | the lifetime |
 | `with_importance(n)` | how much it counts |
 | `with_metadata(m)` | the labels it carries |
+| `with_pinned(true)` | that it is never evicted |
 | `put_spec(key, value, spec)` | the write |
 
 `put` and `put_with_ttl` are the two shorthands for the common cases, and
@@ -1047,6 +1106,11 @@ closest true thing to say about a lifetime of nine hundred million years.
 - **Not eviction by importance.** The importance weights *retrieval* — what a
   search finds — and not what the store throws away. That is the policy's
   business, and the four policies are about age, use and expiry.
+- **Not a soft pin.** A pin is absolute. A store that broke a pin when it had
+  to would make the promise depend on the state of the store, so a store that
+  cannot make room refuses the write instead.
+- **Not immortality.** A pinned entry still expires when its lifetime is up.
+  "Do not evict me" and "never die" are two different promises.
 - **Not eviction by the labels.** The labels say what an entry *is*, and a
   filter says what a search may look at. Neither is a weight, and a store that
   evicted by them would make the eviction depend on a field nobody promised
@@ -1057,7 +1121,7 @@ closest true thing to say about a lifetime of nine hundred million years.
   use.
 
 The full plan and the measurements behind it are in `LOOP3.md`, `LOOP4.md`,
-`LOOP5.md`, `LOOP6.md` and `LOOP7.md`.
+`LOOP5.md`, `LOOP6.md`, `LOOP7.md` and `LOOP8.md`.
 
 ## Running it
 
@@ -1065,7 +1129,7 @@ The full plan and the measurements behind it are in `LOOP3.md`, `LOOP4.md`,
 
 ```sh
 moon check --target all     # type-check every backend
-moon test                   # 344 tests
+moon test                   # 361 tests
 moon fmt --check            # canonical formatting
 
 node cli-smoke.mjs          # the CLIs, as real processes (builds them first)
@@ -1081,8 +1145,9 @@ moon run cmd/main -- .export tsr > dump.tsr
 # the short-term memory
 moon run cmd/memory -- .help
 moon run cmd/memory -- "put greeting hello world" "get greeting"
-moon run cmd/memory -- --scope work "put todo ship 0.1.9" "keys" "scopes"
+moon run cmd/memory -- --scope work "put todo ship 0.1.10" "keys" "scopes"
 moon run cmd/memory -- "put a x --meta kind=note" "search x --where kind=note"
+moon run cmd/memory -- "put a x --pinned" "pin a" "unpin a"
 moon run cmd/memory -- demo
 
 # 256 cells, digits 1..4
@@ -1299,10 +1364,10 @@ The gate, and the result it produced for this version:
 | `moon check --target js --deny-warn` | exit 0 |
 | `moon check --target native --deny-warn` | exit 0 |
 | `moon check --target wasm-gc --deny-warn` | exit 0 |
-| `moon test --target wasm --deny-warn` | **344 passed, 0 failed** |
+| `moon test --target wasm --deny-warn` | **361 passed, 0 failed** |
 | `moon build --target wasm` | exit 0 |
 | `typos` (v1.50.3 — the version the workflow pins) | exit 0 |
-| `node cli-smoke.mjs` | **55 passed, 0 failed** |
+| `node cli-smoke.mjs` | **65 passed, 0 failed** |
 | `node gui-smoke.mjs` | **45 passed, 0 failed** |
 
 The release workflow runs the first two check targets plus the test and build; the
