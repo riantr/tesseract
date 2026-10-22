@@ -51,6 +51,23 @@ For the same reason there is no `@latest`: the version is parsed as semver, so
 `moon add riantr/tesseract` resolves the newest release and pins the concrete
 version it found — that is the "latest" this toolchain has.
 
+The package can be given a shorter name, which is the closest thing here to
+Python's `from x import y as z`:
+
+```moonbit nocheck
+///|
+import {
+  "riantr/tesseract/src/tesseract_memory" @tm,
+}
+```
+
+so that the call is `@tm.new_memory(100)`. The alias belongs to the
+**package**, not to a file: every file in that package sees it, and an import
+statement inside a `.mbt` file is rejected outright — *"Invalid import
+declaration here. Move this declaration to `moon.pkg`."* There is also no
+re-export: `use` is a reserved word, so a package cannot hand another
+package's symbols on under a name of its own.
+
 `cmd/main`, `cmd/persist`, `cmd/memory`, `cmd/sa` and `cmd/gui` are the five
 executables in the same module — the command line, the file-backed store, the
 short-term memory, the scan database and the window. Registry entry:
