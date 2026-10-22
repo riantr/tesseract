@@ -607,10 +607,14 @@ similarity rather than by equality.
 
 It is a separate tier rather than a feature of the core because the two are
 different shapes of store. The core is durable — a cell keeps its record until
-somebody deletes it, the lattice's cell count is the bound, and overfilling it
-is an `INVALID_POSITION` error. A memory is the tier *above* that: an entry has
-a deadline, the bound is a number the caller sets, and going over it evicts an
-entry by a named policy rather than refusing the write.
+somebody deletes it, and the lattice's cell count is the bound on how many
+records exist at once. Going over that bound does not fail the write: the
+cursor wraps, and the write overwrites the cell it lands on — the cyclic write
+the C# original does too. `INVALID_POSITION` is a different thing entirely: it
+is the answer to a position *outside* the lattice, `last_position + 1` or `0`.
+A memory is the tier *above* that: an entry has a deadline, the bound is a
+number the caller sets, and going over it evicts an entry by a named policy
+rather than overwriting one.
 
 ```moonbit nocheck
 ///|
