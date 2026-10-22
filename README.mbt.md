@@ -15,7 +15,7 @@ same success flags, error codes, positions, coordinates and digits.
 ## Install
 
 ```sh
-moon add riantr/tesseract@0.1.8
+moon add riantr/tesseract@0.1.9
 ```
 
 The library is the package `riantr/tesseract/src/tesseract`:
@@ -30,7 +30,7 @@ import {
 `cmd/main`, `cmd/persist`, `cmd/memory`, `cmd/sa` and `cmd/gui` are the five
 executables in the same module — the command line, the file-backed store, the
 short-term memory, the scan database and the window. Registry entry:
-[mooncakes.io/docs/riantr/tesseract@0.1.8](https://mooncakes.io/docs/riantr/tesseract@0.1.8).
+[mooncakes.io/docs/riantr/tesseract@0.1.9](https://mooncakes.io/docs/riantr/tesseract@0.1.9).
 
 ### What the release was checked on
 
@@ -176,14 +176,15 @@ src/tesseract/
 src/tesseract_memory/
   memory.mbt     the memory: put, get, capacity, the statistics
   scope.mbt      the scopes: partitions of one keyspace, one budget, one clock
-  spec.mbt       the spec of an entry: its lifetime and how much it counts
+  spec.mbt       the spec of an entry: its lifetime, its weight, its labels
   entry.mbt      one remembered thing, and when its time is up
+  metadata.mbt   the labels of an entry, and the filters that select them
   ttl.mbt        Never / Absolute / Sliding, and the deadline arithmetic
   clock.mbt      the injected clock, system or manual
   evict.mbt      LRU, LFU, soonest-expiry, oldest
   similar.mbt    the similarity policies and the recency weight
   score.mbt      tokenising, the four similarities, JSON leaf paths
-  search.mbt     top-k over the live entries
+  search.mbt     top-k over the live entries, filtered or not
   size.mbt       the UTF-8 size of a text, in bytes
 cmd/main/        command line front end
 cmd/memory/      the short-term memory, from a shell
@@ -599,6 +600,7 @@ moon run cmd/memory -- "put greeting hello world" "get greeting"
 moon run cmd/memory -- --capacity 3 "put a 1" "put b 2" "put c 3" "put d 4" "keys"
 moon run cmd/memory -- --max-bytes 10 "put a 12345" "put b 12345" "put c 12345" "stats"
 moon run cmd/memory -- --manual-clock "put a x --ttl 1000" "advance 1000" "get a"
+moon run cmd/memory -- "put a x --meta kind=note" "entries --where kind=note"
 moon run cmd/memory -- demo
 ```
 
@@ -696,9 +698,11 @@ until then `size_bytes` honestly reports a store that is over its budget. A
 negative budget is refused, so that a number smaller than none cannot be
 mistaken for "no limit".
 
-The budget counts the **values**. The keys are bounded by the capacity, and
-the overhead of the store itself is not counted at all, so `size_bytes` is the
-size of the content a memory holds, not the size of the process holding it.
+The budget counts the **values and the labels** — the content of an entry, which
+is what the memory holds. The keys and the scopes are bounded by the capacity
+instead, and the overhead of the store itself is not counted at all, so
+`size_bytes` is the size of the content a memory holds, not the size of the
+process holding it.
 
 ### Scopes
 
@@ -710,10 +714,10 @@ to exactly one of them.
 ///|
 let m = @tesseract_memory.new_memory(100)
 let work = m.scope("work")
-ignore(work.put("todo", "ship 0.1.8"))
+ignore(work.put("todo", "ship 0.1.9"))
 ignore(m.scope("notes").put("todo", "buy milk"))
 // Two entries, one key.
-assert_eq(work.get("todo"), Some("ship 0.1.8"))
+assert_eq(work.get("todo"), Some("ship 0.1.9"))
 assert_eq(m.scope("notes").get("todo"), Some("buy milk"))
 ```
 
@@ -762,7 +766,7 @@ place where there is nothing to find.
 From a shell, the scope is the partition the commands work in:
 
 ```sh
-moon run cmd/memory -- --scope work "put todo ship 0.1.8" "keys"
+moon run cmd/memory -- --scope work "put todo ship 0.1.9" "keys"
 moon run cmd/memory -- "put a the cat sat" "scope work" "put a the cat sat on the mat" "scopes"
 moon run cmd/memory -- "put a the cat sat" "scope work" "put a the cat sat on the mat" "search-all cat"
 ```
@@ -901,19 +905,109 @@ Both ends of the range are **refused** rather than clamped:
 - **Above one** would carry the score past the `0.0..1.0` it is documented to
   be in.
 
-The two settings an entry is written with travel together in an `EntrySpec`,
+The three settings an entry is written with travel together in an `EntrySpec`,
 because they are written together:
 
 | | |
 |---|---|
-| `default_spec()` | never expires, counts fully |
+| `default_spec()` | never expires, counts fully, carries no labels |
 | `with_ttl(ttl)` | the lifetime |
 | `with_importance(n)` | how much it counts |
+| `with_metadata(m)` | the labels it carries |
 | `put_spec(key, value, spec)` | the write |
 
 `put` and `put_with_ttl` are the two shorthands for the common cases, and
 `Scope::put_spec` is the same thing in a scope. A spec the store cannot
 honour is **refused**, and the refusal leaves the store exactly as it was.
+
+### Labels on an entry
+
+An entry can carry **labels**: key/value pairs that say what the entry *is*,
+as opposed to what it says. A note is labelled `kind=note`, a task is labelled
+`kind=task`, and a search can ask for one of them.
+
+```moonbit nocheck
+///|
+let m = @tesseract_memory.new_memory(100)
+ignore(
+  m.put_spec(
+    "deploy",
+    "the deploy failed",
+    @tesseract_memory.default_spec()
+    .with_metadata(@tesseract_memory.new_metadata([("kind", "deploy")])),
+  ),
+)
+```
+
+The metadata is a **set**: the pairs are sorted, and a pair written twice is
+one pair, so two entries built from the same pairs carry the same metadata
+however they were written. A key may carry **several** values — "tag" can be
+both "urgent" and "infra".
+
+A label with **no name** is refused. The key is the name of the label, and a
+label with no name is not a label: no filter can select it, and a report of it
+renders as `=value`, which says nothing. A label whose *value* is empty is
+fine.
+
+#### Filtering a search
+
+A **filter** says which entries a search may look at. It is a **value** rather
+than a call, so it can be built, printed and handed to a shell — and a filter
+is the thing a caller composes.
+
+| filter | asks for |
+|---|---|
+| `filter_has(k)` | the label `k`, with any value |
+| `filter_lacks(k)` | the label `k` to be absent |
+| `filter_equals(k, v)` | the label `k` with the value `v` |
+| `filter_not_equals(k, v)` | the label `k` not to carry the value `v` |
+| `filter_all([...])` | every one of them to hold |
+| `filter_any([...])` | at least one of them to hold |
+
+An empty `All` **holds** — nothing was asked, so nothing was missed — and an
+empty `Any` does **not**: nothing was asked, so nothing was found. A key that
+is not there satisfies `not_equals`: it certainly does not carry the value.
+
+The filter is applied to the **candidates**, before they are scored. That
+matters, and the difference is not academic: a store that ranked first and
+filtered afterwards would give back *nothing* when the best match is one the
+filter turns away.
+
+```moonbit nocheck
+///|
+let hits = m.search_filtered(
+  "deploy",
+  3,
+  @tesseract_memory.filter_equals("kind", "deploy"),
+)
+```
+
+The limit is on the **answer**, not on the candidates: the store scores every
+entry the filter admits and keeps the best `k`, so a filter that admits fewer
+than `k` entries gives fewer than `k` — rather than padding the answer with
+the entries the filter turned away.
+
+The labels do **not** change what the store evicts, and they do not change how
+strongly an entry is found. They say what an entry *is*; the importance says
+how much it counts, and the eviction policy says what goes when the store is
+full. A store that evicted by its labels would make the eviction depend on a
+field nobody promised anything about.
+
+| | |
+|---|---|
+| `Memory::search_filtered` | the default scope, the entries the filter admits |
+| `Memory::search_all_filtered` | every scope, the entries the filter admits |
+| `Memory::search_filtered_keys` | the same, without the values |
+| `Memory::search_all_filtered_keys` | the same, over every scope |
+| `Memory::entries_filtered` | the entries the filter admits, by their labels alone |
+| `Scope::search_filtered` | one scope |
+| `Scope::search_filtered_keys` | one scope, without the values |
+| `Scope::entries_filtered` | one scope, by their labels alone |
+
+The labels are **part of the content**, so the byte budget counts them: the
+budget is about what the memory holds, and a label is something the memory
+holds. The key and the scope are not counted — they are the *name* of an entry
+rather than its content.
 
 ### The clock is injected
 
@@ -953,13 +1047,17 @@ closest true thing to say about a lifetime of nine hundred million years.
 - **Not eviction by importance.** The importance weights *retrieval* — what a
   search finds — and not what the store throws away. That is the policy's
   business, and the four policies are about age, use and expiry.
+- **Not eviction by the labels.** The labels say what an entry *is*, and a
+  filter says what a search may look at. Neither is a weight, and a store that
+  evicted by them would make the eviction depend on a field nobody promised
+  anything about.
 - **Not per-scope budgets.** A scope partitions one pool, and the capacity and
   the byte budget belong to the pool. A scope with a budget of its own would
   make the store's size a function of how many partitions a caller happened to
   use.
 
 The full plan and the measurements behind it are in `LOOP3.md`, `LOOP4.md`,
-`LOOP5.md` and `LOOP6.md`.
+`LOOP5.md`, `LOOP6.md` and `LOOP7.md`.
 
 ## Running it
 
@@ -967,7 +1065,7 @@ The full plan and the measurements behind it are in `LOOP3.md`, `LOOP4.md`,
 
 ```sh
 moon check --target all     # type-check every backend
-moon test                   # 314 tests
+moon test                   # 344 tests
 moon fmt --check            # canonical formatting
 
 node cli-smoke.mjs          # the CLIs, as real processes (builds them first)
@@ -983,7 +1081,8 @@ moon run cmd/main -- .export tsr > dump.tsr
 # the short-term memory
 moon run cmd/memory -- .help
 moon run cmd/memory -- "put greeting hello world" "get greeting"
-moon run cmd/memory -- --scope work "put todo ship 0.1.8" "keys" "scopes"
+moon run cmd/memory -- --scope work "put todo ship 0.1.9" "keys" "scopes"
+moon run cmd/memory -- "put a x --meta kind=note" "search x --where kind=note"
 moon run cmd/memory -- demo
 
 # 256 cells, digits 1..4
@@ -1200,10 +1299,10 @@ The gate, and the result it produced for this version:
 | `moon check --target js --deny-warn` | exit 0 |
 | `moon check --target native --deny-warn` | exit 0 |
 | `moon check --target wasm-gc --deny-warn` | exit 0 |
-| `moon test --target wasm --deny-warn` | **314 passed, 0 failed** |
+| `moon test --target wasm --deny-warn` | **344 passed, 0 failed** |
 | `moon build --target wasm` | exit 0 |
 | `typos` (v1.50.3 — the version the workflow pins) | exit 0 |
-| `node cli-smoke.mjs` | **43 passed, 0 failed** |
+| `node cli-smoke.mjs` | **55 passed, 0 failed** |
 | `node gui-smoke.mjs` | **45 passed, 0 failed** |
 
 The release workflow runs the first two check targets plus the test and build; the
