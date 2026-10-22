@@ -260,6 +260,39 @@ function main() {
     check("an importance that is not a number is refused", r.err.includes("not a number"), true, r.out + r.err);
     r = run("memory", ["put a x --ttl 0"], dir);
     check("a lifetime of nothing is refused", r.err.includes("lifetime must be at least one millisecond"), true, r.out + r.err);
+
+    // ---- cmd/memory: the labels on an entry ----
+    // The labels say what an entry is, and a filter says which of them a
+    // search may look at. The check is about *which entries come back*, not
+    // about how they are ranked.
+    //
+    // A `put` echoes the value it stored, so "the cat ran" is in the output
+    // whether or not the search found it. The score is what says a line is a
+    // hit, so the hits are the lines that carry one.
+    const hits = (s) => lines(s).filter((l) => /^\S+\s+\d+\.\d{3}\s/.test(l));
+    const hitText = (s) => hits(s).join("\n");
+
+    r = run("memory", ["put note the cat sat --meta kind=note", "put task the cat ran --meta kind=task", "search cat"], dir);
+    check("an entry is labelled with what it was given", r.out.includes("kind=note"), true, r.out + r.err);
+    check("...and the search shows the labels of a hit", hitText(r.out).includes("kind=note"), true, r.out + r.err);
+    check("...and both entries are found without a filter", hits(r.out).length, 2, r.out + r.err);
+    r = run("memory", ["put note the cat sat --meta kind=note", "put task the cat ran --meta kind=task", "search cat --where kind=note"], dir);
+    check("a filter leaves out the entries it turns away", hitText(r.out).includes("the cat ran"), false, r.out + r.err);
+    check("...and keeps the ones it admits", hitText(r.out).includes("the cat sat"), true, r.out + r.err);
+    r = run("memory", ["put note the cat sat --meta kind=note --meta tag=urgent", "put task the cat ran --meta kind=task", "search cat --where kind=note --where tag=urgent"], dir);
+    check("several filters are combined with and", hitText(r.out).includes("the cat sat") && !hitText(r.out).includes("the cat ran"), true, r.out + r.err);
+    r = run("memory", ["put note the cat sat --meta kind=note", "put task the cat ran --meta kind=task", "search cat --without kind=task"], dir);
+    check("--without k=v turns away the label with that value", hitText(r.out).includes("the cat sat") && !hitText(r.out).includes("the cat ran"), true, r.out + r.err);
+    r = run("memory", ["put note the cat sat --meta kind=note --meta tag=urgent", "put task the cat ran --meta kind=task", "search cat --where tag"], dir);
+    check("--where k asks for the label with any value", hitText(r.out).includes("the cat sat") && !hitText(r.out).includes("the cat ran"), true, r.out + r.err);
+    r = run("memory", ["put note the cat sat --meta kind=note", "put task the dog ran --meta kind=task", "entries --where kind=note"], dir);
+    check("the entries can be listed by their labels alone", r.out.includes("note (age") && !r.out.includes("task (age"), true, r.out + r.err);
+
+    // A label the store cannot hold is reported, not quietly dropped.
+    r = run("memory", ["put a x --meta =value"], dir);
+    check("a label with no name is refused", r.err.includes("label needs a name"), true, r.out + r.err);
+    r = run("memory", ["put a x --meta noequals"], dir);
+    check("a label that is not key=value is refused", r.err.includes("must be key=value"), true, r.out + r.err);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

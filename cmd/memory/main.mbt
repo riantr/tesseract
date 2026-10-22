@@ -11,6 +11,7 @@
 /// moon run cmd/memory -- --capacity 3 "put a 1" "put b 2" "put c 3" "put d 4" "keys"
 /// moon run cmd/memory -- --manual-clock "put a x --ttl 1000" "advance 1000" "get a"
 /// moon run cmd/memory -- --scope work "put a 1" "put b 2" "scopes"
+/// moon run cmd/memory -- "put a x --meta kind=note" "entries --where kind=note"
 /// moon run cmd/memory -- demo
 /// ```
 ///
@@ -36,6 +37,12 @@
 /// scope can evict an entry from another. `scopes` lists the ones that hold
 /// something, `scope <name>` switches to another one, and `search-all` looks
 /// in all of them at once.
+///
+/// The **labels** say what an entry is. `put` writes them with `--meta k=v`,
+/// and the searches and `entries` read them back with `--where k=v`,
+/// `--where k` and `--without k`. A filter chooses the candidates, so an
+/// entry the filter turns away is not looked at at all — even when it would
+/// have been the better match.
 
 ///|
 /// Everything the commands report goes to stdout; the banner and every failure
@@ -75,6 +82,42 @@ fn split_ws(text : String) -> Array[String] {
     out.push(@tesseract.slice(text, start, n))
   }
   out
+}
+
+///|
+/// The place of the first `=` in the text, or -1.
+///
+/// The labels and the filters are written `key=value`, and a value may itself
+/// contain an `=`, so the split is at the **first** one.
+fn index_of_equal(text : String) -> Int32 {
+  let n = text.length()
+  let mut i = 0
+  while i < n {
+    if text.at(i).to_int() == 61 {
+      return i
+    }
+    i = i + 1
+  }
+  -1
+}
+
+///|
+/// A `key=value` argument, split at the first `=`.
+///
+/// `None` when there is no `=` at all: `kind` on its own is a label the entry
+/// must *have*, and the caller has to say which they meant.
+fn key_and_value(text : String) -> (String, String)? {
+  let at = index_of_equal(text)
+  if at < 0 {
+    None
+  } else {
+    Some(
+      (
+        @tesseract.slice(text, 0, at),
+        @tesseract.slice(text, at + 1, text.length()),
+      ),
+    )
+  }
 }
 
 ///|
@@ -140,12 +183,17 @@ fn print_help() -> Unit {
   out("  put <key> <value...>      remember a value")
   out("  put <key> <value...> --ttl MS --sliding")
   out("  put <key> <value...> --importance N   how much it counts, in (0, 1]")
+  out(
+    "  put <key> <value...> --meta k=v        label it, as many times as you like",
+  )
   out("  get <key>                 read a value")
   out("  del <key>                 forget a key")
   out("  touch <key>               refresh a key without reading it")
   out("  keys                      the live keys")
   out("  entries                   the live entries, with their ages")
+  out("  entries --where k=v       only the entries with that label")
   out("  search <query...> [-k N] the entries most like the query")
+  out("  search <query...> --where k=v   only the entries with that label")
   out("  search-all <query...>     the same, over every scope")
   out("  scopes                    the scopes that hold something")
   out("  scope <name>              work in another scope from here on")
@@ -155,6 +203,14 @@ fn print_help() -> Unit {
   out("  clear                     forget everything in this scope")
   out("  clear-all                 forget everything in every scope")
   out("  demo                      a short tour")
+  out("")
+  out("filters:")
+  out("  --where k=v               the entry has the label k with the value v")
+  out("  --where k                 the entry has the label k, with any value")
+  out("  --without k               the entry does not have the label k")
+  out(
+    "  --without k=v             the entry does not have the label k with the value v",
+  )
   out("")
 }
 
@@ -485,10 +541,7 @@ fn command(
     return
   }
   if verb == "entries" {
-    let now = m.now()
-    for entry in scope.entries() {
-      out("  " + entry.describe(now))
-    }
+    entries(m, scope, words)
     return
   }
   if verb == "search" {
@@ -556,7 +609,7 @@ fn command(
 }
 
 ///|
-/// `put <key> <value...> [--ttl MS] [--sliding] [--importance N]`
+/// `put <key> <value...> [--ttl MS] [--sliding] [--importance N] [--meta k=v]`
 ///
 /// The value is the rest of the line with the flags taken out, so
 /// `put greeting hello world --ttl 1000` stores `hello world`.
@@ -567,6 +620,10 @@ fn command(
 /// importance outside that range, and so does the shell — a person who typed
 /// a flag deserves to be told, not to be given a different memory than they
 /// asked for.
+///
+/// The **labels** are written `--meta key=value`, and there may be several:
+/// they are what a filtered search looks at. A label with no name is refused,
+/// because a label with no name is not a label.
 fn put(scope : @tesseract_memory.Scope, words : Array[String]) -> Unit {
   if words.length() < 2 {
     warn("put needs a key and a value")
@@ -576,6 +633,7 @@ fn put(scope : @tesseract_memory.Scope, words : Array[String]) -> Unit {
   let mut sliding = false
   let mut explicit_ms : Int64? = None
   let mut importance : Double? = None
+  let meta_pairs : Array[(String, String)] = []
   let value_parts : Array[String] = []
   let mut i = 2
   while i < words.length() {
@@ -591,6 +649,21 @@ fn put(scope : @tesseract_memory.Scope, words : Array[String]) -> Unit {
         Some(value) => importance = Some(value)
         None => {
           warn("the importance is not a number: " + words[i + 1])
+          return
+        }
+      }
+      i = i + 1
+    } else if words[i] == "--meta" && i + 1 < words.length() {
+      match key_and_value(words[i + 1]) {
+        Some(pair) => {
+          if pair.0.is_empty() {
+            warn("the label needs a name: " + words[i + 1])
+            return
+          }
+          meta_pairs.push(pair)
+        }
+        None => {
+          warn("the label must be key=value: " + words[i + 1])
           return
         }
       }
@@ -627,15 +700,19 @@ fn put(scope : @tesseract_memory.Scope, words : Array[String]) -> Unit {
     warn("the lifetime must be at least one millisecond")
     return
   }
-  let spec = match importance {
-    None => @tesseract_memory.default_spec().with_ttl(ttl)
+  let mut spec = @tesseract_memory.default_spec().with_ttl(ttl)
+  match importance {
+    None => ()
     Some(value) => {
       if value <= 0.0 || value > 1.0 {
         warn("the importance must be more than zero and at most one")
         return
       }
-      @tesseract_memory.default_spec().with_ttl(ttl).with_importance(value)
+      spec = spec.with_importance(value)
     }
+  }
+  if meta_pairs.length() > 0 {
+    spec = spec.with_metadata(@tesseract_memory.new_metadata(meta_pairs))
   }
   let value = value_parts.join(" ")
   if scope.put_spec(key, value, spec) {
@@ -646,28 +723,47 @@ fn put(scope : @tesseract_memory.Scope, words : Array[String]) -> Unit {
 }
 
 ///|
-/// `search <query...> [-k N]`
+/// `search <query...> [-k N] [--where k=v] [--where k] [--without k]`
 ///
 /// The query is the rest of the line, so `search red apple` looks for those
 /// two words together rather than for the word "red".
+///
+/// The **filters** say what the entries have to be labelled. `--where k=v`
+/// asks for the label `k` with the value `v`, `--where k` asks for the label
+/// `k` with any value, and `--without k` asks for the label `k` to be absent.
+/// Several of them are combined with *and*: every one of them has to hold.
+///
+/// The filter chooses the **candidates**, so an entry the filter turns away
+/// is not looked at at all — even when it is a better match than the ones that
+/// are left.
 fn search(scope : @tesseract_memory.Scope, words : Array[String]) -> Unit {
   if words.length() < 2 {
     warn("search needs a query")
     return
   }
-  let (query, k) = query_and_k(words)
-  let hits = scope.search(query, k)
+  let (query, k, filter) = query_filter_and_k(words)
+  let hits = match filter {
+    Some(f) => scope.search_filtered(query, k, f)
+    None => scope.search(query, k)
+  }
   if hits.length() == 0 {
     out("(nothing like that)")
     return
   }
   for hit in hits {
-    out(hit.key + "  " + format_score(hit.score) + "  " + hit.value)
+    out(
+      hit.key +
+      "  " +
+      format_score(hit.score) +
+      "  " +
+      hit.value +
+      labels_of(hit),
+    )
   }
 }
 
 ///|
-/// `search-all <query...> [-k N]`
+/// `search-all <query...> [-k N] [--where ...] [--without ...]`
 ///
 /// The same search over every scope, so each hit says which scope it is in —
 /// a key is unique only within a scope, and without the scope the answer
@@ -677,8 +773,11 @@ fn search_all(m : @tesseract_memory.Memory, words : Array[String]) -> Unit {
     warn("search-all needs a query")
     return
   }
-  let (query, k) = query_and_k(words)
-  let hits = m.search_all(query, k)
+  let (query, k, filter) = query_filter_and_k(words)
+  let hits = match filter {
+    Some(f) => m.search_all_filtered(query, k, f)
+    None => m.search_all(query, k)
+  }
   if hits.length() == 0 {
     out("(nothing like that)")
     return
@@ -691,28 +790,105 @@ fn search_all(m : @tesseract_memory.Memory, words : Array[String]) -> Unit {
       "  " +
       format_score(hit.score) +
       "  " +
-      hit.value,
+      hit.value +
+      labels_of(hit),
     )
   }
 }
 
 ///|
-/// The query and the limit from the words of a search command.
+/// `entries [--where k=v] [--where k] [--without k]`
+///
+/// The entries of this scope, in key order. With a filter, only the ones
+/// whose labels satisfy it — so this is retrieval **by** the labels rather
+/// than by the words.
+fn entries(
+  m : @tesseract_memory.Memory,
+  scope : @tesseract_memory.Scope,
+  words : Array[String],
+) -> Unit {
+  let (_, _, filter) = query_filter_and_k(words)
+  let list = match filter {
+    Some(f) => scope.entries_filtered(f)
+    None => scope.entries()
+  }
+  let now = m.now()
+  for entry in list {
+    out("  " + entry.describe(now))
+  }
+}
+
+///|
+/// The labels of a hit, for the end of the line.
+///
+/// A hit with no labels says nothing extra: the line would end in a space.
+fn labels_of(hit : @tesseract_memory.Hit) -> String {
+  if hit.metadata.is_empty() {
+    ""
+  } else {
+    "  " + hit.metadata.describe()
+  }
+}
+
+///|
+/// The filter a `--where` argument stands for.
+///
+/// `k=v` asks for the label `k` with the value `v`; a bare `k` asks for the
+/// label `k` with any value.
+fn condition_of(text : String) -> @tesseract_memory.MetadataFilter {
+  match key_and_value(text) {
+    Some(pair) => @tesseract_memory.filter_equals(pair.0, pair.1)
+    None => @tesseract_memory.filter_has(text)
+  }
+}
+
+///|
+/// The filter a `--without` argument stands for.
+///
+/// `k=v` asks for the label `k` **not** to carry the value `v`; a bare `k`
+/// asks for the label `k` to be absent. It is the mirror of `--where`, and it
+/// splits the same way — a `--without` that did not would ask for the absence
+/// of a label called "kind=task", which is a label nobody wrote.
+fn exclusion_of(text : String) -> @tesseract_memory.MetadataFilter {
+  match key_and_value(text) {
+    Some(pair) => @tesseract_memory.filter_not_equals(pair.0, pair.1)
+    None => @tesseract_memory.filter_lacks(text)
+  }
+}
+
+///|
+/// The query, the limit and the filter from the words of a search command.
 ///
 /// The query is the rest of the line, so `search red apple` looks for those
 /// two words together rather than for the word "red".
-fn query_and_k(words : Array[String]) -> (String, Int32) {
+fn query_filter_and_k(
+  words : Array[String],
+) -> (String, Int32, @tesseract_memory.MetadataFilter?) {
   let mut k = 3
+  let conditions : Array[@tesseract_memory.MetadataFilter] = []
   let query_parts : Array[String] = []
   let mut i = 1
   while i < words.length() {
     if words[i] == "-k" && i + 1 < words.length() {
       k = @tesseract.parse_int(words[i + 1]).unwrap_or(3)
       i = i + 1
+    } else if words[i] == "--where" && i + 1 < words.length() {
+      conditions.push(condition_of(words[i + 1]))
+      i = i + 1
+    } else if words[i] == "--without" && i + 1 < words.length() {
+      conditions.push(exclusion_of(words[i + 1]))
+      i = i + 1
     } else {
       query_parts.push(words[i])
     }
     i = i + 1
   }
-  (query_parts.join(" "), k)
+  let filter = if conditions.length() == 0 {
+    None
+  } else if conditions.length() == 1 {
+    Some(conditions[0])
+  } else {
+    Some(@tesseract_memory.filter_all(conditions))
+  }
+  (query_parts.join(" "), k, filter)
 }

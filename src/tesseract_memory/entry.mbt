@@ -9,6 +9,11 @@
 /// within a scope: the key `todo` in `default` and the key `todo` in `notes`
 /// are two entries, and an entry that did not say where it lived could not be
 /// told from the other.
+///
+/// The entry carries the **metadata** it was written with. The metadata is a
+/// value, and a copy of the entry copies it with it: an entry that has been
+/// touched is the same entry, with a new deadline and a new hit count, and not
+/// a different entry that happens to have the same key.
 pub struct Entry {
   scope : String
   key : String
@@ -20,6 +25,7 @@ pub struct Entry {
   last_seen : Int64
   hits : Int64
   importance : Double
+  metadata : Metadata
 }
 
 ///|
@@ -77,6 +83,7 @@ pub fn Entry::touched(self : Entry, now_ms : Int64) -> Entry {
     last_seen: now_ms,
     hits: self.hits + 1L,
     importance: self.importance,
+    metadata: self.metadata,
   }
 }
 
@@ -90,7 +97,19 @@ pub fn Entry::importance(self : Entry) -> Double {
 }
 
 ///|
+/// The labels this entry carries.
+///
+/// The metadata is a **value**: a copy of the entry copies it, and the pairs
+/// behind it cannot be reached and changed by a caller.
+pub fn Entry::metadata(self : Entry) -> Metadata {
+  self.metadata
+}
+
+///|
 /// A one-line description of the entry, for a report.
+///
+/// The labels are in the line when the entry has any, and are left out when it
+/// has none: a line that says "meta " and nothing after it is noise.
 pub fn Entry::describe(self : Entry, now_ms : Int64) -> String {
   self.key +
   " (age " +
@@ -99,6 +118,11 @@ pub fn Entry::describe(self : Entry, now_ms : Int64) -> String {
   self.hits.to_string() +
   ", importance " +
   self.importance.to_string() +
+  (if self.metadata.is_empty() {
+    ""
+  } else {
+    ", meta " + self.metadata.describe()
+  }) +
   ", " +
   (if self.window_ms == 0L {
     "no deadline"

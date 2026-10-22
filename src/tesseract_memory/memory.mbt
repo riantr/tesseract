@@ -418,11 +418,13 @@ pub fn Memory::put_spec(
 }
 
 ///|
-/// How many bytes the stored values take up, in every scope.
+/// How many bytes the stored content takes up, in every scope.
 ///
-/// UTF-8 bytes, because that is the unit a budget is stated in. The keys are
-/// not counted: the budget is about the content, and the number of keys is
-/// bounded by the capacity.
+/// UTF-8 bytes, because that is the unit a budget is stated in. The content is
+/// the values **and** the labels that go with them — the budget is about what
+/// the memory holds, and a label is something the memory holds. The keys are
+/// not counted: they are the name of an entry rather than its content, and the
+/// number of keys is bounded by the capacity.
 ///
 /// This is the **store's** total, because the budget is the store's — it is
 /// the number to compare with `max_bytes`.
@@ -458,11 +460,11 @@ fn Memory::make_room(
   self : Memory,
   scope : String,
   key : String,
-  value_bytes : Int64,
+  total_bytes : Int64,
   new_key : Bool,
 ) -> Bool {
   let mut ok = true
-  while self.over_capacity_after(scope, key, value_bytes, new_key) {
+  while self.over_capacity_after(scope, key, total_bytes, new_key) {
     match self.pick_victim(scope, key) {
       Some(victim) => {
         ignore(self.forget(victim.0, victim.1))
@@ -488,7 +490,7 @@ fn Memory::over_capacity_after(
   self : Memory,
   scope : String,
   key : String,
-  value_bytes : Int64,
+  total_bytes : Int64,
   new_key : Bool,
 ) -> Bool {
   if new_key && self.entry_count() + 1 > self.config.capacity {
@@ -496,14 +498,25 @@ fn Memory::over_capacity_after(
   }
   if self.config.max_bytes > 0L {
     let final_bytes = match self.lookup(scope, key) {
-      Some(old) => self.bytes - utf8_bytes(old.value) + value_bytes
-      None => self.bytes + value_bytes
+      Some(old) => self.bytes - entry_bytes(old) + total_bytes
+      None => self.bytes + total_bytes
     }
     if final_bytes > self.config.max_bytes {
       return true
     }
   }
   false
+}
+
+///|
+/// How many bytes an entry takes up: its value and its labels.
+///
+/// The budget is about what the memory holds, and this is what it holds. The
+/// key and the scope are not counted — they are the **name** of the entry
+/// rather than its content, and the capacity bounds how many entries there
+/// are.
+fn entry_bytes(entry : Entry) -> Int64 {
+  utf8_bytes(entry.value) + entry.metadata.bytes()
 }
 
 ///|
@@ -531,17 +544,17 @@ fn Memory::write(
   match self.entries.get(scope) {
     Some(inner) => {
       match inner.get(key) {
-        Some(old) => self.bytes = self.bytes - utf8_bytes(old.value)
+        Some(old) => self.bytes = self.bytes - entry_bytes(old)
         None => ()
       }
       inner.set(key, entry)
-      self.bytes = self.bytes + utf8_bytes(entry.value)
+      self.bytes = self.bytes + entry_bytes(entry)
     }
     None => {
       let inner : Map[String, Entry] = Map([])
       inner.set(key, entry)
       self.entries.set(scope, inner)
-      self.bytes = self.bytes + utf8_bytes(entry.value)
+      self.bytes = self.bytes + entry_bytes(entry)
     }
   }
 }
@@ -558,7 +571,7 @@ fn Memory::forget(self : Memory, scope : String, key : String) -> Bool {
       match inner.remove_and_get(key) {
         None => false
         Some(entry) => {
-          self.bytes = self.bytes - utf8_bytes(entry.value)
+          self.bytes = self.bytes - entry_bytes(entry)
           if inner.length() == 0 {
             ignore(self.entries.remove_and_get(scope))
           }
@@ -672,15 +685,17 @@ fn Memory::put_in(
   let now = self.now()
   let (deadline, sliding) = spec.ttl.deadline(now)
   let window = spec.ttl.window_ms()
-  let value_bytes = utf8_bytes(value)
-  // A value that cannot fit in an *empty* store is refused here, before
+  // The content of an entry is its value **and** its labels: the budget is
+  // about what the memory holds, and this is what it will hold.
+  let total_bytes = utf8_bytes(value) + spec.metadata.bytes()
+  // Content that cannot fit in an *empty* store is refused here, before
   // anything is evicted. Refusing it later would cost the caller every entry
   // it already has, and a write that fails should not empty the memory.
-  if self.config.max_bytes > 0L && value_bytes > self.config.max_bytes {
+  if self.config.max_bytes > 0L && total_bytes > self.config.max_bytes {
     return false
   }
   let already = self.lookup(scope, key) is Some(_)
-  if !self.make_room(scope, key, value_bytes, !already) {
+  if !self.make_room(scope, key, total_bytes, !already) {
     return false
   }
   self.write(scope, key, {
@@ -694,6 +709,7 @@ fn Memory::put_in(
     last_seen: now,
     hits: 0L,
     importance: spec.importance,
+    metadata: spec.metadata,
   })
   self.stats.puts = self.stats.puts + 1L
   if already {
@@ -799,7 +815,7 @@ fn Memory::clear_in(self : Memory, scope : String) -> Unit {
     None => ()
     Some(inner) => {
       for (_, entry) in inner.iter() {
-        self.bytes = self.bytes - utf8_bytes(entry.value)
+        self.bytes = self.bytes - entry_bytes(entry)
       }
       ignore(self.entries.remove_and_get(scope))
     }

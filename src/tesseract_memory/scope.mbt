@@ -187,16 +187,17 @@ pub fn Scope::size(self : Scope) -> Int32 {
 }
 
 ///|
-/// How many bytes this scope's values take up.
+/// How many bytes this scope's content takes up.
 ///
-/// UTF-8 bytes, the same unit the store's budget is stated in. The store's own
-/// total is `Memory::size_bytes`; this is the part of it that belongs to this
-/// scope.
+/// UTF-8 bytes, the same unit the store's budget is stated in. The content is
+/// the values **and** their labels: the budget is about what the memory holds,
+/// and this is the part of it that belongs to this scope. The store's own
+/// total is `Memory::size_bytes`.
 pub fn Scope::size_bytes(self : Scope) -> Int64 {
   ignore(self.memory.expire_due())
   let mut bytes = 0L
   for entry in self.memory.entries_in(self.name) {
-    bytes = bytes + utf8_bytes(entry.value)
+    bytes = bytes + entry_bytes(entry)
   }
   bytes
 }
@@ -228,4 +229,42 @@ pub fn Scope::search_keys(
   k : Int32,
 ) -> Array[String] {
   self.memory.search_keys_in(self.name, query, k)
+}
+
+///|
+/// The entries of this scope most like `query` that the filter admits.
+///
+/// The filter is applied to the **candidates**, before they are scored, so it
+/// changes which entries are looked at rather than how they are ranked.
+pub fn Scope::search_filtered(
+  self : Scope,
+  query : String,
+  k : Int32,
+  filter : MetadataFilter,
+) -> Array[Hit] {
+  self.memory.search_in_where(self.name, query, k, Some(filter))
+}
+
+///|
+/// The keys of this scope's entries most like `query` that the filter admits.
+pub fn Scope::search_filtered_keys(
+  self : Scope,
+  query : String,
+  k : Int32,
+  filter : MetadataFilter,
+) -> Array[String] {
+  self.memory.search_keys_in_where(self.name, query, k, Some(filter))
+}
+
+///|
+/// The live entries of this scope whose labels the filter admits, in key
+/// order.
+///
+/// Retrieval **by** the labels rather than by the words: there is no text to
+/// match here.
+pub fn Scope::entries_filtered(
+  self : Scope,
+  filter : MetadataFilter,
+) -> Array[Entry] {
+  self.memory.entries_in_where(self.name, Some(filter))
 }

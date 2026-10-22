@@ -20,6 +20,18 @@ pub fn evict_oldest() -> EvictionPolicy
 
 pub fn evict_soonest_expiry() -> EvictionPolicy
 
+pub fn filter_all(Array[MetadataFilter]) -> MetadataFilter
+
+pub fn filter_any(Array[MetadataFilter]) -> MetadataFilter
+
+pub fn filter_equals(String, String) -> MetadataFilter
+
+pub fn filter_has(String) -> MetadataFilter
+
+pub fn filter_lacks(String) -> MetadataFilter
+
+pub fn filter_not_equals(String, String) -> MetadataFilter
+
 pub fn jaccard(String, String) -> Double
 
 pub fn memory_clock_manual(Int64) -> MemoryClock
@@ -31,6 +43,10 @@ pub fn new_memory(Int32) -> Memory
 pub fn new_memory_with(Config) -> Memory
 
 pub fn new_memory_with_clock(Config, MemoryClock) -> Memory
+
+pub fn new_metadata(Array[(String, String)]) -> Metadata
+
+pub fn no_metadata() -> Metadata
 
 pub fn recency_decay(Int64) -> Recency
 
@@ -92,20 +108,24 @@ pub struct Entry {
   last_seen : Int64
   hits : Int64
   importance : Double
+  metadata : Metadata
 }
 pub fn Entry::age_ms(Self, Int64) -> Int64
 pub fn Entry::describe(Self, Int64) -> String
 pub fn Entry::expired(Self, Int64) -> Bool
 pub fn Entry::idle_ms(Self, Int64) -> Int64
 pub fn Entry::importance(Self) -> Double
+pub fn Entry::metadata(Self) -> Metadata
 pub fn Entry::touched(Self, Int64) -> Self
 
 pub struct EntrySpec {
   ttl : Ttl
   importance : Double
+  metadata : Metadata
 }
 pub fn EntrySpec::is_valid(Self) -> Bool
 pub fn EntrySpec::with_importance(Self, Double) -> Self
+pub fn EntrySpec::with_metadata(Self, Metadata) -> Self
 pub fn EntrySpec::with_ttl(Self, Ttl) -> Self
 
 pub enum EvictionPolicy {
@@ -122,9 +142,11 @@ pub struct Hit {
   value : String
   score : Double
   importance : Double
+  metadata : Metadata
 }
 pub fn Hit::importance(Self) -> Double
 pub fn Hit::key(Self) -> String
+pub fn Hit::metadata(Self) -> Metadata
 pub fn Hit::scope(Self) -> String
 pub fn Hit::score(Self) -> Double
 pub fn Hit::value(Self) -> String
@@ -141,6 +163,7 @@ pub fn Memory::contains(Self, String) -> Bool
 pub fn Memory::default_scope(Self) -> Scope
 pub fn Memory::delete(Self, String) -> Bool
 pub fn Memory::entries(Self) -> Array[Entry]
+pub fn Memory::entries_filtered(Self, MetadataFilter) -> Array[Entry]
 pub fn Memory::entry(Self, String) -> Entry?
 pub fn Memory::get(Self, String) -> String?
 pub fn Memory::keys(Self) -> Array[String]
@@ -153,7 +176,11 @@ pub fn Memory::scope(Self, String) -> Scope
 pub fn Memory::scopes(Self) -> Array[String]
 pub fn Memory::search(Self, String, Int32) -> Array[Hit]
 pub fn Memory::search_all(Self, String, Int32) -> Array[Hit]
+pub fn Memory::search_all_filtered(Self, String, Int32, MetadataFilter) -> Array[Hit]
+pub fn Memory::search_all_filtered_keys(Self, String, Int32, MetadataFilter) -> Array[String]
 pub fn Memory::search_all_keys(Self, String, Int32) -> Array[String]
+pub fn Memory::search_filtered(Self, String, Int32, MetadataFilter) -> Array[Hit]
+pub fn Memory::search_filtered_keys(Self, String, Int32, MetadataFilter) -> Array[String]
 pub fn Memory::search_keys(Self, String, Int32) -> Array[String]
 pub fn Memory::set_config(Self, Config) -> Bool
 pub fn Memory::size(Self) -> Int32
@@ -169,6 +196,30 @@ pub enum MemoryClock {
 pub fn MemoryClock::is_manual(Self) -> Bool
 pub fn MemoryClock::name(Self) -> String
 pub fn MemoryClock::read(Self) -> Int64
+
+pub struct Metadata {
+  // private fields
+}
+pub fn Metadata::bytes(Self) -> Int64
+pub fn Metadata::describe(Self) -> String
+pub fn Metadata::has(Self, String) -> Bool
+pub fn Metadata::has_value(Self, String, String) -> Bool
+pub fn Metadata::is_empty(Self) -> Bool
+pub fn Metadata::is_valid(Self) -> Bool
+pub fn Metadata::pairs(Self) -> Array[(String, String)]
+pub fn Metadata::size(Self) -> Int32
+pub fn Metadata::values(Self, String) -> Array[String]
+
+pub enum MetadataFilter {
+  Has(String)
+  Lacks(String)
+  Equals(String, String)
+  NotEquals(String, String)
+  All(Array[MetadataFilter])
+  Any(Array[MetadataFilter])
+}
+pub fn MetadataFilter::describe(Self) -> String
+pub fn MetadataFilter::matches(Self, Metadata) -> Bool
 
 pub enum Recency {
   None
@@ -186,6 +237,7 @@ pub fn Scope::contains(Self, String) -> Bool
 pub fn Scope::default_ttl(Self) -> Ttl
 pub fn Scope::delete(Self, String) -> Bool
 pub fn Scope::entries(Self) -> Array[Entry]
+pub fn Scope::entries_filtered(Self, MetadataFilter) -> Array[Entry]
 pub fn Scope::entry(Self, String) -> Entry?
 pub fn Scope::get(Self, String) -> String?
 pub fn Scope::keys(Self) -> Array[String]
@@ -194,6 +246,8 @@ pub fn Scope::put(Self, String, String) -> Bool
 pub fn Scope::put_spec(Self, String, String, EntrySpec) -> Bool
 pub fn Scope::put_with_ttl(Self, String, String, Ttl) -> Bool
 pub fn Scope::search(Self, String, Int32) -> Array[Hit]
+pub fn Scope::search_filtered(Self, String, Int32, MetadataFilter) -> Array[Hit]
+pub fn Scope::search_filtered_keys(Self, String, Int32, MetadataFilter) -> Array[String]
 pub fn Scope::search_keys(Self, String, Int32) -> Array[String]
 pub fn Scope::size(Self) -> Int32
 pub fn Scope::size_bytes(Self) -> Int64
