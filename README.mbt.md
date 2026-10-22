@@ -15,7 +15,7 @@ same success flags, error codes, positions, coordinates and digits.
 ## Install
 
 ```sh
-moon add riantr/tesseract@0.1.7
+moon add riantr/tesseract@0.1.8
 ```
 
 The library is the package `riantr/tesseract/src/tesseract`:
@@ -30,7 +30,7 @@ import {
 `cmd/main`, `cmd/persist`, `cmd/memory`, `cmd/sa` and `cmd/gui` are the five
 executables in the same module — the command line, the file-backed store, the
 short-term memory, the scan database and the window. Registry entry:
-[mooncakes.io/docs/riantr/tesseract@0.1.7](https://mooncakes.io/docs/riantr/tesseract@0.1.7).
+[mooncakes.io/docs/riantr/tesseract@0.1.8](https://mooncakes.io/docs/riantr/tesseract@0.1.8).
 
 ### What the release was checked on
 
@@ -176,6 +176,7 @@ src/tesseract/
 src/tesseract_memory/
   memory.mbt     the memory: put, get, capacity, the statistics
   scope.mbt      the scopes: partitions of one keyspace, one budget, one clock
+  spec.mbt       the spec of an entry: its lifetime and how much it counts
   entry.mbt      one remembered thing, and when its time is up
   ttl.mbt        Never / Absolute / Sliding, and the deadline arithmetic
   clock.mbt      the injected clock, system or manual
@@ -616,6 +617,20 @@ The boundary is exact: an entry with deadline `D` is live while `now < D` and
 gone at `now == D`, so a 1000ms TTL is 1000 milliseconds of life and not one
 more.
 
+A lifetime of **zero or less** is refused. An entry written with one is dead
+the moment it was written — the deadline is the moment of the write, and the
+boundary is exclusive at the live end — so accepting the write would be
+accepting a write that does nothing, and the caller would be told the value
+was stored. `ttl_never()` is how a caller says "no deadline", and the two are
+not the same thing.
+
+Whether an entry expires is decided by its **window**, not by its deadline.
+A deadline of zero is also the deadline an entry that never expires carries,
+so a store that told those two apart by the deadline would give a
+zero-lifetime entry the other one's meaning — it would live forever. The
+window is unambiguous: an entry with no deadline has a window of zero, and
+every entry with a lifetime has a window of at least one millisecond.
+
 Expiry is **eager** — every operation that observes the clock first removes
 what has expired — so the store never holds a dead entry, `size` is the number
 of *live* entries, and a key that has expired is gone from `get`, `contains`,
@@ -695,10 +710,10 @@ to exactly one of them.
 ///|
 let m = @tesseract_memory.new_memory(100)
 let work = m.scope("work")
-ignore(work.put("todo", "ship 0.1.7"))
+ignore(work.put("todo", "ship 0.1.8"))
 ignore(m.scope("notes").put("todo", "buy milk"))
 // Two entries, one key.
-assert_eq(work.get("todo"), Some("ship 0.1.7"))
+assert_eq(work.get("todo"), Some("ship 0.1.8"))
 assert_eq(m.scope("notes").get("todo"), Some("buy milk"))
 ```
 
@@ -747,7 +762,7 @@ place where there is nothing to find.
 From a shell, the scope is the partition the commands work in:
 
 ```sh
-moon run cmd/memory -- --scope work "put todo ship 0.1.7" "keys"
+moon run cmd/memory -- --scope work "put todo ship 0.1.8" "keys"
 moon run cmd/memory -- "put a the cat sat" "scope work" "put a the cat sat on the mat" "scopes"
 moon run cmd/memory -- "put a the cat sat" "scope work" "put a the cat sat on the mat" "search-all cat"
 ```
@@ -842,6 +857,64 @@ let m = @tesseract_memory.new_memory_with(
 )
 ```
 
+### How much an entry counts
+
+The score is a **product of three weights**, and the third one belongs to the
+entry rather than to the store:
+
+| weight | range | from |
+|---|---|---|
+| similarity | `0.0..1.0` | the store's similarity policy |
+| recency | `0.0..1.0` | the store's recency policy |
+| importance | `(0.0, 1.0]` | the entry itself |
+
+An entry written with `with_importance(0.5)` is found **half as strongly** as
+the same entry written with the default, for the same query and at the same
+age — and it can lose to a better match, which is the whole point of a weight.
+
+```moonbit nocheck
+///|
+let m = @tesseract_memory.new_memory(100)
+ignore(m.put("trivia", "the cat sat on the mat"))
+ignore(
+  m.put_spec(
+    "important",
+    "the cat",
+    @tesseract_memory.default_spec().with_importance(0.2),
+  ),
+)
+// "the cat" is the better match on its own, and the importance is what
+// turns the order over.
+```
+
+The range is `(0.0, 1.0]`, and **one is the default and the most an entry can
+count**. A caller demotes the entries that matter less rather than raising
+the ones that matter more, and the score stays in `0.0..1.0` because every
+one of the three weights is a fraction.
+
+Both ends of the range are **refused** rather than clamped:
+
+- **Zero** would make the entry unfindable — stored, readable by key, and
+  never matched by a search — and a zero-initialised field is the easiest way
+  to get there by accident. An entry that should not be found is an entry
+  that should be deleted.
+- **Above one** would carry the score past the `0.0..1.0` it is documented to
+  be in.
+
+The two settings an entry is written with travel together in an `EntrySpec`,
+because they are written together:
+
+| | |
+|---|---|
+| `default_spec()` | never expires, counts fully |
+| `with_ttl(ttl)` | the lifetime |
+| `with_importance(n)` | how much it counts |
+| `put_spec(key, value, spec)` | the write |
+
+`put` and `put_with_ttl` are the two shorthands for the common cases, and
+`Scope::put_spec` is the same thing in a scope. A spec the store cannot
+honour is **refused**, and the refusal leaves the store exactly as it was.
+
 ### The clock is injected
 
 The memory's clock is a **value**, for the same reason the core's is: a test
@@ -854,9 +927,16 @@ to a shell.
 The clock moves **forward**. `advance` refuses a negative interval: a clock
 that runs backwards is not a clock, and an entry would then be *older* than the
 moment it was written — which makes the recency weight larger than one and the
-search score larger than the `0.0..1.0` it is documented to be in. Reading the
-clock also purges what has expired, because reading the clock is reading the
-store.
+search score larger than the `0.0..1.0` it is documented to be in. It refuses
+an interval so large that the clock would pass the end of what an instant can
+hold, for the same reason: the arithmetic would wrap round into the past, and
+the clock would run backwards by nine hundred million years while reporting
+that it had moved forwards. Reading the clock also purges what has expired,
+because reading the clock is reading the store.
+
+A deadline that would not fit in an instant **saturates** rather than
+wrapping: the entry lives as long as the store can express, which is the
+closest true thing to say about a lifetime of nine hundred million years.
 
 ### What it does not do
 
@@ -870,13 +950,16 @@ store.
   for.
 - **Not thread-safe**, for the same reason the core is not: the runtime is
   single-threaded, and the store is mutated in place.
+- **Not eviction by importance.** The importance weights *retrieval* — what a
+  search finds — and not what the store throws away. That is the policy's
+  business, and the four policies are about age, use and expiry.
 - **Not per-scope budgets.** A scope partitions one pool, and the capacity and
   the byte budget belong to the pool. A scope with a budget of its own would
   make the store's size a function of how many partitions a caller happened to
   use.
 
-The full plan and the measurements behind it are in `LOOP3.md`, `LOOP4.md` and
-`LOOP5.md`.
+The full plan and the measurements behind it are in `LOOP3.md`, `LOOP4.md`,
+`LOOP5.md` and `LOOP6.md`.
 
 ## Running it
 
@@ -884,7 +967,7 @@ The full plan and the measurements behind it are in `LOOP3.md`, `LOOP4.md` and
 
 ```sh
 moon check --target all     # type-check every backend
-moon test                   # 301 tests
+moon test                   # 314 tests
 moon fmt --check            # canonical formatting
 
 node cli-smoke.mjs          # the CLIs, as real processes (builds them first)
@@ -900,7 +983,7 @@ moon run cmd/main -- .export tsr > dump.tsr
 # the short-term memory
 moon run cmd/memory -- .help
 moon run cmd/memory -- "put greeting hello world" "get greeting"
-moon run cmd/memory -- --scope work "put todo ship 0.1.7" "keys" "scopes"
+moon run cmd/memory -- --scope work "put todo ship 0.1.8" "keys" "scopes"
 moon run cmd/memory -- demo
 
 # 256 cells, digits 1..4
@@ -1117,10 +1200,10 @@ The gate, and the result it produced for this version:
 | `moon check --target js --deny-warn` | exit 0 |
 | `moon check --target native --deny-warn` | exit 0 |
 | `moon check --target wasm-gc --deny-warn` | exit 0 |
-| `moon test --target wasm --deny-warn` | **301 passed, 0 failed** |
+| `moon test --target wasm --deny-warn` | **314 passed, 0 failed** |
 | `moon build --target wasm` | exit 0 |
 | `typos` (v1.50.3 — the version the workflow pins) | exit 0 |
-| `node cli-smoke.mjs` | **36 passed, 0 failed** |
+| `node cli-smoke.mjs` | **43 passed, 0 failed** |
 | `node gui-smoke.mjs` | **45 passed, 0 failed** |
 
 The release workflow runs the first two check targets plus the test and build; the
