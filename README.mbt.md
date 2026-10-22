@@ -15,7 +15,7 @@ same success flags, error codes, positions, coordinates and digits.
 ## Install
 
 ```sh
-moon add riantr/tesseract@0.1.6
+moon add riantr/tesseract@0.1.7
 ```
 
 The library is the package `riantr/tesseract/src/tesseract`:
@@ -30,7 +30,7 @@ import {
 `cmd/main`, `cmd/persist`, `cmd/memory`, `cmd/sa` and `cmd/gui` are the five
 executables in the same module — the command line, the file-backed store, the
 short-term memory, the scan database and the window. Registry entry:
-[mooncakes.io/docs/riantr/tesseract@0.1.6](https://mooncakes.io/docs/riantr/tesseract@0.1.6).
+[mooncakes.io/docs/riantr/tesseract@0.1.7](https://mooncakes.io/docs/riantr/tesseract@0.1.7).
 
 ### What the release was checked on
 
@@ -175,6 +175,7 @@ src/tesseract/
   serialize.mbt  .tsr JSON, .md table, .sql dump, lattice rendering
 src/tesseract_memory/
   memory.mbt     the memory: put, get, capacity, the statistics
+  scope.mbt      the scopes: partitions of one keyspace, one budget, one clock
   entry.mbt      one remembered thing, and when its time is up
   ttl.mbt        Never / Absolute / Sliding, and the deadline arithmetic
   clock.mbt      the injected clock, system or manual
@@ -635,9 +636,11 @@ key its place.
 | `evict_soonest_expiry()` | the entry closest to expiring — an entry that never expires goes last |
 | `evict_oldest()` | the entry written longest ago |
 
-Ties are broken by **key**, so the same sequence of operations always evicts
-the same entry. A store that evicts differently on two runs of the same program
-is a store nobody can test.
+Ties are broken by the **scope** and then the **key**, so the same sequence of
+operations always evicts the same entry. A store that evicts differently on two
+runs of the same program is a store nobody can test. The scope comes first
+because a key is only unique within a scope, and both are compared **by their
+letters** — see [the order of keys](#the-order-of-keys-is-by-their-letters).
 
 ### The byte budget
 
@@ -681,6 +684,92 @@ mistaken for "no limit".
 The budget counts the **values**. The keys are bounded by the capacity, and
 the overhead of the store itself is not counted at all, so `size_bytes` is the
 size of the content a memory holds, not the size of the process holding it.
+
+### Scopes
+
+A **scope** is a named partition of the memory's keyspace. Two scopes can hold
+the same key without either of them seeing the other's entry, and a key belongs
+to exactly one of them.
+
+```moonbit nocheck
+///|
+let m = @tesseract_memory.new_memory(100)
+let work = m.scope("work")
+ignore(work.put("todo", "ship 0.1.7"))
+ignore(m.scope("notes").put("todo", "buy milk"))
+// Two entries, one key.
+assert_eq(work.get("todo"), Some("ship 0.1.7"))
+assert_eq(m.scope("notes").get("todo"), Some("buy milk"))
+```
+
+A scope is **not a second store**. It shares the memory's clock, its budget, its
+statistics and its eviction, and the only thing it has of its own is the set of
+keys it holds. The capacity and the byte budget are the **store's**, spent
+across every scope, so a write into one scope can evict an entry from another —
+and a store that gave each scope a budget of its own would hold
+`scopes × capacity` entries, which is not a limit.
+
+`Memory` is the store, and its own methods address the **default scope**, so a
+program that never mentions a scope behaves exactly as it did before.
+
+| | addresses |
+|---|---|
+| `Memory::put`, `put_with_ttl`, `get`, `contains`, `touch`, `delete`, `entry` | the **default** scope |
+| `Memory::keys`, `entries`, `search`, `search_keys` | the **default** scope |
+| `Memory::size`, `size_bytes` | the **whole store** — the limits are the store's |
+| `Memory::scopes` | the scopes that hold something |
+| `Memory::search_all`, `search_all_keys` | the **whole store** |
+| `Memory::clear` | the whole store |
+| `Memory::sweep`, `stats`, `now`, `advance`, `capacity`, `max_bytes` | the whole store |
+
+A scope is reached with `Memory::scope(name)`, and `Scope` answers for itself:
+`name`, `put`, `put_with_ttl`, `get`, `contains`, `touch`, `delete`, `entry`,
+`keys`, `entries`, `search`, `search_keys`, `size`, `size_bytes`, `clear` and
+`default_ttl`.
+
+Three things are easy to get wrong, so they are stated here:
+
+- **A scope is a handle, not a copy.** Two handles on the same scope see the
+  same entries and the same byte total, so the total cannot drift between them.
+- **A key is unique only within a scope.** A hit from `search_all` says which
+  scope it is in, and an `Entry` carries its scope — otherwise an entry could
+  not be told from the same key in another scope.
+- **`Memory::size` is the store's count and `Scope::size` is one scope's.**
+  The number to compare with `capacity` is the store's, because the capacity is
+  spent across the scopes; a scope's count would under-report how full the
+  store is, and a caller who believed it would think there was room when there
+  was none.
+
+`Memory::scopes` lists the scopes that **hold something**: a scope with no live
+entries is not a scope yet, and listing it would send the caller looking in a
+place where there is nothing to find.
+
+From a shell, the scope is the partition the commands work in:
+
+```sh
+moon run cmd/memory -- --scope work "put todo ship 0.1.7" "keys"
+moon run cmd/memory -- "put a the cat sat" "scope work" "put a the cat sat on the mat" "scopes"
+moon run cmd/memory -- "put a the cat sat" "scope work" "put a the cat sat on the mat" "search-all cat"
+```
+
+`--scope` sets the scope the run starts in, the `scope` command switches to
+another one for the commands that follow, `scopes` lists them, and `search-all`
+looks in all of them at once — each hit prefixed with the scope it is in.
+
+### The order of keys is by their letters
+
+`keys`, `entries`, `scopes` and the eviction tie-break are ordered **by the
+letters of the text**, and that order is written out in the core's
+`compare_text` rather than taken from the runtime's `String::compare`.
+
+The runtime's `String::compare` compares the **lengths first**: `"work"` sorts
+*before* `"default"`, because it is shorter, whatever its letters say. That is a
+total order, so it was never ambiguous — but it is not the order the
+documentation promised, and a reader who sorted a list of keys by hand would
+get a different answer. The memory's key order and its eviction tie-break had
+that rule before 0.1.7; they are ordered by their letters now. The core's own
+SQL comparison was never affected: it compares text by code unit, in its own
+code.
 
 ### A configuration is either usable or it is refused
 
@@ -781,8 +870,13 @@ store.
   for.
 - **Not thread-safe**, for the same reason the core is not: the runtime is
   single-threaded, and the store is mutated in place.
+- **Not per-scope budgets.** A scope partitions one pool, and the capacity and
+  the byte budget belong to the pool. A scope with a budget of its own would
+  make the store's size a function of how many partitions a caller happened to
+  use.
 
-The full plan and the measurements behind it are in `LOOP3.md`.
+The full plan and the measurements behind it are in `LOOP3.md`, `LOOP4.md` and
+`LOOP5.md`.
 
 ## Running it
 
@@ -790,7 +884,7 @@ The full plan and the measurements behind it are in `LOOP3.md`.
 
 ```sh
 moon check --target all     # type-check every backend
-moon test                   # 284 tests
+moon test                   # 301 tests
 moon fmt --check            # canonical formatting
 
 node cli-smoke.mjs          # the CLIs, as real processes (builds them first)
@@ -806,6 +900,7 @@ moon run cmd/main -- .export tsr > dump.tsr
 # the short-term memory
 moon run cmd/memory -- .help
 moon run cmd/memory -- "put greeting hello world" "get greeting"
+moon run cmd/memory -- --scope work "put todo ship 0.1.7" "keys" "scopes"
 moon run cmd/memory -- demo
 
 # 256 cells, digits 1..4
@@ -1022,10 +1117,10 @@ The gate, and the result it produced for this version:
 | `moon check --target js --deny-warn` | exit 0 |
 | `moon check --target native --deny-warn` | exit 0 |
 | `moon check --target wasm-gc --deny-warn` | exit 0 |
-| `moon test --target wasm --deny-warn` | **284 passed, 0 failed** |
+| `moon test --target wasm --deny-warn` | **301 passed, 0 failed** |
 | `moon build --target wasm` | exit 0 |
 | `typos` (v1.50.3 — the version the workflow pins) | exit 0 |
-| `node cli-smoke.mjs` | **26 passed, 0 failed** |
+| `node cli-smoke.mjs` | **36 passed, 0 failed** |
 | `node gui-smoke.mjs` | **45 passed, 0 failed** |
 
 The release workflow runs the first two check targets plus the test and build; the
