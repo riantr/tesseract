@@ -280,6 +280,101 @@ pub fn eq_ci(a : String, b : String) -> Bool {
 }
 
 ///|
+/// Parses a decimal number, or `None`.
+///
+/// The grammar is a plain decimal: an optional sign, digits, and an optional
+/// fractional part. There is **no exponent** — `1e3` is not a number here —
+/// and there is no hexadecimal, no `inf` and no `nan`. Anything the grammar
+/// does not cover is `None` rather than a silent zero, for the same reason
+/// `parse_int` refuses what it cannot read: a caller that typed a number
+/// deserves to be told when it is not one.
+///
+/// A number with more than fifteen significant digits is refused rather than
+/// rounded. The mantissa is accumulated as an integer and divided by the
+/// scale at the end, so the digits are exact; a number too long for that is a
+/// number the caller has to shorten, not one the store may quietly change.
+///
+/// The result is the nearest double to the decimal, which is the same number
+/// every double has: `0.1` is not exactly a tenth, and that is the point of
+/// using a double rather than a scaled integer.
+pub fn parse_float(s : String) -> Double? {
+  let t = trim_ws(s)
+  let n = t.length()
+  if n == 0 {
+    return None
+  }
+  let mut i = 0
+  let mut negative = false
+  let first = t.at(0).to_int()
+  if first == 45 {
+    negative = true
+    i = 1
+  } else if first == 43 {
+    i = 1
+  }
+  if i >= n {
+    return None
+  }
+  // The digits, as an integer, and how many of them there are.
+  let mut mantissa : Int64 = 0L
+  let mut digits = 0
+  while i < n {
+    let c = t.at(i).to_int()
+    if c < 48 || c > 57 {
+      break
+    }
+    mantissa = mantissa * 10L + (c - 48).to_int64()
+    digits = digits + 1
+    if digits > 15 {
+      return None
+    }
+    i = i + 1
+  }
+  // The fraction, and the scale it divides by.
+  let mut scale = 0
+  if i < n && t.at(i).to_int() == 46 {
+    i = i + 1
+    let mut fraction = 0
+    while i < n {
+      let c = t.at(i).to_int()
+      if c < 48 || c > 57 {
+        break
+      }
+      mantissa = mantissa * 10L + (c - 48).to_int64()
+      scale = scale + 1
+      fraction = fraction + 1
+      if digits + fraction > 15 {
+        return None
+      }
+      i = i + 1
+    }
+    // A point with nothing after it is a point, not a number.
+    if fraction == 0 && digits == 0 {
+      return None
+    }
+  }
+  if digits == 0 && scale == 0 {
+    return None
+  }
+  // Anything left over is not part of the number.
+  if i != n {
+    return None
+  }
+  let mut divisor = 1.0
+  let mut k = 0
+  while k < scale {
+    divisor = divisor * 10.0
+    k = k + 1
+  }
+  let value = mantissa.to_double() / divisor
+  if negative {
+    Some(-value)
+  } else {
+    Some(value)
+  }
+}
+
+///|
 /// Exact ASCII prefix test.
 pub fn starts_with(s : String, p : String) -> Bool {
   if p.length() > s.length() {

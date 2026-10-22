@@ -10,6 +10,8 @@ pub fn default_config() -> Config
 
 pub fn default_scope_name() -> String
 
+pub fn default_spec() -> EntrySpec
+
 pub fn evict_lfu() -> EvictionPolicy
 
 pub fn evict_lru() -> EvictionPolicy
@@ -89,12 +91,22 @@ pub struct Entry {
   sliding : Bool
   last_seen : Int64
   hits : Int64
+  importance : Double
 }
 pub fn Entry::age_ms(Self, Int64) -> Int64
 pub fn Entry::describe(Self, Int64) -> String
 pub fn Entry::expired(Self, Int64) -> Bool
 pub fn Entry::idle_ms(Self, Int64) -> Int64
+pub fn Entry::importance(Self) -> Double
 pub fn Entry::touched(Self, Int64) -> Self
+
+pub struct EntrySpec {
+  ttl : Ttl
+  importance : Double
+}
+pub fn EntrySpec::is_valid(Self) -> Bool
+pub fn EntrySpec::with_importance(Self, Double) -> Self
+pub fn EntrySpec::with_ttl(Self, Ttl) -> Self
 
 pub enum EvictionPolicy {
   LeastRecentlyUsed
@@ -109,7 +121,9 @@ pub struct Hit {
   key : String
   value : String
   score : Double
+  importance : Double
 }
+pub fn Hit::importance(Self) -> Double
 pub fn Hit::key(Self) -> String
 pub fn Hit::scope(Self) -> String
 pub fn Hit::score(Self) -> Double
@@ -133,6 +147,7 @@ pub fn Memory::keys(Self) -> Array[String]
 pub fn Memory::max_bytes(Self) -> Int64
 pub fn Memory::now(Self) -> Int64
 pub fn Memory::put(Self, String, String) -> Bool
+pub fn Memory::put_spec(Self, String, String, EntrySpec) -> Bool
 pub fn Memory::put_with_ttl(Self, String, String, Ttl) -> Bool
 pub fn Memory::scope(Self, String) -> Scope
 pub fn Memory::scopes(Self) -> Array[String]
@@ -176,6 +191,7 @@ pub fn Scope::get(Self, String) -> String?
 pub fn Scope::keys(Self) -> Array[String]
 pub fn Scope::name(Self) -> String
 pub fn Scope::put(Self, String, String) -> Bool
+pub fn Scope::put_spec(Self, String, String, EntrySpec) -> Bool
 pub fn Scope::put_with_ttl(Self, String, String, Ttl) -> Bool
 pub fn Scope::search(Self, String, Int32) -> Array[Hit]
 pub fn Scope::search_keys(Self, String, Int32) -> Array[String]
@@ -210,6 +226,7 @@ pub enum Ttl {
 pub fn Ttl::deadline(Self, Int64) -> (Int64, Bool)
 pub fn Ttl::is_never(Self) -> Bool
 pub fn Ttl::is_sliding(Self) -> Bool
+pub fn Ttl::is_valid(Self) -> Bool
 pub fn Ttl::name(Self) -> String
 pub fn Ttl::window_ms(Self) -> Int64
 

@@ -250,6 +250,34 @@ test "texts are ordered by their letters, not by their length" {
 }
 
 ///|
+/// A decimal is parsed, and everything else is refused.
+///
+/// The grammar is a plain decimal: a sign, digits, and a fractional part.
+/// There is no exponent and no hexadecimal, and a number that is not one is
+/// `None` rather than a silent zero — the same rule `parse_int` follows.
+test "a decimal is parsed, and everything else is refused" {
+  assert_eq(@tesseract.parse_float("0.5"), Some(0.5))
+  assert_eq(@tesseract.parse_float("1"), Some(1.0))
+  assert_eq(@tesseract.parse_float("1.0"), Some(1.0))
+  assert_eq(@tesseract.parse_float("-2.25"), Some(-2.25))
+  assert_eq(@tesseract.parse_float("+0.5"), Some(0.5))
+  assert_eq(@tesseract.parse_float(" 0.5 "), Some(0.5))
+  assert_eq(@tesseract.parse_float(".5"), Some(0.5))
+  assert_eq(@tesseract.parse_float("3."), Some(3.0))
+  // And what is not a number is refused.
+  assert_eq(@tesseract.parse_float(""), None)
+  assert_eq(@tesseract.parse_float("abc"), None)
+  assert_eq(@tesseract.parse_float("1e3"), None)
+  assert_eq(@tesseract.parse_float("1.2.3"), None)
+  assert_eq(@tesseract.parse_float("0x10"), None)
+  assert_eq(@tesseract.parse_float("."), None)
+  assert_eq(@tesseract.parse_float("-"), None)
+  assert_eq(@tesseract.parse_float("1 2"), None)
+  // A number too long to be exact is refused rather than rounded.
+  assert_eq(@tesseract.parse_float("0.1234567890123456789"), None)
+}
+
+///|
 /// A character outside the basic plane survives the text helpers.
 ///
 /// An emoji is two code units in the runtime's string and one character to a

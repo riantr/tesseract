@@ -578,6 +578,29 @@ test "reading the clock purges what has expired" {
 }
 
 ///|
+/// The clock cannot be moved past the end of what an instant can hold.
+///
+/// The arithmetic would wrap round into the past, so the clock would run
+/// backwards by nine hundred million years while reporting that it had moved
+/// forwards — which is the same rule that refuses a negative interval, for
+/// the same reason.
+test "the clock cannot be moved past the end of what an instant can hold" {
+  let m = memory_at(0L)
+  ignore(m.advance(1000L))
+  assert_eq(m.now(), 1000L)
+  // The largest interval there is, from a clock that is not at zero.
+  assert_false(m.advance(9223372036854775807L))
+  // The clock did not move, and it did not run backwards.
+  assert_eq(m.now(), 1000L)
+  // The largest interval that does fit is taken.
+  assert_true(m.advance(9223372036854774807L))
+  assert_eq(m.now(), 9223372036854775807L)
+  // And from there the clock cannot move at all.
+  assert_false(m.advance(1L))
+  assert_eq(m.now(), 9223372036854775807L)
+}
+
+///|
 /// Touching refreshes an entry without reading it.
 test "touching refreshes an entry without reading it" {
   let m = memory_at(0L)

@@ -299,6 +299,11 @@ pub fn Memory::now(self : Memory) -> Int64 {
 /// a clock, and an entry would then be *older* than the moment it was
 /// written — which makes the recency weight larger than one, and the search
 /// score larger than the `0.0..1.0` it is documented to be in.
+///
+/// An interval so large that the clock would pass the end of what an `Int64`
+/// can hold is refused for the same reason. The arithmetic would wrap round
+/// into the past, and the clock would run backwards by nine hundred million
+/// years while reporting that it had moved forwards.
 pub fn Memory::advance(self : Memory, ms : Int64) -> Bool {
   if ms < 0L {
     return false
@@ -306,6 +311,9 @@ pub fn Memory::advance(self : Memory, ms : Int64) -> Bool {
   match self.clock {
     System => false
     Manual(now) => {
+      if now > MAX_INSTANT - ms {
+        return false
+      }
       self.clock = Manual(now + ms)
       true
     }
@@ -351,12 +359,15 @@ pub fn Memory::capacity(self : Memory) -> Int32 {
 /// The key goes into the **default scope**, so `put` and `get` on the memory
 /// itself are the same scope talking to itself.
 ///
+/// The entry counts fully — the default importance — and lives as long as the
+/// store's default TTL says.
+///
 /// A `put` of a key that is already there replaces the value **in place** and
 /// evicts nothing — overwriting a key must not cost another key its place.
 /// The replacement is a new entry: it was added now, and nobody has read the
 /// new value yet, so its hit count starts at zero.
 pub fn Memory::put(self : Memory, key : String, value : String) -> Bool {
-  self.put_with_ttl(key, value, self.config.default_ttl)
+  self.put_spec(key, value, default_spec().with_ttl(self.config.default_ttl))
 }
 
 ///|
@@ -374,13 +385,36 @@ pub fn Memory::put(self : Memory, key : String, value : String) -> Bool {
 ///
 /// The room it makes is made out of the **store**, not out of this scope: the
 /// eviction that follows can take an entry from any scope.
+///
+/// A lifetime in the past is **refused**: an entry written with one is dead
+/// the moment it is written, and accepting the write would be accepting a
+/// write that does nothing. The refusal leaves the store as it was.
 pub fn Memory::put_with_ttl(
   self : Memory,
   key : String,
   value : String,
   ttl : Ttl,
 ) -> Bool {
-  self.put_in(default_scope_name(), key, value, ttl)
+  self.put_spec(key, value, default_spec().with_ttl(ttl))
+}
+
+///|
+/// Write a value under a key, with a spec of this entry's own.
+///
+/// The spec carries the two things an entry is written with: how long it
+/// lives, and how much it counts. `put` and `put_with_ttl` are the two
+/// shorthands for the common cases.
+///
+/// A spec the store cannot honour is **refused**, and the refusal leaves the
+/// store as it was: a write that fails must not cost the caller the entries
+/// it already has. See `EntrySpec::is_valid` for what "cannot honour" means.
+pub fn Memory::put_spec(
+  self : Memory,
+  key : String,
+  value : String,
+  spec : EntrySpec,
+) -> Bool {
+  self.put_in(default_scope_name(), key, value, spec)
 }
 
 ///|
@@ -618,21 +652,26 @@ pub fn Memory::stats(self : Memory) -> Stats {
 }
 
 ///|
-/// Write a value under a key, in a scope.
+/// Write a value under a key, in a scope, with a spec.
 ///
-/// The scope-aware form of `put_with_ttl`, and the only place a write
-/// actually happens.
+/// The scope-aware form of `put_spec`, and the only place a write actually
+/// happens.
 fn Memory::put_in(
   self : Memory,
   scope : String,
   key : String,
   value : String,
-  ttl : Ttl,
+  spec : EntrySpec,
 ) -> Bool {
+  // A spec the store cannot honour is refused before anything is touched, so
+  // the refusal leaves the store exactly as it was.
+  if !spec.is_valid() {
+    return false
+  }
   ignore(self.expire_due())
   let now = self.now()
-  let (deadline, sliding) = ttl.deadline(now)
-  let window = ttl.window_ms()
+  let (deadline, sliding) = spec.ttl.deadline(now)
+  let window = spec.ttl.window_ms()
   let value_bytes = utf8_bytes(value)
   // A value that cannot fit in an *empty* store is refused here, before
   // anything is evicted. Refusing it later would cost the caller every entry
@@ -654,6 +693,7 @@ fn Memory::put_in(
     sliding,
     last_seen: now,
     hits: 0L,
+    importance: spec.importance,
   })
   self.stats.puts = self.stats.puts + 1L
   if already {
@@ -819,7 +859,7 @@ fn Memory::pick_victim(
         LeastRecentlyUsed => entry.last_seen
         LeastFrequentlyUsed => entry.hits
         SoonestExpiry =>
-          if entry.deadline == 0L {
+          if entry.window_ms == 0L {
             NEVER_EXPIRES
           } else {
             entry.deadline

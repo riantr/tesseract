@@ -241,6 +241,25 @@ function main() {
     check("clear forgets this scope only", lastLine(r.out), "default");
     r = run("memory", ["put k1 aaa", "scope work", "put k2 bbb", "clear-all", "scopes"], dir);
     check("clear-all forgets every scope", lastLine(r.out), "(no scopes hold anything)");
+
+    // ---- cmd/memory: how much an entry counts ----
+    // The importance is a weight in the search score, so the check is about
+    // the *ranking*: the demoted entry is found less strongly.
+    r = run("memory", ["put a the cat sat", "put b the cat sat --importance 0.25", "search cat"], dir);
+    check("a less important entry is found less strongly", r.out.includes("a  0.333"), true, r.out + r.err);
+    check("...and the demoted one keeps its own score", r.out.includes("b  0.083"), true, r.out + r.err);
+    r = run("memory", ["put a x --importance 0.5", "entries"], dir);
+    check("the importance is reported with the entry", r.out.includes("importance 0.5"), true, r.out + r.err);
+
+    // A flag the store cannot honour is reported, not quietly replaced.
+    r = run("memory", ["put a x --importance 0"], dir);
+    check("an importance of zero is refused", r.err.includes("importance must be more than zero"), true, r.out + r.err);
+    r = run("memory", ["put a x --importance 2"], dir);
+    check("an importance above one is refused", r.err.includes("at most one"), true, r.out + r.err);
+    r = run("memory", ["put a x --importance zzz"], dir);
+    check("an importance that is not a number is refused", r.err.includes("not a number"), true, r.out + r.err);
+    r = run("memory", ["put a x --ttl 0"], dir);
+    check("a lifetime of nothing is refused", r.err.includes("lifetime must be at least one millisecond"), true, r.out + r.err);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

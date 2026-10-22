@@ -83,9 +83,13 @@ pub fn Scope::default_ttl(self : Scope) -> Ttl {
 /// Write a value under a key, with the default TTL.
 ///
 /// The TTL is the **store's** default, so every scope of one memory expires
-/// on the same policy.
+/// on the same policy. The entry counts fully, like every other `put`.
 pub fn Scope::put(self : Scope, key : String, value : String) -> Bool {
-  self.memory.put_in(self.name, key, value, self.memory.config.default_ttl)
+  self.put_spec(
+    key,
+    value,
+    default_spec().with_ttl(self.memory.config.default_ttl),
+  )
 }
 
 ///|
@@ -93,13 +97,30 @@ pub fn Scope::put(self : Scope, key : String, value : String) -> Bool {
 ///
 /// The room it makes is made out of the store: the eviction that follows can
 /// take an entry from another scope, because the budget is the store's.
+///
+/// A lifetime in the past is refused, and the refusal leaves the store as it
+/// was.
 pub fn Scope::put_with_ttl(
   self : Scope,
   key : String,
   value : String,
   ttl : Ttl,
 ) -> Bool {
-  self.memory.put_in(self.name, key, value, ttl)
+  self.put_spec(key, value, default_spec().with_ttl(ttl))
+}
+
+///|
+/// Write a value under a key, with a spec of this entry's own.
+///
+/// The spec carries how long the entry lives and how much it counts, and a
+/// spec the store cannot honour is refused.
+pub fn Scope::put_spec(
+  self : Scope,
+  key : String,
+  value : String,
+  spec : EntrySpec,
+) -> Bool {
+  self.memory.put_in(self.name, key, value, spec)
 }
 
 ///|

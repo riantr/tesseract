@@ -162,6 +162,8 @@ pub fn parse_coords_raw(String) -> Coords?
 
 pub fn parse_error_message(ParseError) -> String
 
+pub fn parse_float(String) -> Double?
+
 pub fn parse_int(String) -> Int32?
 
 pub fn parse_statement(String) -> Result[Stmt, ParseError]

@@ -19,6 +19,7 @@ pub struct Entry {
   sliding : Bool
   last_seen : Int64
   hits : Int64
+  importance : Double
 }
 
 ///|
@@ -29,10 +30,13 @@ pub struct Entry {
 /// gives exactly 1000 milliseconds of life, and the entry written at t=0 is
 /// gone at t=1000 — not a millisecond later, and not a millisecond earlier.
 ///
-/// A deadline of zero means "never", and no instant equals zero, so the check
-/// has to be written rather than folded into the comparison.
+/// Whether an entry has a deadline at all is decided by its **window**, not
+/// by its deadline. An entry with no deadline has a window of zero, and a
+/// deadline of zero is an ordinary deadline — the one an entry written at
+/// t=0 with the shortest lifetime there is would have. Deciding it by the
+/// deadline instead would make that entry live forever.
 pub fn Entry::expired(self : Entry, now_ms : Int64) -> Bool {
-  if self.deadline == 0L {
+  if self.window_ms == 0L {
     false
   } else {
     now_ms >= self.deadline
@@ -63,8 +67,8 @@ pub fn Entry::touched(self : Entry, now_ms : Int64) -> Entry {
     key: self.key,
     value: self.value,
     added_at: self.added_at,
-    deadline: if self.sliding && self.deadline != 0L {
-      now_ms + self.window_ms
+    deadline: if self.sliding && self.window_ms > 0L {
+      instant_after(now_ms, self.window_ms)
     } else {
       self.deadline
     },
@@ -72,7 +76,17 @@ pub fn Entry::touched(self : Entry, now_ms : Int64) -> Entry {
     sliding: self.sliding,
     last_seen: now_ms,
     hits: self.hits + 1L,
+    importance: self.importance,
   }
+}
+
+///|
+/// How much this entry counts, in `0.0..1.0`.
+///
+/// The importance is the weight the search score is built from, so an entry at
+/// 0.2 is found a fifth as strongly as the same entry at 1.0.
+pub fn Entry::importance(self : Entry) -> Double {
+  self.importance
 }
 
 ///|
@@ -83,8 +97,10 @@ pub fn Entry::describe(self : Entry, now_ms : Int64) -> String {
   self.age_ms(now_ms).to_string() +
   "ms, hits " +
   self.hits.to_string() +
+  ", importance " +
+  self.importance.to_string() +
   ", " +
-  (if self.deadline == 0L {
+  (if self.window_ms == 0L {
     "no deadline"
   } else {
     "expires in " + (self.deadline - now_ms).to_string() + "ms"

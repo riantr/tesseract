@@ -5,6 +5,7 @@ pub struct Hit {
   key : String
   value : String
   score : Double
+  importance : Double
 }
 
 ///|
@@ -35,6 +36,16 @@ pub fn Hit::score(self : Hit) -> Double {
 }
 
 ///|
+/// How much the entry counts, in `0.0..1.0`.
+///
+/// The score is a product of three things, and this is one of them: an entry
+/// that counts half as much is found half as strongly, for the same query and
+/// at the same age.
+pub fn Hit::importance(self : Hit) -> Double {
+  self.importance
+}
+
+///|
 /// The entries most like `query`, best first.
 ///
 /// Four things decide the answer, and each of them is a choice rather than a
@@ -45,12 +56,17 @@ pub fn Hit::score(self : Hit) -> Double {
 /// - **How much recency counts** — the store's configuration. With a decay
 ///   policy the similarity is multiplied by `0.5 ^ (age / half_life)`, so an
 ///   old entry is worth less even when it matches better.
+/// - **How much the entry counts** — the entry's own importance, which
+///   multiplies the score like the other two do. An entry written with
+///   `with_importance(0.5)` is found half as strongly as the same entry
+///   written with the default.
 /// - **Which entries are eligible** — the live ones of the **default scope**.
 ///   An expired entry is gone before the search starts, and an entry in
 ///   another scope is not a candidate at all.
-/// - **What is returned** — only entries with a score above zero, at most `k`
-///   of them, ties broken by key so the same store always answers the same
-///   way.
+///
+/// What is returned is only entries with a score above zero, at most `k` of
+/// them, ties broken by scope and key so the same store always answers the
+/// same way.
 ///
 /// A `k` of zero or less returns nothing. Returning the zero-score entries
 /// would pad the answer with entries that have nothing to do with the query,
@@ -187,6 +203,10 @@ fn Memory::search_keys_in(
 ///|
 /// The score of an entry against a query, or `None` when it does not match.
 ///
+/// The score is a **product of three weights**: how alike the texts are, how
+/// recently the entry was written, and how much the entry counts. Each is a
+/// fraction, so the score is in `0.0..1.0` whatever the three are.
+///
 /// An entry that shares nothing with the query is not a weak match: it is not
 /// a match, and padding the answer with it would mean a caller that asked for
 /// three matches always got three.
@@ -202,11 +222,17 @@ fn score_entry(
     return None
   }
   let weight = recency.weight(entry.age_ms(now))
-  let score = base * weight
+  let score = base * weight * entry.importance
   if score <= 0.0 {
     return None
   }
-  Some({ scope: entry.scope, key: entry.key, value: entry.value, score, })
+  Some({
+    scope: entry.scope,
+    key: entry.key,
+    value: entry.value,
+    score,
+    importance: entry.importance,
+  })
 }
 
 ///|

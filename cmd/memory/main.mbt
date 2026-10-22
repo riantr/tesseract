@@ -139,6 +139,7 @@ fn print_help() -> Unit {
   out("commands:")
   out("  put <key> <value...>      remember a value")
   out("  put <key> <value...> --ttl MS --sliding")
+  out("  put <key> <value...> --importance N   how much it counts, in (0, 1]")
   out("  get <key>                 read a value")
   out("  del <key>                 forget a key")
   out("  touch <key>               refresh a key without reading it")
@@ -555,10 +556,17 @@ fn command(
 }
 
 ///|
-/// `put <key> <value...> [--ttl MS] [--sliding]`
+/// `put <key> <value...> [--ttl MS] [--sliding] [--importance N]`
 ///
 /// The value is the rest of the line with the flags taken out, so
 /// `put greeting hello world --ttl 1000` stores `hello world`.
+///
+/// The **importance** is how much the entry counts in a search, in `(0, 1]`.
+/// One is the default and the most an entry can count; a lower number counts
+/// less, so the entry is found less strongly. The store refuses an
+/// importance outside that range, and so does the shell — a person who typed
+/// a flag deserves to be told, not to be given a different memory than they
+/// asked for.
 fn put(scope : @tesseract_memory.Scope, words : Array[String]) -> Unit {
   if words.length() < 2 {
     warn("put needs a key and a value")
@@ -567,6 +575,7 @@ fn put(scope : @tesseract_memory.Scope, words : Array[String]) -> Unit {
   let key = words[1]
   let mut sliding = false
   let mut explicit_ms : Int64? = None
+  let mut importance : Double? = None
   let value_parts : Array[String] = []
   let mut i = 2
   while i < words.length() {
@@ -576,6 +585,15 @@ fn put(scope : @tesseract_memory.Scope, words : Array[String]) -> Unit {
       explicit_ms = Some(
         @tesseract.parse_int(words[i + 1]).unwrap_or(0).to_int64(),
       )
+      i = i + 1
+    } else if words[i] == "--importance" && i + 1 < words.length() {
+      match @tesseract.parse_float(words[i + 1]) {
+        Some(value) => importance = Some(value)
+        None => {
+          warn("the importance is not a number: " + words[i + 1])
+          return
+        }
+      }
       i = i + 1
     } else {
       value_parts.push(words[i])
@@ -603,8 +621,24 @@ fn put(scope : @tesseract_memory.Scope, words : Array[String]) -> Unit {
         configured
       }
   }
+  // A lifetime of nothing, or one in the past, is an entry that is dead on
+  // arrival: the store refuses it, and so does the shell.
+  if !ttl.is_valid() {
+    warn("the lifetime must be at least one millisecond")
+    return
+  }
+  let spec = match importance {
+    None => @tesseract_memory.default_spec().with_ttl(ttl)
+    Some(value) => {
+      if value <= 0.0 || value > 1.0 {
+        warn("the importance must be more than zero and at most one")
+        return
+      }
+      @tesseract_memory.default_spec().with_ttl(ttl).with_importance(value)
+    }
+  }
   let value = value_parts.join(" ")
-  if scope.put_with_ttl(key, value, ttl) {
+  if scope.put_spec(key, value, spec) {
     out(key + " -> " + value)
   } else {
     warn("could not store " + key)
