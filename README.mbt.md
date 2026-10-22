@@ -18,7 +18,17 @@ same success flags, error codes, positions, coordinates and digits.
 moon add riantr/tesseract@0.1.10
 ```
 
-The library is the package `riantr/tesseract/src/tesseract`:
+That is a **module** dependency, and it belongs in the consumer's `moon.mod`.
+`moon add` writes it for you, so the file ends up holding:
+
+```toml
+import {
+  "riantr/tesseract@0.1.10",
+}
+```
+
+The library is the package `riantr/tesseract/src/tesseract`, and the **package**
+import belongs in the consumer's `moon.pkg`:
 
 ```moonbit nocheck
 ///|
@@ -26,6 +36,20 @@ import {
   "riantr/tesseract/src/tesseract",
 }
 ```
+
+The two blocks look alike and are not the same thing. `moon.mod` names a
+*module* and pins the version it resolved; `moon.pkg` names a *package* inside
+a module and takes **no version at all**. A version in a `moon.pkg` import is
+not a newer spelling — it is an import the toolchain cannot find:
+
+```
+Cannot find import 'riantr/tesseract/src/tesseract@0.1.10' in my/app/src/thing@0.1.0
+```
+
+For the same reason there is no `@latest`: the version is parsed as semver, so
+`latest`, `^0.1.10`, `>=0.1.10`, `0.1` and `v0.1.10` are all rejected. A bare
+`moon add riantr/tesseract` resolves the newest release and pins the concrete
+version it found — that is the "latest" this toolchain has.
 
 `cmd/main`, `cmd/persist`, `cmd/memory`, `cmd/sa` and `cmd/gui` are the five
 executables in the same module — the command line, the file-backed store, the
@@ -594,6 +618,9 @@ import {
   "riantr/tesseract/src/tesseract_memory",
 }
 ```
+
+That is the `moon.pkg` import; the module it comes from is pinned in `moon.mod`
+as described under [Install](#install).
 
 ```sh
 moon run cmd/memory -- "put greeting hello world" "get greeting"
