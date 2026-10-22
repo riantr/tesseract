@@ -109,6 +109,7 @@ pub struct Entry {
   hits : Int64
   importance : Double
   metadata : Metadata
+  pinned : Bool
 }
 pub fn Entry::age_ms(Self, Int64) -> Int64
 pub fn Entry::describe(Self, Int64) -> String
@@ -116,16 +117,19 @@ pub fn Entry::expired(Self, Int64) -> Bool
 pub fn Entry::idle_ms(Self, Int64) -> Int64
 pub fn Entry::importance(Self) -> Double
 pub fn Entry::metadata(Self) -> Metadata
+pub fn Entry::pinned(Self) -> Bool
 pub fn Entry::touched(Self, Int64) -> Self
 
 pub struct EntrySpec {
   ttl : Ttl
   importance : Double
   metadata : Metadata
+  pinned : Bool
 }
 pub fn EntrySpec::is_valid(Self) -> Bool
 pub fn EntrySpec::with_importance(Self, Double) -> Self
 pub fn EntrySpec::with_metadata(Self, Metadata) -> Self
+pub fn EntrySpec::with_pinned(Self, Bool) -> Self
 pub fn EntrySpec::with_ttl(Self, Ttl) -> Self
 
 pub enum EvictionPolicy {
@@ -169,6 +173,7 @@ pub fn Memory::get(Self, String) -> String?
 pub fn Memory::keys(Self) -> Array[String]
 pub fn Memory::max_bytes(Self) -> Int64
 pub fn Memory::now(Self) -> Int64
+pub fn Memory::pin(Self, String) -> Bool
 pub fn Memory::put(Self, String, String) -> Bool
 pub fn Memory::put_spec(Self, String, String, EntrySpec) -> Bool
 pub fn Memory::put_with_ttl(Self, String, String, Ttl) -> Bool
@@ -188,6 +193,7 @@ pub fn Memory::size_bytes(Self) -> Int64
 pub fn Memory::stats(Self) -> Stats
 pub fn Memory::sweep(Self) -> Int64
 pub fn Memory::touch(Self, String) -> Bool
+pub fn Memory::unpin(Self, String) -> Bool
 
 pub enum MemoryClock {
   System
@@ -242,6 +248,7 @@ pub fn Scope::entry(Self, String) -> Entry?
 pub fn Scope::get(Self, String) -> String?
 pub fn Scope::keys(Self) -> Array[String]
 pub fn Scope::name(Self) -> String
+pub fn Scope::pin(Self, String) -> Bool
 pub fn Scope::put(Self, String, String) -> Bool
 pub fn Scope::put_spec(Self, String, String, EntrySpec) -> Bool
 pub fn Scope::put_with_ttl(Self, String, String, Ttl) -> Bool
@@ -252,6 +259,7 @@ pub fn Scope::search_keys(Self, String, Int32) -> Array[String]
 pub fn Scope::size(Self) -> Int32
 pub fn Scope::size_bytes(Self) -> Int64
 pub fn Scope::touch(Self, String) -> Bool
+pub fn Scope::unpin(Self, String) -> Bool
 
 pub enum Similarity {
   Jaccard

@@ -43,6 +43,12 @@
 /// `--where k` and `--without k`. A filter chooses the candidates, so an
 /// entry the filter turns away is not looked at at all — even when it would
 /// have been the better match.
+///
+/// The **pin** says an entry is never thrown away to make room for another
+/// one. `put --pinned` writes a pinned entry, and `pin` and `unpin` change
+/// the pin of an entry that is already there. The pin is absolute: a store
+/// that cannot make room for a write without breaking a pin refuses the write
+/// rather than breaking it.
 
 ///|
 /// Everything the commands report goes to stdout; the banner and every failure
@@ -186,9 +192,12 @@ fn print_help() -> Unit {
   out(
     "  put <key> <value...> --meta k=v        label it, as many times as you like",
   )
+  out("  put <key> <value...> --pinned         never evict it to make room")
   out("  get <key>                 read a value")
   out("  del <key>                 forget a key")
   out("  touch <key>               refresh a key without reading it")
+  out("  pin <key>                 never evict this key to make room")
+  out("  unpin <key>               let it be evicted again")
   out("  keys                      the live keys")
   out("  entries                   the live entries, with their ages")
   out("  entries --where k=v       only the entries with that label")
@@ -536,6 +545,27 @@ fn command(
     }
     return
   }
+  if verb == "pin" || verb == "unpin" {
+    if words.length() < 2 {
+      warn(verb + " needs a key")
+      return
+    }
+    let done = if verb == "pin" {
+      scope.pin(words[1])
+    } else {
+      scope.unpin(words[1])
+    }
+    if done {
+      if verb == "pin" {
+        out("pinned " + words[1])
+      } else {
+        out("unpinned " + words[1])
+      }
+    } else {
+      out(words[1] + " -> (nothing to " + verb + ")")
+    }
+    return
+  }
   if verb == "keys" {
     out(scope.keys().join(", "))
     return
@@ -609,7 +639,8 @@ fn command(
 }
 
 ///|
-/// `put <key> <value...> [--ttl MS] [--sliding] [--importance N] [--meta k=v]`
+/// `put <key> <value...> [--ttl MS] [--sliding] [--importance N] [--meta k=v]
+/// [--pinned]`
 ///
 /// The value is the rest of the line with the flags taken out, so
 /// `put greeting hello world --ttl 1000` stores `hello world`.
@@ -624,6 +655,10 @@ fn command(
 /// The **labels** are written `--meta key=value`, and there may be several:
 /// they are what a filtered search looks at. A label with no name is refused,
 /// because a label with no name is not a label.
+///
+/// The **pin** says the entry is never thrown away to make room for another
+/// one. It does not make the entry immortal: a pinned entry with a lifetime
+/// still dies when its time is up.
 fn put(scope : @tesseract_memory.Scope, words : Array[String]) -> Unit {
   if words.length() < 2 {
     warn("put needs a key and a value")
@@ -631,6 +666,7 @@ fn put(scope : @tesseract_memory.Scope, words : Array[String]) -> Unit {
   }
   let key = words[1]
   let mut sliding = false
+  let mut pinned = false
   let mut explicit_ms : Int64? = None
   let mut importance : Double? = None
   let meta_pairs : Array[(String, String)] = []
@@ -639,6 +675,8 @@ fn put(scope : @tesseract_memory.Scope, words : Array[String]) -> Unit {
   while i < words.length() {
     if words[i] == "--sliding" {
       sliding = true
+    } else if words[i] == "--pinned" {
+      pinned = true
     } else if words[i] == "--ttl" && i + 1 < words.length() {
       explicit_ms = Some(
         @tesseract.parse_int(words[i + 1]).unwrap_or(0).to_int64(),
@@ -713,6 +751,9 @@ fn put(scope : @tesseract_memory.Scope, words : Array[String]) -> Unit {
   }
   if meta_pairs.length() > 0 {
     spec = spec.with_metadata(@tesseract_memory.new_metadata(meta_pairs))
+  }
+  if pinned {
+    spec = spec.with_pinned(true)
   }
   let value = value_parts.join(" ")
   if scope.put_spec(key, value, spec) {

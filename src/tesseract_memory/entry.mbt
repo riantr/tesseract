@@ -14,6 +14,12 @@
 /// value, and a copy of the entry copies it with it: an entry that has been
 /// touched is the same entry, with a new deadline and a new hit count, and not
 /// a different entry that happens to have the same key.
+///
+/// The entry carries whether it is **pinned**. A pinned entry is never thrown
+/// away to make room for another one — it is not a candidate for eviction at
+/// all. The pin says nothing about expiry: a pinned entry with a lifetime
+/// still dies when its time is up, because "do not evict me" and "never die"
+/// are two different promises.
 pub struct Entry {
   scope : String
   key : String
@@ -26,6 +32,7 @@ pub struct Entry {
   hits : Int64
   importance : Double
   metadata : Metadata
+  pinned : Bool
 }
 
 ///|
@@ -84,6 +91,7 @@ pub fn Entry::touched(self : Entry, now_ms : Int64) -> Entry {
     hits: self.hits + 1L,
     importance: self.importance,
     metadata: self.metadata,
+    pinned: self.pinned,
   }
 }
 
@@ -106,6 +114,16 @@ pub fn Entry::metadata(self : Entry) -> Metadata {
 }
 
 ///|
+/// Whether the entry is pinned.
+///
+/// A pinned entry is never evicted to make room for another one. It still
+/// takes up room — it is still counted against the capacity and the byte
+/// budget — and it still expires when its lifetime is up.
+pub fn Entry::pinned(self : Entry) -> Bool {
+  self.pinned
+}
+
+///|
 /// A one-line description of the entry, for a report.
 ///
 /// The labels are in the line when the entry has any, and are left out when it
@@ -123,6 +141,7 @@ pub fn Entry::describe(self : Entry, now_ms : Int64) -> String {
   } else {
     ", meta " + self.metadata.describe()
   }) +
+  (if self.pinned { ", pinned" } else { "" }) +
   ", " +
   (if self.window_ms == 0L {
     "no deadline"

@@ -1,8 +1,8 @@
 ///|
-/// How one entry is written: how long it lives, how much it counts, and what
-/// it is labelled.
+/// How one entry is written: how long it lives, how much it counts, what it
+/// is labelled, and whether it is pinned.
 ///
-/// The three settings are one thing rather than three because they are written
+/// The settings are one thing rather than several because they are written
 /// together, and a caller who has to remember which call takes which is a
 /// caller who will get it wrong. `put` and `put_with_ttl` are the two
 /// shorthands for the common cases; `put_spec` is the whole of it.
@@ -10,7 +10,7 @@
 /// ```
 /// ignore(m.put_spec(
 ///   "todo",
-///   "ship 0.1.9",
+///   "ship 0.1.10",
 ///   @tesseract_memory.default_spec()
 ///   .with_ttl(@tesseract_memory.ttl_absolute(60000L))
 ///   .with_importance(0.5)
@@ -21,17 +21,18 @@ pub struct EntrySpec {
   ttl : Ttl
   importance : Double
   metadata : Metadata
+  pinned : Bool
 }
 
 ///|
-/// The spec of an ordinary entry: it never expires, it counts fully, and it
-/// carries no labels.
+/// The spec of an ordinary entry: it never expires, it counts fully, it
+/// carries no labels, and it is not pinned.
 ///
 /// The default TTL of a *store* is a setting of the store, so a `put` with no
 /// TTL of its own gets that one; the spec's own default is "never", which is
 /// what a spec carries when the caller has not said otherwise.
 pub fn default_spec() -> EntrySpec {
-  { ttl: ttl_never(), importance: 1.0, metadata: no_metadata(), }
+  { ttl: ttl_never(), importance: 1.0, metadata: no_metadata(), pinned: false, }
 }
 
 ///|
@@ -72,6 +73,23 @@ pub fn EntrySpec::with_metadata(
   metadata : Metadata,
 ) -> EntrySpec {
   { ..self, metadata, }
+}
+
+///|
+/// The same spec, pinned or not.
+///
+/// A **pinned** entry is never thrown away to make room for another one: it
+/// is not a candidate for eviction at all. The pin says nothing about expiry
+/// — a pinned entry with a lifetime still dies when its time is up, because
+/// "do not evict me" and "never die" are two different promises.
+///
+/// The pin is absolute rather than a preference. A store that broke a pin when
+/// it had to would make the promise depend on the state of the store, and a
+/// caller who pinned an entry could not tell from the answer whether the entry
+/// had survived. So a store that cannot make room without evicting a pinned
+/// entry **refuses the write**, and the refusal leaves the store as it was.
+pub fn EntrySpec::with_pinned(self : EntrySpec, pinned : Bool) -> EntrySpec {
+  { ..self, pinned, }
 }
 
 ///|

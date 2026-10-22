@@ -293,6 +293,34 @@ function main() {
     check("a label with no name is refused", r.err.includes("label needs a name"), true, r.out + r.err);
     r = run("memory", ["put a x --meta noequals"], dir);
     check("a label that is not key=value is refused", r.err.includes("must be key=value"), true, r.out + r.err);
+
+    // ---- cmd/memory: the pin ----
+    // A pin says an entry is never thrown away to make room for another one.
+    // It is absolute: a store that cannot make room refuses the write rather
+    // than breaking the pin.
+    r = run("memory", ["put a x --pinned", "entries"], dir);
+    check("a pinned entry is reported with the entry", r.out.includes(", pinned"), true, r.out + r.err);
+    r = run("memory", ["put a x", "entries"], dir);
+    check("...and an entry that is not pinned says nothing about it", !r.out.includes(", pinned"), true, r.out + r.err);
+
+    r = run("memory", ["--capacity", "2", "put keep kept --pinned", "put other dropped", "put new new", "keys"], dir);
+    check("a pinned entry is not the one thrown away", lastLine(r.out), "keep, new");
+    r = run("memory", ["--capacity", "2", "put keep kept", "put other dropped", "put new new", "keys"], dir);
+    check("...and without the pin it is", lastLine(r.out), "new, other");
+
+    r = run("memory", ["--capacity", "1", "put a kept --pinned", "put b no room", "keys"], dir);
+    check("a store of pinned entries refuses the write", r.err.includes("could not store b"), true, r.out + r.err);
+    check("...and the entry it would have thrown away is still there", lastLine(r.out), "a");
+
+    r = run("memory", ["put a x", "pin a", "entries"], dir);
+    check("pin changes the pin of an entry that is there", r.out.includes(", pinned"), true, r.out + r.err);
+    r = run("memory", ["put a x --pinned", "unpin a", "entries"], dir);
+    check("unpin takes it away again", !r.out.includes(", pinned"), true, r.out + r.err);
+    r = run("memory", ["pin nothing"], dir);
+    check("pinning a key that is not there says so", r.out.includes("nothing to pin"), true, r.out + r.err);
+
+    r = run("memory", ["--manual-clock", "put a x --pinned --ttl 1000", "advance 1000", "get a"], dir);
+    check("a pinned entry still expires when its time is up", r.out.includes("a -> (nothing)"), true, r.out + r.err);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

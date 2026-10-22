@@ -152,6 +152,27 @@ pub fn Scope::touch(self : Scope, key : String) -> Bool {
 }
 
 ///|
+/// Pin an entry, so it is never evicted to make room for another one.
+///
+/// The pin is absolute, and a store that cannot make room for a write without
+/// breaking a pin refuses the write and leaves the store as it was. The pin
+/// says nothing about expiry: a pinned entry with a lifetime still dies when
+/// its time is up.
+///
+/// Everything else about the entry is left as it was — its age, its hit
+/// count, its deadline and its labels. Returns false when the key is not
+/// there.
+pub fn Scope::pin(self : Scope, key : String) -> Bool {
+  self.memory.pin_in(self.name, key, true)
+}
+
+///|
+/// Unpin an entry, so it can be evicted again.
+pub fn Scope::unpin(self : Scope, key : String) -> Bool {
+  self.memory.pin_in(self.name, key, false)
+}
+
+///|
 /// Forget a key.
 ///
 /// Returns false when there was nothing to forget.

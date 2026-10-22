@@ -440,14 +440,14 @@ pub fn Memory::max_bytes(self : Memory) -> Int64 {
 }
 
 ///|
-/// Evicts until a write of `value_bytes` would fit, or reports that it cannot.
+/// Evicts until a write of `total_bytes` would fit, or reports that it cannot.
 ///
 /// Two limits, and the store has to satisfy **both**: at most `capacity`
-/// entries, and at most `max_bytes` of values. A caller who sets both gets
+/// entries, and at most `max_bytes` of content. A caller who sets both gets
 /// the smaller of the two, which is the point of setting both.
 ///
 /// The question is asked of the store as it will be **after** the write, not
-/// as it is now: the key's own old value is subtracted, because the write
+/// as it is now: the key's own old content is subtracted, because the write
 /// replaces it. Asking about the present would make every replacement look
 /// like an addition, and a store that evicts on a replacement is a store that
 /// throws away a memory the caller did not ask to lose.
@@ -456,6 +456,13 @@ pub fn Memory::max_bytes(self : Memory) -> Int64 {
 /// for itself would be work done twice — the entry would be thrown away and
 /// then written again — and it would take the store's byte total with it, so
 /// the arithmetic would be counting a value that is no longer there.
+///
+/// A **pinned** entry is never the victim either, and that makes a store of
+/// nothing but pinned entries a store that cannot make room for anything. So
+/// the room is **planned before it is taken**: if even throwing away every
+/// entry that could be thrown away would not make room, the write is refused
+/// and **nothing is evicted**. A refused write that had already thrown
+/// something away would cost the caller an entry it did not ask to lose.
 fn Memory::make_room(
   self : Memory,
   scope : String,
@@ -463,6 +470,9 @@ fn Memory::make_room(
   total_bytes : Int64,
   new_key : Bool,
 ) -> Bool {
+  if !self.can_make_room(scope, key, total_bytes, new_key) {
+    return false
+  }
   let mut ok = true
   while self.over_capacity_after(scope, key, total_bytes, new_key) {
     match self.pick_victim(scope, key) {
@@ -477,6 +487,60 @@ fn Memory::make_room(
     }
   }
   ok
+}
+
+///|
+/// Whether the write could fit at all.
+///
+/// The best case is that **every** entry which could be thrown away is thrown
+/// away, and the question is whether the store would fit then. If it would
+/// not, the write cannot be made room for, and it is refused before anything
+/// is evicted.
+///
+/// The entries that could be thrown away are the ones that are **not pinned**
+/// and not the key being written — a pinned entry is never a victim, and the
+/// key being written is never thrown away to make room for itself.
+fn Memory::can_make_room(
+  self : Memory,
+  scope : String,
+  key : String,
+  total_bytes : Int64,
+  new_key : Bool,
+) -> Bool {
+  let mut evictable = 0
+  let mut evictable_bytes = 0L
+  for (other_scope, inner) in self.entries.iter() {
+    for (other_key, entry) in inner.iter() {
+      if other_scope == scope && other_key == key {
+        continue
+      }
+      if entry.pinned {
+        continue
+      }
+      evictable = evictable + 1
+      evictable_bytes = evictable_bytes + entry_bytes(entry)
+    }
+  }
+  // The count, if every one of them went.
+  let final_count = self.entry_count() -
+    evictable +
+    (if new_key { 1 } else { 0 })
+  if final_count > self.config.capacity {
+    return false
+  }
+  if self.config.max_bytes > 0L {
+    // The bytes, if every one of them went. The key being written is not
+    // among them, so its own old content is subtracted on its own.
+    let old_bytes = match self.lookup(scope, key) {
+      Some(old) => entry_bytes(old)
+      None => 0L
+    }
+    let final_bytes = self.bytes - evictable_bytes - old_bytes + total_bytes
+    if final_bytes > self.config.max_bytes {
+      return false
+    }
+  }
+  true
 }
 
 ///|
@@ -620,6 +684,36 @@ pub fn Memory::touch(self : Memory, key : String) -> Bool {
 }
 
 ///|
+/// Pin an entry, so it is never evicted to make room for another one.
+///
+/// A pinned entry is not a candidate for eviction at all: not the oldest, not
+/// the least used, not the one whose time is up soonest. The pin is absolute
+/// — a store that broke it when it had to would make the promise depend on
+/// the state of the store — and a store that cannot make room for a write
+/// without breaking a pin **refuses the write** instead, and leaves the store
+/// as it was.
+///
+/// The pin says nothing about expiry: a pinned entry with a lifetime still
+/// dies when its time is up.
+///
+/// The pin is the only thing that changes. The entry keeps its age, its hit
+/// count, its deadline and its labels, because pinning something is not the
+/// same as reading it. Returns false when the key is not there.
+pub fn Memory::pin(self : Memory, key : String) -> Bool {
+  self.pin_in(default_scope_name(), key, true)
+}
+
+///|
+/// Unpin an entry, so it can be evicted again.
+///
+/// Everything else about the entry is left as it was, for the same reason
+/// pinning does not change anything else. Returns false when the key is not
+/// there.
+pub fn Memory::unpin(self : Memory, key : String) -> Bool {
+  self.pin_in(default_scope_name(), key, false)
+}
+
+///|
 /// Forget a key.
 ///
 /// Returns false when there was nothing to forget.
@@ -710,6 +804,7 @@ fn Memory::put_in(
     hits: 0L,
     importance: spec.importance,
     metadata: spec.metadata,
+    pinned: spec.pinned,
   })
   self.stats.puts = self.stats.puts + 1L
   if already {
@@ -751,6 +846,37 @@ fn Memory::touch_in(self : Memory, scope : String, key : String) -> Bool {
     None => false
     Some(entry) => {
       self.write(scope, key, entry.touched(self.now()))
+      true
+    }
+  }
+}
+
+///|
+/// Set the pin of an entry in a scope.
+fn Memory::pin_in(
+  self : Memory,
+  scope : String,
+  key : String,
+  pinned : Bool,
+) -> Bool {
+  ignore(self.expire_due())
+  match self.lookup(scope, key) {
+    None => false
+    Some(entry) => {
+      self.write(scope, key, {
+        scope: entry.scope,
+        key: entry.key,
+        value: entry.value,
+        added_at: entry.added_at,
+        deadline: entry.deadline,
+        window_ms: entry.window_ms,
+        sliding: entry.sliding,
+        last_seen: entry.last_seen,
+        hits: entry.hits,
+        importance: entry.importance,
+        metadata: entry.metadata,
+        pinned,
+      })
       true
     }
   }
@@ -859,6 +985,11 @@ fn Memory::expire_due(self : Memory) -> Int64 {
 /// entry is not evicted to make room for the value that is about to replace
 /// it. An entry that is not there cannot be a victim anyway, so the exclusion
 /// is the same whether the key is new or not.
+///
+/// A **pinned** entry is not a victim either, and that is not a preference
+/// the policy may overrule — it is the whole meaning of the pin. A store
+/// whose every entry is pinned has no victim at all, and the write that
+/// needed the room is refused.
 fn Memory::pick_victim(
   self : Memory,
   exclude_scope : String,
@@ -869,6 +1000,9 @@ fn Memory::pick_victim(
   for (scope, inner) in self.entries.iter() {
     for (key, entry) in inner.iter() {
       if scope == exclude_scope && key == exclude_key {
+        continue
+      }
+      if entry.pinned {
         continue
       }
       let rank = match self.config.eviction {
