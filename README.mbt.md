@@ -46,6 +46,13 @@ not a newer spelling — it is an import the toolchain cannot find:
 Cannot find import 'riantr/tesseract/src/tesseract@0.1.10' in my/app/src/thing@0.1.0
 ```
 
+The `src/` in the package path is part of the package's name, not a prefix the
+toolchain strips. A module's **library** packages live under `src/` and its
+**executables** under `cmd/`, and the registry lists them under exactly those
+paths — so `riantr/tesseract/src/tesseract_memory` is a package and
+`riantr/tesseract/tesseract_memory` is not found. The way to write less is the
+alias, below.
+
 For the same reason there is no `@latest`: the version is parsed as semver, so
 `latest`, `^0.1.10`, `>=0.1.10`, `0.1` and `v0.1.10` are all rejected. A bare
 `moon add riantr/tesseract` resolves the newest release and pins the concrete
