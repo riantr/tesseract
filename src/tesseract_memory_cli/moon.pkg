@@ -1,0 +1,10 @@
+import {
+  "riantr/tesseract/src/tesseract",
+  "riantr/tesseract/src/tesseract_memory",
+}
+
+/// The command layer of the memory CLIs. It talks to a store and to nothing
+/// else - no file, no clock of its own - so it builds on every backend the
+/// memory tier does.
+
+supported_targets = "native+wasm+wasm-gc+js"

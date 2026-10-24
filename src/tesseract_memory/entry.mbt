@@ -36,6 +36,52 @@ pub struct Entry {
 }
 
 ///|
+/// An entry, built from its parts.
+///
+/// The fields of an entry are public so a caller can **read** them, and the
+/// memory owns the lifecycle: an entry is written, touched, and eventually
+/// removed, and nothing outside this package writes one. This is the one way
+/// to build one that is not a write.
+///
+/// It exists for the store that has to put an entry back exactly as it was —
+/// a checkpoint that was read from a file, where the entry's deadline, its age
+/// and its hit count are facts that a write would change rather than
+/// restore. A caller that builds an entry this way still cannot put it in a
+/// store: `Memory::restore_entry` is what does that, and it is what checks
+/// that the entry is one the store can honour.
+///
+/// The arguments are the entry's fields in the order they are declared.
+pub fn Entry::make(
+  scope : String,
+  key : String,
+  value : String,
+  added_at : Int64,
+  deadline : Int64,
+  window_ms : Int64,
+  sliding : Bool,
+  last_seen : Int64,
+  hits : Int64,
+  importance : Double,
+  metadata : Metadata,
+  pinned : Bool,
+) -> Entry {
+  {
+    scope,
+    key,
+    value,
+    added_at,
+    deadline,
+    window_ms,
+    sliding,
+    last_seen,
+    hits,
+    importance,
+    metadata,
+    pinned,
+  }
+}
+
+///|
 /// True when the entry is past its deadline.
 ///
 /// The boundary is *exclusive at the live end*: an entry with deadline `D` is

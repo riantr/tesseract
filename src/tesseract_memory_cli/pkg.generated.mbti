@@ -1,0 +1,51 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "riantr/tesseract/src/tesseract_memory_cli"
+
+import {
+  "riantr/tesseract/src/tesseract_memory",
+}
+
+// Values
+pub fn default_options() -> Options
+
+pub fn demo(@tesseract_memory.Memory) -> Unit
+
+pub fn is_demo(String) -> Bool
+
+pub fn out(String) -> Unit
+
+pub fn parse_session(ArrayView[String]) -> (Options, Array[String])
+
+pub fn print_help(Usage) -> Unit
+
+pub fn run_command(@tesseract_memory.Memory, @tesseract_memory.Scope, String, Usage) -> @tesseract_memory.Scope
+
+pub fn usage(String, Array[String]) -> Usage
+
+pub fn warn(String) -> Unit
+
+// Errors
+
+// Types and methods
+pub struct Options {
+  capacity : Int32
+  max_bytes : Int64
+  default_ttl : @tesseract_memory.Ttl
+  eviction : @tesseract_memory.EvictionPolicy
+  similarity : @tesseract_memory.Similarity
+  recency : @tesseract_memory.Recency
+  manual : Bool
+  scope_name : String
+  file : String?
+}
+pub fn Options::config(Self) -> @tesseract_memory.Config
+pub fn Options::problem(Self) -> String?
+
+pub struct Usage {
+  usage : String
+  extra_options : Array[String]
+}
+
+// Type aliases
+
+// Traits

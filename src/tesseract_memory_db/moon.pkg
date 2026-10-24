@@ -1,0 +1,18 @@
+import {
+  "riantr/tesseract/src/tesseract",
+  "riantr/tesseract/src/tesseract_memory",
+  "riantr/tesseract/src/tesseract_sqlite",
+  "moonbitlang/core/builtin",
+  "moonbitlang/core/json",
+}
+
+import {
+  "moonbit-community/sqlite3",
+  "moonbitlang/x/fs" @xfs,
+} for "test"
+
+/// The durable memory is backed by the `.db` adapter, and the adapter is
+/// native and wasm only. The memory tier itself stays on every backend — this
+/// is a second store, not a replacement.
+
+supported_targets = "native+wasm"

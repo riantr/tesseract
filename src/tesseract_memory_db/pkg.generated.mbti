@@ -1,0 +1,74 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "riantr/tesseract/src/tesseract_memory_db"
+
+import {
+  "riantr/tesseract/src/tesseract_memory",
+}
+
+// Values
+pub const FORMAT_VERSION : Int64 = 1
+
+pub const HEADER_KEY : String = "tesseract-memory"
+
+pub fn open(String, @tesseract_memory.Config) -> Result[DurableMemory, String]
+
+pub fn open_with_clock(String, @tesseract_memory.Config, @tesseract_memory.MemoryClock) -> Result[DurableMemory, String]
+
+// Errors
+
+// Types and methods
+pub struct DurableMemory {
+  // private fields
+}
+pub fn DurableMemory::advance(Self, Int64) -> Result[Bool, String]
+pub fn DurableMemory::checkpoint(Self) -> Result[Int32, String]
+pub fn DurableMemory::clear(Self) -> Result[Unit, String]
+pub fn DurableMemory::contains(Self, String) -> Bool
+pub fn DurableMemory::default_scope(Self) -> DurableScope
+pub fn DurableMemory::delete(Self, String) -> Result[Bool, String]
+pub fn DurableMemory::entries(Self) -> Array[@tesseract_memory.Entry]
+pub fn DurableMemory::entry(Self, String) -> @tesseract_memory.Entry?
+pub fn DurableMemory::get(Self, String) -> String?
+pub fn DurableMemory::keys(Self) -> Array[String]
+pub fn DurableMemory::memory(Self) -> @tesseract_memory.Memory
+pub fn DurableMemory::path(Self) -> String
+pub fn DurableMemory::pin(Self, String) -> Result[Bool, String]
+pub fn DurableMemory::put(Self, String, String) -> Result[Bool, String]
+pub fn DurableMemory::put_spec(Self, String, String, @tesseract_memory.EntrySpec) -> Result[Bool, String]
+pub fn DurableMemory::put_with_ttl(Self, String, String, @tesseract_memory.Ttl) -> Result[Bool, String]
+pub fn DurableMemory::reload(Self) -> Result[Int32, String]
+pub fn DurableMemory::scope(Self, String) -> DurableScope
+pub fn DurableMemory::scopes(Self) -> Array[String]
+pub fn DurableMemory::search(Self, String, Int32) -> Array[@tesseract_memory.Hit]
+pub fn DurableMemory::search_filtered(Self, String, Int32, @tesseract_memory.MetadataFilter) -> Array[@tesseract_memory.Hit]
+pub fn DurableMemory::set_config(Self, @tesseract_memory.Config) -> Result[Bool, String]
+pub fn DurableMemory::size(Self) -> Int32
+pub fn DurableMemory::size_bytes(Self) -> Int64
+pub fn DurableMemory::stats(Self) -> @tesseract_memory.Stats
+pub fn DurableMemory::sweep(Self) -> Result[Int64, String]
+pub fn DurableMemory::touch(Self, String) -> Result[Bool, String]
+pub fn DurableMemory::unpin(Self, String) -> Result[Bool, String]
+
+pub struct DurableScope {
+  // private fields
+}
+pub fn DurableScope::clear(Self) -> Result[Unit, String]
+pub fn DurableScope::contains(Self, String) -> Bool
+pub fn DurableScope::delete(Self, String) -> Result[Bool, String]
+pub fn DurableScope::entries(Self) -> Array[@tesseract_memory.Entry]
+pub fn DurableScope::entry(Self, String) -> @tesseract_memory.Entry?
+pub fn DurableScope::get(Self, String) -> String?
+pub fn DurableScope::keys(Self) -> Array[String]
+pub fn DurableScope::name(Self) -> String
+pub fn DurableScope::pin(Self, String) -> Result[Bool, String]
+pub fn DurableScope::put(Self, String, String) -> Result[Bool, String]
+pub fn DurableScope::put_spec(Self, String, String, @tesseract_memory.EntrySpec) -> Result[Bool, String]
+pub fn DurableScope::put_with_ttl(Self, String, String, @tesseract_memory.Ttl) -> Result[Bool, String]
+pub fn DurableScope::search(Self, String, Int32) -> Array[@tesseract_memory.Hit]
+pub fn DurableScope::size(Self) -> Int32
+pub fn DurableScope::touch(Self, String) -> Result[Bool, String]
+pub fn DurableScope::unpin(Self, String) -> Result[Bool, String]
+
+// Type aliases
+
+// Traits

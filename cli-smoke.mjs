@@ -90,10 +90,11 @@ function stamp_after(later, earlier) {
 }
 
 function main() {
-  log("building cmd/main, cmd/persist and cmd/memory for native...");
+  log("building cmd/main, cmd/persist, cmd/memory and cmd/memory_db for native...");
   moon(["build", "cmd/main", "--target", "native"]);
   moon(["build", "cmd/persist", "--target", "native"]);
   moon(["build", "cmd/memory", "--target", "native"]);
+  moon(["build", "cmd/memory_db", "--target", "native"]);
 
   // A scratch directory this script owns outright, so it can clean up after
   // itself without touching anything of yours.
@@ -321,6 +322,59 @@ function main() {
 
     r = run("memory", ["--manual-clock", "put a x --pinned --ttl 1000", "advance 1000", "get a"], dir);
     check("a pinned entry still expires when its time is up", r.out.includes("a -> (nothing)"), true, r.out + r.err);
+
+    // ---- cmd/memory_db: the durable memory ----
+    // The library's own tests cover the rules; this covers the one thing that
+    // cannot be checked from inside a process: that what the first process
+    // wrote is what the second one reads. Every run below is a separate
+    // process, and the file is the only thing they share.
+    const durable = path.join(dir, "memory.db");
+    r = run("memory_db", ["--file", "memory.db", "put a hello", "put b second"], dir);
+    check("the durable store writes its file", fs.existsSync(durable) && fs.statSync(durable).size > 0, true, r.out + r.err);
+    check("...and says what it stored", r.out.includes("a -> hello"), true, r.out + r.err);
+
+    r = run("memory_db", ["--file", "memory.db", "keys"], dir);
+    check("a second process reads what the first one wrote", lastLine(r.out), "a, b");
+
+    // The labels and the pin are part of the entry, so they survive the
+    // process boundary too.
+    r = run("memory_db", ["--file", "memory.db", "put c third --meta kind=note --pinned"], dir);
+    r = run("memory_db", ["--file", "memory.db", "entries"], dir);
+    check("...with their labels", r.out.includes("meta kind=note"), true, r.out + r.err);
+    check("...and their pin", r.out.includes(", pinned"), true, r.out + r.err);
+
+    // The deadline is absolute, so an entry written with a lifetime has the
+    // time it had left when the process ended - not the time it was given.
+    r = run("memory_db", ["--file", "ttl.db", "--manual-clock", "put soon x --ttl 1000"], dir);
+    r = run("memory_db", ["--file", "ttl.db", "--manual-clock", "keys"], dir);
+    check("an entry with a lifetime is still there after the process ends", lastLine(r.out), "soon");
+    r = run("memory_db", ["--file", "ttl.db", "--manual-clock", "advance 1000", "keys"], dir);
+    check("...and is gone once its time is up", r.out.includes("soon"), false, r.out + r.err);
+    r = run("memory_db", ["--file", "ttl.db", "--manual-clock", "keys"], dir);
+    check("...and does not come back", r.out.includes("soon"), false, r.out + r.err);
+
+    // A refused write leaves the store unchanged, and the file with it.
+    r = run("memory_db", ["--file", "full.db", "--capacity", "1", "put keep kept --pinned", "put other dropped", "keys"], dir);
+    check("a refused write says so", r.err.includes("could not store other"), true, r.out + r.err);
+    check("...and the entry it would have thrown away is still there", lastLine(r.out), "keep");
+    r = run("memory_db", ["--file", "full.db", "keys"], dir);
+    check("...in the file too", lastLine(r.out), "keep");
+
+    // A checkpoint that does not fit the store it is opened with is refused
+    // rather than half-loaded: the entries it holds would not fit.
+    r = run("memory_db", ["--file", "toobig.db", "put a 1", "put b 2"], dir);
+    r = run("memory_db", ["--file", "toobig.db", "--capacity", "1", "keys"], dir);
+    check("a checkpoint that does not fit the store is refused", r.err.includes("checkpoint holds"), true, r.out + r.err);
+
+    // The tour writes into the store it is given, and this store is a file.
+    r = run("memory_db", ["--file", "tour.db", "demo"], dir);
+    check("the tour is refused by a store that is a file", r.err.includes("tour writes into the store"), true, r.out + r.err);
+    r = run("memory_db", ["--file", "tour.db", "keys"], dir);
+    check("...and it left nothing behind", r.out.includes("greeting"), false, r.out + r.err);
+
+    // A durable memory without a file is not a durable memory.
+    r = run("memory_db", ["put a hello"], dir);
+    check("a durable memory without a file says so", r.err.includes("needs a file"), true, r.out + r.err);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

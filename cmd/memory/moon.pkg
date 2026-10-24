@@ -1,6 +1,6 @@
 import {
-  "riantr/tesseract/src/tesseract",
   "riantr/tesseract/src/tesseract_memory",
+  "riantr/tesseract/src/tesseract_memory_cli",
   "moonbitlang/core/env",
 }
 

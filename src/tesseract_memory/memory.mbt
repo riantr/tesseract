@@ -814,6 +814,66 @@ fn Memory::put_in(
 }
 
 ///|
+/// Put an entry back exactly as it was.
+///
+/// A `put` builds a **new** entry: it stamps the time, it counts the hits from
+/// zero, and it turns a lifetime into a deadline measured from now. That is
+/// right for a write and wrong for a restore — a store that is reloaded wants
+/// the entry it had, not a copy of it with a new age.
+///
+/// So this takes the entry itself, and the entry's own fields are what the
+/// store keeps: the deadline it had, the time it was added, how often it was
+/// read, and when it was last seen. A store that reloads through this keeps
+/// its LRU and LFU ranking across the restart, which is the whole point of
+/// restoring rather than re-writing.
+///
+/// The limits are the store's, exactly as they are for a write: the entry
+/// still has to fit the byte budget, and the capacity is still the capacity.
+/// A restore that cannot make room is refused the same way a write is — and a
+/// refused restore leaves the store as it was.
+///
+/// An entry whose time is already up is **refused**. It is dead, and accepting
+/// it would be accepting a write that does nothing.
+///
+/// Returns false when the entry was refused, or when there is nothing to
+/// restore — an entry with no key has no name to be stored under.
+pub fn Memory::restore_entry(self : Memory, entry : Entry) -> Bool {
+  if entry.key == "" {
+    return false
+  }
+  if entry.importance <= 0.0 || entry.importance > 1.0 {
+    return false
+  }
+  if !entry.metadata.is_valid() {
+    return false
+  }
+  ignore(self.expire_due())
+  let now = self.now()
+  // Whether an entry expires is decided by its window: a window of zero means
+  // it never does, and its deadline is then only a number.
+  if entry.window_ms > 0L && entry.deadline <= now {
+    return false
+  }
+  let total_bytes = entry_bytes(entry)
+  // Content that cannot fit in an empty store is refused before anything is
+  // evicted, for the same reason a write refuses it: a failed write must not
+  // cost the caller the entries it already has.
+  if self.config.max_bytes > 0L && total_bytes > self.config.max_bytes {
+    return false
+  }
+  let already = self.lookup(entry.scope, entry.key) is Some(_)
+  if !self.make_room(entry.scope, entry.key, total_bytes, !already) {
+    return false
+  }
+  self.write(entry.scope, entry.key, entry)
+  self.stats.puts = self.stats.puts + 1L
+  if already {
+    self.stats.updates = self.stats.updates + 1L
+  }
+  true
+}
+
+///|
 /// Read a value from a scope, and count it as a use.
 fn Memory::get_in(self : Memory, scope : String, key : String) -> String? {
   ignore(self.expire_due())

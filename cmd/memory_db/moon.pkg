@@ -1,0 +1,15 @@
+import {
+  "riantr/tesseract/src/tesseract_memory",
+  "riantr/tesseract/src/tesseract_memory_cli",
+  "riantr/tesseract/src/tesseract_memory_db",
+  "moonbitlang/core/env",
+}
+
+/// The store is a `.db` file, and the `.db` adapter builds only for `native`
+/// and `wasm`. That is the same reason `cmd/persist` is a separate binary from
+/// `cmd/main`, and the same reason this one is separate from `cmd/memory`:
+/// adding it there would take that binary off `js` and `wasm-gc`.
+
+supported_targets = "native+wasm"
+
+pkgtype(kind: "executable")
