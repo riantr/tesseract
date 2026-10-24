@@ -15,7 +15,7 @@ same success flags, error codes, positions, coordinates and digits.
 ## Install
 
 ```sh
-moon add riantr/tesseract@0.1.12
+moon add riantr/tesseract@0.1.13
 ```
 
 That is a **module** dependency, and it belongs in the consumer's `moon.mod`.
@@ -23,7 +23,7 @@ That is a **module** dependency, and it belongs in the consumer's `moon.mod`.
 
 ```toml
 import {
-  "riantr/tesseract@0.1.12",
+  "riantr/tesseract@0.1.13",
 }
 ```
 
@@ -43,7 +43,7 @@ a module and takes **no version at all**. A version in a `moon.pkg` import is
 not a newer spelling — it is an import the toolchain cannot find:
 
 ```
-Cannot find import 'riantr/tesseract/src/tesseract@0.1.12' in my/app/src/thing@0.1.0
+Cannot find import 'riantr/tesseract/src/tesseract@0.1.13' in my/app/src/thing@0.1.0
 ```
 
 The `src/` in the package path is part of the package's name, not a prefix the
@@ -54,7 +54,7 @@ paths — so `riantr/tesseract/src/tesseract_memory` is a package and
 alias, below.
 
 For the same reason there is no `@latest`: the version is parsed as semver, so
-`latest`, `^0.1.12`, `>=0.1.12`, `0.1` and `v0.1.12` are all rejected. A bare
+`latest`, `^0.1.13`, `>=0.1.13`, `0.1` and `v0.1.13` are all rejected. A bare
 `moon add riantr/tesseract` resolves the newest release and pins the concrete
 version it found — that is the "latest" this toolchain has.
 
@@ -79,7 +79,7 @@ package's symbols on under a name of its own.
 are the six executables in the same module — the command line, the file-backed
 store, the short-term memory, the durable memory, the scan database and the
 window. Registry entry:
-[mooncakes.io/docs/riantr/tesseract@0.1.12](https://mooncakes.io/docs/riantr/tesseract@0.1.12).
+[mooncakes.io/docs/riantr/tesseract@0.1.13](https://mooncakes.io/docs/riantr/tesseract@0.1.13).
 
 ### What the release was checked on
 
@@ -96,6 +96,7 @@ exercised here, and quoting a lower bound nobody ran would be a claim, not a fac
 | `riantr/tesseract/src/tesseract_memory` | library | yes | yes | yes | yes |
 | `riantr/tesseract/src/tesseract_memory_cli` | library | yes | yes | yes | yes |
 | `riantr/tesseract/src/tesseract_memory_db` | library | yes | yes | — | — |
+| `riantr/tesseract/src/tesseract_memory_index` | library | yes | yes | — | — |
 | `riantr/tesseract/src/tesseract_dgp` | library | yes | yes | yes | yes |
 | `riantr/tesseract/src/tesseract_sqlite` | library | yes | yes | — | — |
 | `riantr/tesseract/src/tesseract_sa` | library | yes | yes | — | — |
@@ -238,8 +239,16 @@ src/tesseract_memory/
   score.mbt      tokenising, the four similarities, JSON leaf paths
   search.mbt     top-k over the live entries, filtered or not
   size.mbt       the UTF-8 size of a text, in bytes
+src/tesseract_memory_index/
+  index.mbt      the SQL index: an inverted index of the entries' words
+src/tesseract_memory_db/
+  format.mbt     the checkpoint container: the lattice that holds the entries
+  store.mbt      the durable memory: open, checkpoint, reload
+src/tesseract_memory_cli/
+  cli.mbt        the command layer, shared by cmd/memory and cmd/memory_db
 cmd/main/        command line front end
 cmd/memory/      the short-term memory, from a shell
+cmd/memory_db/   the durable memory, from a shell, with the index behind it
 cmd/gui/         the proton desktop window
   main.mbt       the App: entry point, page asset, command registration
   state.mbt      the store the window drives, and its JSON projections
@@ -838,10 +847,10 @@ to exactly one of them.
 ///|
 let m = @tesseract_memory.new_memory(100)
 let work = m.scope("work")
-ignore(work.put("todo", "ship 0.1.12"))
+ignore(work.put("todo", "ship 0.1.13"))
 ignore(m.scope("notes").put("todo", "buy milk"))
 // Two entries, one key.
-assert_eq(work.get("todo"), Some("ship 0.1.12"))
+assert_eq(work.get("todo"), Some("ship 0.1.13"))
 assert_eq(m.scope("notes").get("todo"), Some("buy milk"))
 ```
 
@@ -890,7 +899,7 @@ place where there is nothing to find.
 From a shell, the scope is the partition the commands work in:
 
 ```sh
-moon run cmd/memory -- --scope work "put todo ship 0.1.12" "keys"
+moon run cmd/memory -- --scope work "put todo ship 0.1.13" "keys"
 moon run cmd/memory -- "put a the cat sat" "scope work" "put a the cat sat on the mat" "scopes"
 moon run cmd/memory -- "put a the cat sat" "scope work" "put a the cat sat on the mat" "search-all cat"
 ```
@@ -1151,7 +1160,7 @@ let m = @tesseract_memory.new_memory(100)
 ignore(
   m.put_spec(
     "todo",
-    "ship 0.1.12",
+    "ship 0.1.13",
     @tesseract_memory.default_spec()
     .with_metadata(@tesseract_memory.no_metadata().with_kind("task")),
   ),
@@ -1190,8 +1199,8 @@ From the shell, `put --kind K` writes the label and `kinds` reports the
 mixture:
 
 ```sh
-moon run cmd/memory -- "put todo ship 0.1.12 --kind task" "put note the cat sat --kind note" "kinds"
-moon run cmd/memory -- "put todo ship 0.1.12 --kind task" "entries --kind task"
+moon run cmd/memory -- "put todo ship 0.1.13 --kind task" "put note the cat sat --kind note" "kinds"
+moon run cmd/memory -- "put todo ship 0.1.13 --kind task" "entries --kind task"
 ```
 
 `--kind` on `entries` and `search` is a spelling of `--where kind=…`, and a
@@ -1281,11 +1290,98 @@ A checkpoint that does not fit the store it is opened with is **refused**
 rather than half-loaded — restoring an entry into a store that is already full
 would evict the entries that were there.
 
+### The SQL index
+
+`src/tesseract_memory_index` is an **inverted index** of the memory's entries:
+one row per word, per entry, and the row says which entry it is. "Which of my
+entries mention the word 'cat'?" is a lookup rather than a scan, and the answer
+is **exact** — the memory's own `search` is a similarity, and an entry that
+shares nothing with the query is not in its answer at all.
+
+The index is a **plain SQLite table**, so it is a table a person can query
+with SQL:
+
+```sql
+SELECT scope, key FROM tesseract_memory_index WHERE token = 'cat';
+```
+
+```moonbit nocheck
+///|
+import {
+  "riantr/tesseract/src/tesseract_memory" @tm,
+  "riantr/tesseract/src/tesseract_memory_index" @tmi,
+}
+
+let m = @tm.new_memory(100)
+ignore(m.put("note", "the cat sat"))
+let index = @tmi.open("notes.idx").unwrap()
+let report = index.rebuild(m).unwrap()
+println(report.describe())
+```
+
+It is a **separate package** for the same reason the durable memory is: the
+file is a `.db`, and the `.db` adapter builds for `native` and `wasm` only.
+
+#### The index is derivative
+
+Every row is a word of an entry's value or of one of its labels, so the index
+holds **nothing the entries do not**. It can be thrown away and built again,
+and the rebuild gives back the same thing. That is the property worth having:
+a caller who does not trust the index can delete it, and the next rebuild is
+the index the store says.
+
+The proof is the **rebuild's report**. It says how far the index was from the
+store — the entries that changed, the rows to add, the rows to remove — and a
+rebuild of an index that was already right says **nothing on all three
+counts**:
+
+```
+index notes.idx: 9 rows, 3 entries, 0 changed, 0 rows added, 0 rows removed
+```
+
+`verify` is the same question asked without the answer: it computes the same
+difference and applies none of it. A caller that keeps an index up to date
+asks it after every write; a caller that does not asks it to find out.
+
+Four things make the two true:
+
+- **The words are the content's words.** The words of the value, and the words
+  of the **values** of the labels. The *keys* of the labels are not words:
+  "kind" is the name of a label, and every entry with a kind would then be
+  found by the word "kind", which says nothing about the entry.
+- **The lookup is exact.** "cat" finds the entry that says "cat"; "ca" and
+  "cats" find nothing. The query is lowercased, because the index holds the
+  words the tokenizer wrote and the tokenizer lowercases.
+- **The store decides.** The rebuild reads the store's own scopes and entries,
+  so the index covers every scope, and an entry the store has forgotten — or
+  let die — has no rows.
+- **A verify changes nothing.** It does not even create the file it was asked
+  about: a read that wrote would be a read that lied.
+
+#### From a shell
+
+`cmd/memory_db --index PATH` names the index file, and two commands use it:
+
+```sh
+moon run cmd/memory_db --target native -- --file notes.db --index notes.idx "index"
+moon run cmd/memory_db --target native -- --file notes.db --index notes.idx "index-find cat"
+```
+
+`index` is the **explicit rebuild**: it puts the index back in step with the
+store and says what it had to change. `index-find <word>` is the lookup.
+
+The index is **not** rebuilt by the other commands. A command that changes the
+store changes the store, and the index is the caller's to rebuild when it wants
+it fresh — so `index-find` checks the index against the store before it
+answers, and says so when the two disagree. A lookup that answered from a
+stale index without saying so would be worse than no index at all.
+
 ### What it does not do
 
-- **Not SQL, and not a second query language.** The memory has a native API.
-  Putting it behind the core's SQL would mean the core's executor learned about
-  a tier it does not own.
+- **Not SQL, and not a second query language.** The *memory* has a native API;
+  the index is a separate package with a table of its own. Putting the memory
+  behind the core's SQL would mean the core's executor learned about a tier it
+  does not own.
 - **Not embeddings.** A semantic similarity needs a model, and a model is a
   dependency and a download.
 - **Not persistent by itself.** The memory tier lives in the process. What
@@ -1311,9 +1407,15 @@ would evict the entries that were there.
   the byte budget belong to the pool. A scope with a budget of its own would
   make the store's size a function of how many partitions a caller happened to
   use.
+- **Not maintained behind the caller's back.** The index is rebuilt when the
+  caller says so, because the writes go through the memory's own API and a
+  store that kept a second index in step on every write would have to own
+  those writes. A caller that wants the index fresh runs the rebuild; a caller
+  that does not can ask how far the index is from the store instead.
 
 The full plan and the measurements behind it are in `LOOP3.md`, `LOOP4.md`,
-`LOOP5.md`, `LOOP6.md`, `LOOP7.md`, `LOOP8.md`, `LOOP9.md` and `LOOP10.md`.
+`LOOP5.md`, `LOOP6.md`, `LOOP7.md`, `LOOP8.md`, `LOOP9.md`, `LOOP10.md` and
+`LOOP11.md`.
 
 ## Running it
 
@@ -1321,7 +1423,7 @@ The full plan and the measurements behind it are in `LOOP3.md`, `LOOP4.md`,
 
 ```sh
 moon check --target all     # type-check every backend
-moon test                   # 388 tests
+moon test                   # 401 tests
 moon fmt --check            # canonical formatting
 
 node cli-smoke.mjs          # the CLIs, as real processes (builds them first)
@@ -1337,9 +1439,9 @@ moon run cmd/main -- .export tsr > dump.tsr
 # the short-term memory
 moon run cmd/memory -- .help
 moon run cmd/memory -- "put greeting hello world" "get greeting"
-moon run cmd/memory -- --scope work "put todo ship 0.1.12" "keys" "scopes"
+moon run cmd/memory -- --scope work "put todo ship 0.1.13" "keys" "scopes"
 moon run cmd/memory -- "put a x --meta kind=note" "search x --where kind=note"
-moon run cmd/memory -- "put todo ship 0.1.12 --kind task" "kinds"
+moon run cmd/memory -- "put todo ship 0.1.13 --kind task" "kinds"
 moon run cmd/memory -- "put a x --pinned" "pin a" "unpin a"
 moon run cmd/memory -- demo
 
@@ -1347,6 +1449,10 @@ moon run cmd/memory -- demo
 moon run cmd/memory_db --target native -- --file notes.db "put greeting hello world"
 moon run cmd/memory_db --target native -- --file notes.db "get greeting"
 moon run cmd/memory_db --target native -- --file notes.db --manual-clock "put a x --ttl 1000" "advance 1000" "get a"
+
+# the SQL index of the same store: rebuild it, then look a word up in it
+moon run cmd/memory_db --target native -- --file notes.db --index notes.idx "index"
+moon run cmd/memory_db --target native -- --file notes.db --index notes.idx "index-find cat"
 
 # 256 cells, digits 1..4
 moon run cmd/main -- --side 4 .status
@@ -1590,10 +1696,10 @@ The gate, and the result it produced for this version:
 | `moon check --target js --deny-warn` | exit 0 |
 | `moon check --target native --deny-warn` | exit 0 |
 | `moon check --target wasm-gc --deny-warn` | exit 0 |
-| `moon test --target wasm --deny-warn` | **388 passed, 0 failed** |
+| `moon test --target wasm --deny-warn` | **401 passed, 0 failed** |
 | `moon build --target wasm` | exit 0 |
 | `typos` (v1.50.3 — the version the workflow pins) | exit 0 |
-| `node cli-smoke.mjs` | **87 passed, 0 failed** |
+| `node cli-smoke.mjs` | **99 passed, 0 failed** |
 | `node gui-smoke.mjs` | **45 passed, 0 failed** |
 
 The release workflow runs the first two check targets plus the test and build; the
