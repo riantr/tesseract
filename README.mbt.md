@@ -15,7 +15,7 @@ same success flags, error codes, positions, coordinates and digits.
 ## Install
 
 ```sh
-moon add riantr/tesseract@0.1.10
+moon add riantr/tesseract@0.1.11
 ```
 
 That is a **module** dependency, and it belongs in the consumer's `moon.mod`.
@@ -23,7 +23,7 @@ That is a **module** dependency, and it belongs in the consumer's `moon.mod`.
 
 ```toml
 import {
-  "riantr/tesseract@0.1.10",
+  "riantr/tesseract@0.1.11",
 }
 ```
 
@@ -43,7 +43,7 @@ a module and takes **no version at all**. A version in a `moon.pkg` import is
 not a newer spelling — it is an import the toolchain cannot find:
 
 ```
-Cannot find import 'riantr/tesseract/src/tesseract@0.1.10' in my/app/src/thing@0.1.0
+Cannot find import 'riantr/tesseract/src/tesseract@0.1.11' in my/app/src/thing@0.1.0
 ```
 
 The `src/` in the package path is part of the package's name, not a prefix the
@@ -54,7 +54,7 @@ paths — so `riantr/tesseract/src/tesseract_memory` is a package and
 alias, below.
 
 For the same reason there is no `@latest`: the version is parsed as semver, so
-`latest`, `^0.1.10`, `>=0.1.10`, `0.1` and `v0.1.10` are all rejected. A bare
+`latest`, `^0.1.11`, `>=0.1.11`, `0.1` and `v0.1.11` are all rejected. A bare
 `moon add riantr/tesseract` resolves the newest release and pins the concrete
 version it found — that is the "latest" this toolchain has.
 
@@ -75,10 +75,11 @@ declaration here. Move this declaration to `moon.pkg`."* There is also no
 re-export: `use` is a reserved word, so a package cannot hand another
 package's symbols on under a name of its own.
 
-`cmd/main`, `cmd/persist`, `cmd/memory`, `cmd/sa` and `cmd/gui` are the five
-executables in the same module — the command line, the file-backed store, the
-short-term memory, the scan database and the window. Registry entry:
-[mooncakes.io/docs/riantr/tesseract@0.1.10](https://mooncakes.io/docs/riantr/tesseract@0.1.10).
+`cmd/main`, `cmd/persist`, `cmd/memory`, `cmd/memory_db`, `cmd/sa` and `cmd/gui`
+are the six executables in the same module — the command line, the file-backed
+store, the short-term memory, the durable memory, the scan database and the
+window. Registry entry:
+[mooncakes.io/docs/riantr/tesseract@0.1.11](https://mooncakes.io/docs/riantr/tesseract@0.1.11).
 
 ### What the release was checked on
 
@@ -93,11 +94,14 @@ exercised here, and quoting a lower bound nobody ran would be a claim, not a fac
 |---|---|---:|---:|---:|---:|
 | `riantr/tesseract/src/tesseract` | library | yes | yes | yes | yes |
 | `riantr/tesseract/src/tesseract_memory` | library | yes | yes | yes | yes |
+| `riantr/tesseract/src/tesseract_memory_cli` | library | yes | yes | yes | yes |
+| `riantr/tesseract/src/tesseract_memory_db` | library | yes | yes | — | — |
 | `riantr/tesseract/src/tesseract_dgp` | library | yes | yes | yes | yes |
 | `riantr/tesseract/src/tesseract_sqlite` | library | yes | yes | — | — |
 | `riantr/tesseract/src/tesseract_sa` | library | yes | yes | — | — |
 | `cmd/main` | executable | yes | yes | yes | yes |
 | `cmd/memory` | executable | yes | yes | yes | yes |
+| `cmd/memory_db` | executable | yes | yes | — | — |
 | `cmd/persist` | executable | yes | yes | — | — |
 | `cmd/sa` | executable | yes | yes | — | — |
 | `cmd/gui` | executable | yes | — | — | — |
@@ -255,7 +259,7 @@ dependency. The memory tier adds `@math.pow` from `moonbitlang/core/math`, for
 the same reason.
 
 `cmd/gui` is the one exception, and only because it needs a window: it depends on
-`moonbit-community/proton@0.5.1`. Proton is native-only, so that package declares
+`moonbit-community/proton@0.6.0`. Proton is native-only, so that package declares
 `supported_targets = "native"` and the rest of the module stays target-agnostic.
 
 ## The window
@@ -827,10 +831,10 @@ to exactly one of them.
 ///|
 let m = @tesseract_memory.new_memory(100)
 let work = m.scope("work")
-ignore(work.put("todo", "ship 0.1.10"))
+ignore(work.put("todo", "ship 0.1.11"))
 ignore(m.scope("notes").put("todo", "buy milk"))
 // Two entries, one key.
-assert_eq(work.get("todo"), Some("ship 0.1.10"))
+assert_eq(work.get("todo"), Some("ship 0.1.11"))
 assert_eq(m.scope("notes").get("todo"), Some("buy milk"))
 ```
 
@@ -879,7 +883,7 @@ place where there is nothing to find.
 From a shell, the scope is the partition the commands work in:
 
 ```sh
-moon run cmd/memory -- --scope work "put todo ship 0.1.10" "keys"
+moon run cmd/memory -- --scope work "put todo ship 0.1.11" "keys"
 moon run cmd/memory -- "put a the cat sat" "scope work" "put a the cat sat on the mat" "scopes"
 moon run cmd/memory -- "put a the cat sat" "scope work" "put a the cat sat on the mat" "search-all cat"
 ```
@@ -1146,6 +1150,66 @@ A deadline that would not fit in an instant **saturates** rather than
 wrapping: the entry lives as long as the store can express, which is the
 closest true thing to say about a lifetime of nine hundred million years.
 
+### The durable memory
+
+`src/tesseract_memory_db` is the same memory with a **checkpoint** behind it: a
+`.db` file the store is written to and read back from, so a memory can be closed
+and reopened without losing what it was holding.
+
+It is a **separate package** because the file is a `.db`, and the `.db` adapter
+builds for `native` and `wasm` only — the same reason `cmd/persist` is a
+separate binary from `cmd/main`. The memory tier itself stays on all four
+backends.
+
+```moonbit nocheck
+///|
+import {
+  "riantr/tesseract/src/tesseract_memory" @tm,
+  "riantr/tesseract/src/tesseract_memory_db" @tmdb,
+}
+
+let store = @tmdb.open("notes.db", @tm.default_config())
+ignore(store.put("greeting", "hello"))
+```
+
+Two rules, and both are the point of the thing:
+
+- **A reload brings back exactly the entries that were live.** An entry whose
+  time was up when the checkpoint was written is not in the file, and an entry
+  whose time is up by the time the file is read is dropped again. What comes
+  back is the live set, not the written set.
+- **A refused write leaves the store unchanged** — and the file with it. A write
+  the store cannot honour is refused before anything is touched, and a refused
+  write writes no checkpoint either.
+
+Three things are what make those two rules true:
+
+- **The deadline is absolute.** The checkpoint stores the *instant* an entry
+  dies, not the lifetime it was given. A lifetime is relative to the moment of
+  the write, so a checkpoint that stored one would move every deadline forward
+  by however long the store was closed — a store reopened after an hour would
+  hold entries an hour younger than they were.
+- **The clock goes into the checkpoint too, and comes back with it.** A store on
+  a manual clock that was reopened on a fresh one would find its entries
+  *younger* than they were, and an age of minus an hour is not a thing a store
+  should report. A checkpoint that carries the **system** clock says nothing
+  about the timeline — the host's clock is the host's clock — so the clock the
+  store was opened with is the one in force.
+- **The checkpoint is swept before it is written.** What goes into the file is
+  what is *live*, so an expired entry cannot come back.
+
+The checkpoint is a **lattice of its own** — its own cells, never shared with
+the sudoku records — and the file it writes is a *checkpoint container*, a
+lattice whose cells hold the memory's entries, rather than a tesseract database
+a person would query. Its side is **fixed** at four cells per axis, so a file
+written by a store with a large capacity is readable by a store with a small
+one. That gives a durable memory at most **255 entries**: one cell for the
+header and one for each entry.
+
+A checkpoint that does not fit the store it is opened with is **refused**
+rather than half-loaded — restoring an entry into a store that is already full
+would evict the entries that were there.
+
 ### What it does not do
 
 - **Not SQL, and not a second query language.** The memory has a native API.
@@ -1153,9 +1217,11 @@ closest true thing to say about a lifetime of nine hundred million years.
   a tier it does not own.
 - **Not embeddings.** A semantic similarity needs a model, and a model is a
   dependency and a download.
-- **Not persistent.** A short-term memory is the tier above the durable store,
-  not a replacement for it. What is worth keeping is what the durable store is
-  for.
+- **Not persistent by itself.** The memory tier lives in the process. What
+  survives the process is `src/tesseract_memory_db`'s checkpoint, which is a
+  different package and a different type: a `Memory` is not durable, and a
+  caller who believed it was would lose entries on the strength of a promise
+  the type never made.
 - **Not thread-safe**, for the same reason the core is not: the runtime is
   single-threaded, and the store is mutated in place.
 - **Not eviction by importance.** The importance weights *retrieval* — what a
@@ -1176,7 +1242,7 @@ closest true thing to say about a lifetime of nine hundred million years.
   use.
 
 The full plan and the measurements behind it are in `LOOP3.md`, `LOOP4.md`,
-`LOOP5.md`, `LOOP6.md`, `LOOP7.md` and `LOOP8.md`.
+`LOOP5.md`, `LOOP6.md`, `LOOP7.md`, `LOOP8.md` and `LOOP9.md`.
 
 ## Running it
 
@@ -1184,7 +1250,7 @@ The full plan and the measurements behind it are in `LOOP3.md`, `LOOP4.md`,
 
 ```sh
 moon check --target all     # type-check every backend
-moon test                   # 361 tests
+moon test                   # 376 tests
 moon fmt --check            # canonical formatting
 
 node cli-smoke.mjs          # the CLIs, as real processes (builds them first)
@@ -1200,10 +1266,15 @@ moon run cmd/main -- .export tsr > dump.tsr
 # the short-term memory
 moon run cmd/memory -- .help
 moon run cmd/memory -- "put greeting hello world" "get greeting"
-moon run cmd/memory -- --scope work "put todo ship 0.1.10" "keys" "scopes"
+moon run cmd/memory -- --scope work "put todo ship 0.1.11" "keys" "scopes"
 moon run cmd/memory -- "put a x --meta kind=note" "search x --where kind=note"
 moon run cmd/memory -- "put a x --pinned" "pin a" "unpin a"
 moon run cmd/memory -- demo
+
+# the durable memory: the same commands, and a file behind them
+moon run cmd/memory_db --target native -- --file notes.db "put greeting hello world"
+moon run cmd/memory_db --target native -- --file notes.db "get greeting"
+moon run cmd/memory_db --target native -- --file notes.db --manual-clock "put a x --ttl 1000" "advance 1000" "get a"
 
 # 256 cells, digits 1..4
 moon run cmd/main -- --side 4 .status
@@ -1283,6 +1354,34 @@ through to the SQL parser as `Unsupported SQL statement: .open`.
 ```sh
 while read -r line; do moon run cmd/main -- "$line"; done
 ```
+
+### The durable memory
+
+`cmd/memory_db` is the same commands as `cmd/memory` with a file behind them.
+It is a **separate binary** for the reason `cmd/persist` is: the store is a
+`.db`, and the `.db` adapter builds for `native` and `wasm` only, so putting it
+in `cmd/memory` would take that binary off `js` and `wasm-gc`.
+
+```sh
+moon run cmd/memory_db --target native -- --file notes.db "put greeting hello world"
+moon run cmd/memory_db --target native -- --file notes.db "get greeting"
+
+# a second process reads the same file back
+moon run cmd/memory_db --target native -- --file notes.db "keys"
+
+# the file holds what is live, and the clock comes back with it
+moon run cmd/memory_db --target native -- --file notes.db --manual-clock \
+  "put soon x --ttl 1000" "advance 1000" "keys"
+```
+
+The file is written after **every** command, so it is current when the next
+command starts and current when the process ends. The tour (`demo`) is refused
+here: it writes a handful of entries into the store it is given, and this store
+is a file the caller keeps.
+
+The commands themselves live in `riantr/tesseract/src/tesseract_memory_cli`, a
+library both binaries share. The two differ in **where the memory is kept**,
+not in what they can do to it.
 
 ### Static analysis
 
@@ -1365,7 +1464,7 @@ the CEF runtime once:
 
 ```sh
 moon update                                        # refresh the registry index
-moon install moonbit-community/proton_cli@0.5.1   # match the library version
+moon install moonbit-community/proton_cli@0.6.0   # match the library version
 proton_cli cef setup                               # CEF runtime + subprocess helper
 
 proton_cli doctor                  # identity, toolchain and runtime
@@ -1419,10 +1518,10 @@ The gate, and the result it produced for this version:
 | `moon check --target js --deny-warn` | exit 0 |
 | `moon check --target native --deny-warn` | exit 0 |
 | `moon check --target wasm-gc --deny-warn` | exit 0 |
-| `moon test --target wasm --deny-warn` | **361 passed, 0 failed** |
+| `moon test --target wasm --deny-warn` | **376 passed, 0 failed** |
 | `moon build --target wasm` | exit 0 |
 | `typos` (v1.50.3 — the version the workflow pins) | exit 0 |
-| `node cli-smoke.mjs` | **65 passed, 0 failed** |
+| `node cli-smoke.mjs` | **80 passed, 0 failed** |
 | `node gui-smoke.mjs` | **45 passed, 0 failed** |
 
 The release workflow runs the first two check targets plus the test and build; the
@@ -1430,7 +1529,9 @@ The release workflow runs the first two check targets plus the test and build; t
 are listed because they were run, not because CI depends on them.
 
 `cli-smoke.mjs` drives the CLIs as real processes against a built database —
-`cmd/main`, `cmd/persist` and `cmd/memory`.
+`cmd/main`, `cmd/persist`, `cmd/memory` and `cmd/memory_db`. The durable
+binary's checks are the only ones that span processes: each of them is a
+separate run, and the file is the only thing the two share.
 `gui-smoke.mjs` drives the window over the Chromium DevTools protocol and needs
 `proton_cli dev` running.
 
@@ -1535,7 +1636,7 @@ Stated plainly, because "it has a SQL surface" invites the wrong assumption.
   structural, computed at query time, and exact — the same two texts always
   give the same score. There is no embedding, no index, and no model to drift.
 - **The window is Proton, not a native GUI toolkit.** `cmd/gui` depends on
-  `moonbit-community/proton@0.5.1` and is therefore native-only. The library and
+  `moonbit-community/proton@0.6.0` and is therefore native-only. The library and
   `cmd/main` do not depend on it.
 - **The core library has no third-party dependencies.** File I/O and stdin are
   not in this toolchain's core, so what the package needs is implemented here. The
