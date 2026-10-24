@@ -20,9 +20,11 @@ pub fn print_help(Usage) -> Unit
 
 pub fn run_command(@tesseract_memory.Memory, @tesseract_memory.Scope, String, Usage) -> @tesseract_memory.Scope
 
-pub fn usage(String, Array[String]) -> Usage
+pub fn usage(String, Array[String], Array[String]) -> Usage
 
 pub fn warn(String) -> Unit
+
+pub fn words_of(String) -> Array[String]
 
 // Errors
 
@@ -44,6 +46,7 @@ pub fn Options::problem(Self) -> String?
 pub struct Usage {
   usage : String
   extra_options : Array[String]
+  extra_commands : Array[String]
 }
 
 // Type aliases

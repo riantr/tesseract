@@ -1,0 +1,24 @@
+import {
+  "riantr/tesseract/src/tesseract",
+  "riantr/tesseract/src/tesseract_memory",
+  "moonbit-community/sqlite3",
+  // The file has to be asked about before it is opened: a verify that created
+  // the file it was asked about would be a write in a read's clothing.
+  "moonbitlang/x/fs" @xfs,
+}
+
+import {
+  "moonbitlang/x/fs" @xfs,
+  // Test-only. The fixture removes the file a test used, and a file that was
+  // never created is the normal case rather than a failure.
+} for "test"
+
+/// Same suppression `moonbit-community/sqlite3` uses: deriving a trait turns
+/// its methods into implicitly promoted methods on the type, which the
+/// toolchain warns about (79).
+
+warnings = "-79"
+
+/// The index is a SQLite file, and SQLite builds for `native` and `wasm` only.
+
+supported_targets = "native+wasm"

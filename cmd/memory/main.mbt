@@ -67,6 +67,7 @@ fn how_to_run() -> @tesseract_memory_cli.Usage {
   @tesseract_memory_cli.usage(
     "moon run cmd/memory -- [options] <command> [args]...",
     [],
+    [],
   )
 }
 

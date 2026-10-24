@@ -84,15 +84,24 @@ pub fn Options::problem(self : Options) -> String? {
 /// holds this so the help can say the truth about whichever binary asked for
 /// it, and so the two binaries do not have to keep two copies of the same
 /// text in step with each other.
+///
+/// The extra lines are the binary's own: the options and the commands it has
+/// and the layer does not. The layer cannot know them — it is shared by
+/// binaries that do not have the same ones — so the binary says them.
 pub struct Usage {
   usage : String
   extra_options : Array[String]
+  extra_commands : Array[String]
 }
 
 ///|
 /// How this binary is run, for the help.
-pub fn usage(usage_line : String, extra_options : Array[String]) -> Usage {
-  { usage: usage_line, extra_options, }
+pub fn usage(
+  usage_line : String,
+  extra_options : Array[String],
+  extra_commands : Array[String],
+) -> Usage {
+  { usage: usage_line, extra_options, extra_commands, }
 }
 
 ///|
@@ -359,6 +368,9 @@ pub fn print_help(u : Usage) -> Unit {
   out("  clear                     forget everything in this scope")
   out("  clear-all                 forget everything in every scope")
   out("  demo                      a short tour")
+  for line in u.extra_commands {
+    out(line)
+  }
   out("")
   out("filters:")
   out("  --where k=v               the entry has the label k with the value v")
@@ -369,6 +381,17 @@ pub fn print_help(u : Usage) -> Unit {
   )
   out("  --kind K                  the entry is of the kind K")
   out("")
+}
+
+///|
+/// The words of a command.
+///
+/// The layer splits a command into its words itself, and a binary that has a
+/// command of its own needs the same split — so the split is public. A binary
+/// that adds a command does not have to guess where the words begin and end,
+/// and it cannot get it wrong in a way the layer would not.
+pub fn words_of(text : String) -> Array[String] {
+  split_ws(text)
 }
 
 ///|

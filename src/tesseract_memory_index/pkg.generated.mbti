@@ -1,0 +1,36 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "riantr/tesseract/src/tesseract_memory_index"
+
+import {
+  "moonbitlang/core/debug",
+  "riantr/tesseract/src/tesseract_memory",
+}
+
+// Values
+pub fn open(String) -> Result[MemoryIndex, String]
+
+// Errors
+
+// Types and methods
+pub struct MemoryIndex {
+  path : String
+}
+pub fn MemoryIndex::forget(Self, String, String) -> Result[Unit, String]
+pub fn MemoryIndex::lookup(Self, String) -> Result[Array[(String, String)], String]
+pub fn MemoryIndex::path(Self) -> String
+pub fn MemoryIndex::put(Self, @tesseract_memory.Entry) -> Result[Unit, String]
+pub fn MemoryIndex::rebuild(Self, @tesseract_memory.Memory) -> Result[RebuildReport, String]
+pub fn MemoryIndex::rows(Self) -> Result[Int32, String]
+pub fn MemoryIndex::verify(Self, @tesseract_memory.Memory) -> Result[RebuildReport, String]
+
+pub struct RebuildReport {
+  entries : Int32
+  changed : Int32
+  added : Int32
+  removed : Int32
+} derive(Eq, @debug.Debug)
+pub fn RebuildReport::describe(Self) -> String
+
+// Type aliases
+
+// Traits

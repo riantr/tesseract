@@ -401,6 +401,46 @@ function main() {
     // A durable memory without a file is not a durable memory.
     r = run("memory_db", ["put a hello"], dir);
     check("a durable memory without a file says so", r.err.includes("needs a file"), true, r.out + r.err);
+
+    // ---- cmd/memory_db: the SQL index ----
+    // The index is a file of its own, and it is derivative: it holds nothing
+    // the entries do not. The check that matters is the second `index` — a
+    // rebuild of an index that was already right must find nothing to change,
+    // because that is what "derivative" means.
+    const index_file = path.join(dir, "memory.idx");
+    r = run("memory_db", ["--file", "memory.db", "--index", "memory.idx", "put x the cat sat", "put y a dog barked"], dir);
+    r = run("memory_db", ["--file", "memory.db", "--index", "memory.idx", "index"], dir);
+    check("the index is a file of its own", fs.existsSync(index_file) && fs.statSync(index_file).size > 0, true, r.out + r.err);
+    check("...and it says what the rebuild had to change", r.out.includes("0 rows removed"), true, r.out + r.err);
+    check("...and how many rows it holds", r.out.includes("rows,"), true, r.out + r.err);
+
+    r = run("memory_db", ["--file", "memory.db", "--index", "memory.idx", "index"], dir);
+    check("a rebuild of an index that was already right changes nothing", r.out.includes("0 changed, 0 rows added, 0 rows removed"), true, r.out + r.err);
+
+    // The lookup is exact: the word is in the entries that say it.
+    r = run("memory_db", ["--file", "memory.db", "--index", "memory.idx", "index-find cat"], dir);
+    check("the index finds the entries that contain the word", r.out.includes("cat -> default/x"), true, r.out + r.err);
+    r = run("memory_db", ["--file", "memory.db", "--index", "memory.idx", "index-find zebra"], dir);
+    check("...and says so when no entry does", r.out.includes("zebra -> (nothing)"), true, r.out + r.err);
+
+    // The index is not rebuilt by the other commands, so a store that changed
+    // leaves it out of step — and the lookup says so rather than answering
+    // from the past.
+    r = run("memory_db", ["--file", "memory.db", "put z an owl watches"], dir);
+    r = run("memory_db", ["--file", "memory.db", "--index", "memory.idx", "index-find owl"], dir);
+    check("an index that is out of step says so", r.err.includes("out of step with the store"), true, r.out + r.err);
+    check("...and does not answer from the past", r.out.includes("owl -> (nothing)"), true, r.out + r.err);
+    r = run("memory_db", ["--file", "memory.db", "--index", "memory.idx", "index"], dir);
+    r = run("memory_db", ["--file", "memory.db", "--index", "memory.idx", "index-find owl"], dir);
+    check("...and the rebuild puts it back", r.out.includes("owl -> default/z"), true, r.out + r.err);
+    check("...with nothing left to change", r.err.includes("out of step"), false, r.out + r.err);
+
+    // The index is this binary's own business: a file it was not told about
+    // is not a file it can use.
+    r = run("memory_db", ["--file", "memory.db", "index"], dir);
+    check("the index command needs a file", r.err.includes("the index needs a file"), true, r.out + r.err);
+    r = run("memory_db", ["--file", "memory.db", "--index", "memory.idx", "index-find"], dir);
+    check("a lookup needs a word", r.err.includes("index-find needs a word"), true, r.out + r.err);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

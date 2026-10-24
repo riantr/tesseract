@@ -2,6 +2,7 @@ import {
   "riantr/tesseract/src/tesseract_memory",
   "riantr/tesseract/src/tesseract_memory_cli",
   "riantr/tesseract/src/tesseract_memory_db",
+  "riantr/tesseract/src/tesseract_memory_index",
   "moonbitlang/core/env",
 }
 
