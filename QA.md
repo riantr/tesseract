@@ -20,7 +20,7 @@ carries 0.1.13, and the report says plainly which defects that means.
 | 4 | **Unit** | **406 tests, 406 passed, 0 failed**, on 4 check targets under `--deny-warn` | `moon test --target wasm --deny-warn` |
 | 5 | **Integration** | **22** production edges across 14 packages (+1 test-only); **5** crossed by an in-tree test that names the other package; **17** covered only from outside the package | `node qa/integration.mjs` |
 | 6 | **API** | **509** public symbols (62 types, 169 fns, 271 methods, 7 consts); naming **100 %** conformant; **75** findings, of which **11** were closed this round | `node qa/api.mjs` |
-| 7 | **Contract** | **508** published symbols matched, **0** unexpected; **12** error codes, **12/12** documented and **12/12** asserted on the code; **0** findings in the working tree | `node qa/contract.mjs` |
+| 7 | **Contract** | **508** published symbols matched; **2** published symbols deliberately no longer exposed and **1** new one, both drift; **12** error codes, **12/12** documented and **12/12** asserted on the code; **0** findings in the working tree | `node qa/contract.mjs` |
 | 8 | **Component** | **8** library packages, coverage from **0 %** to **98.5 %**; **75** API findings across the module's packages | `node qa/api.mjs`, `node qa/coverage.mjs` |
 | 9 | **Gherkin** | **7** features, **54** scenarios, **222** steps, **54/54** pass | `node qa/gherkin.mjs` |
 | 10 | **E2E** | **72** commands across **5** CLIs mapped onto **4** layers; **0** exercised by no layer; **5** exercised only by the unit suite | `node qa/e2e.mjs` |
