@@ -199,6 +199,30 @@ pub fn Scope::entries(self : Scope) -> Array[Entry] {
 }
 
 ///|
+/// The kinds this scope holds, and how many entries of each.
+///
+/// The kinds are derived from the labels, and an entry that carries no kind
+/// label is of no kind and is not counted here.
+pub fn Scope::kinds(self : Scope) -> Array[(String, Int32)] {
+  kind_counts(self.entries())
+}
+
+///|
+/// The entries of one kind in this scope.
+///
+/// The kind is the value of the `kind` label, so this is the same set of
+/// entries that a filter for that label admits.
+pub fn Scope::entries_of_kind(self : Scope, kind : String) -> Array[Entry] {
+  let out : Array[Entry] = []
+  for entry in self.entries() {
+    if entry.metadata.has_value(KIND_LABEL, kind) {
+      out.push(entry)
+    }
+  }
+  out
+}
+
+///|
 /// How many entries are live in this scope.
 ///
 /// This is the scope's share of the store's count: `Memory::size` is the

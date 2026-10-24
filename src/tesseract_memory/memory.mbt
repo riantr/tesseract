@@ -994,6 +994,72 @@ fn Memory::entries_in(self : Memory, scope : String) -> Array[Entry] {
 }
 
 ///|
+/// The kinds the store holds, and how many entries of each.
+///
+/// The kinds are **derived** from the labels: nothing extra is kept, so the
+/// answer is the answer about the entries themselves. An entry that carries no
+/// kind label is of no kind, and is not counted here.
+///
+/// The pairs are in the order of the letters of the kind, so the same store
+/// answers the same way however it was filled.
+pub fn Memory::kinds(self : Memory) -> Array[(String, Int32)] {
+  ignore(self.expire_due())
+  let all : Array[Entry] = []
+  for (_, inner) in self.entries.iter() {
+    for (_, entry) in inner.iter() {
+      all.push(entry)
+    }
+  }
+  kind_counts(all)
+}
+
+///|
+/// The entries of one kind, in every scope.
+///
+/// The kind is the value of the `kind` label, so this is the same set of
+/// entries that a filter for that label admits. The entries are in the order of
+/// the scope and then the key, so the same store answers the same way.
+pub fn Memory::entries_of_kind(self : Memory, kind : String) -> Array[Entry] {
+  ignore(self.expire_due())
+  let out : Array[Entry] = []
+  for (_, inner) in self.entries.iter() {
+    for (_, entry) in inner.iter() {
+      if entry.metadata.has_value(KIND_LABEL, kind) {
+        out.push(entry)
+      }
+    }
+  }
+  out.sort_by(fn(a, b) { scope_key_compare(a.scope, a.key, b.scope, b.key) })
+  out
+}
+
+///|
+/// The kinds of a list of entries, with how many of each.
+///
+/// The kinds are sorted by their letters first, so the answer comes out in one
+/// order however the entries were written.
+fn kind_counts(entries : Array[Entry]) -> Array[(String, Int32)] {
+  let kinds : Array[String] = []
+  for entry in entries {
+    match entry.kind() {
+      Some(kind) => kinds.push(kind)
+      None => ()
+    }
+  }
+  kinds.sort_by(fn(a, b) { @tesseract.compare_text(a, b) })
+  let out : Array[(String, Int32)] = []
+  for kind in kinds {
+    if out.length() > 0 && out[out.length() - 1].0 == kind {
+      let last = out.length() - 1
+      out[last] = (kind, out[last].1 + 1)
+    } else {
+      out.push((kind, 1))
+    }
+  }
+  out
+}
+
+///|
 /// Forget everything in one scope.
 fn Memory::clear_in(self : Memory, scope : String) -> Unit {
   ignore(self.expire_due())
@@ -1075,6 +1141,11 @@ fn Memory::pick_victim(
             entry.deadline
           }
         OldestFirst => entry.added_at
+        // The store evicts the entry with the **smallest** rank, and this one
+        // wants the **largest** entry, so the size is negated. Every policy
+        // then compares the same way, and a policy that wanted the opposite
+        // would need a second comparison rather than a second rank.
+        Largest => -entry_bytes(entry)
       }
       match best {
         None => {

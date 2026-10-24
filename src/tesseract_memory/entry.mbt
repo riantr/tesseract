@@ -170,6 +170,24 @@ pub fn Entry::pinned(self : Entry) -> Bool {
 }
 
 ///|
+/// What kind of thing this entry is, or `None` when it says nothing.
+///
+/// The kind is the value of the `kind` label, so an entry that was written
+/// without one has no kind — and so does an entry whose kind was set to
+/// nothing.
+///
+/// A label may carry several values, and the kind is the first of them: the
+/// labels are kept in order, so that is the same value on every run.
+pub fn Entry::kind(self : Entry) -> String? {
+  let values = self.metadata.values(KIND_LABEL)
+  if values.length() == 0 {
+    None
+  } else {
+    Some(values[0])
+  }
+}
+
+///|
 /// A one-line description of the entry, for a report.
 ///
 /// The labels are in the line when the entry has any, and are left out when it

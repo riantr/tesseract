@@ -323,6 +323,32 @@ function main() {
     r = run("memory", ["--manual-clock", "put a x --pinned --ttl 1000", "advance 1000", "get a"], dir);
     check("a pinned entry still expires when its time is up", r.out.includes("a -> (nothing)"), true, r.out + r.err);
 
+    // ---- cmd/memory: the kinds ----
+    // The kind is the `kind` label, so the shell can write one and ask for
+    // one the same way it writes any other label. The store's own report says
+    // what kinds it holds.
+    r = run("memory", ["put a ship it --kind task", "put b the cat sat --kind note", "put c plain", "kinds"], dir);
+    check("the kinds are listed, with their counts", r.out.includes("task 1") && r.out.includes("note 1"), true, r.out + r.err);
+    check("...and an entry of no kind is of no kind", r.out.includes("plain 1"), false, r.out + r.err);
+
+    r = run("memory", ["put a ship it --kind task", "put b the cat sat --kind note", "entries --kind note"], dir);
+    check("a kind is a filter like any other", r.out.includes("b (age") && !r.out.includes("a (age"), true, r.out + r.err);
+
+    r = run("memory", ["put a ship it --kind task", "entries --where kind=task"], dir);
+    check("...and the label behind it is the same thing", r.out.includes("a (age"), true, r.out + r.err);
+
+    r = run("memory", ["put a x --kind task --meta kind=note"], dir);
+    check("a kind given twice, and differently, is refused", r.err.includes("kind is given twice"), true, r.out + r.err);
+
+    // ---- cmd/memory: the largest entry goes ----
+    // The control is the default policy: the same three writes under LRU throw
+    // away "a" and keep "b", so the only thing that can explain "a,c" is the
+    // size.
+    r = run("memory", ["--evict", "largest", "--capacity", "2", "put a 1", "put b a much longer value", "put c 3", "keys"], dir);
+    check("the largest entry is the one that goes", lastLine(r.out), "a, c");
+    r = run("memory", ["--capacity", "2", "put a 1", "put b a much longer value", "put c 3", "keys"], dir);
+    check("...and the default policy throws away another one", lastLine(r.out), "b, c");
+
     // ---- cmd/memory_db: the durable memory ----
     // The library's own tests cover the rules; this covers the one thing that
     // cannot be checked from inside a process: that what the first process

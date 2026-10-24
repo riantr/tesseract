@@ -2,6 +2,8 @@
 package "riantr/tesseract/src/tesseract_memory"
 
 // Values
+pub const KIND_LABEL : String = "kind"
+
 pub fn containment(String, String) -> Double
 
 pub fn cosine(String, String) -> Double
@@ -11,6 +13,8 @@ pub fn default_config() -> Config
 pub fn default_scope_name() -> String
 
 pub fn default_spec() -> EntrySpec
+
+pub fn evict_largest() -> EvictionPolicy
 
 pub fn evict_lfu() -> EvictionPolicy
 
@@ -116,6 +120,7 @@ pub fn Entry::describe(Self, Int64) -> String
 pub fn Entry::expired(Self, Int64) -> Bool
 pub fn Entry::idle_ms(Self, Int64) -> Int64
 pub fn Entry::importance(Self) -> Double
+pub fn Entry::kind(Self) -> String?
 pub fn Entry::make(String, String, String, Int64, Int64, Int64, Bool, Int64, Int64, Double, Metadata, Bool) -> Self
 pub fn Entry::metadata(Self) -> Metadata
 pub fn Entry::pinned(Self) -> Bool
@@ -138,6 +143,7 @@ pub enum EvictionPolicy {
   LeastFrequentlyUsed
   SoonestExpiry
   OldestFirst
+  Largest
 }
 pub fn EvictionPolicy::name(Self) -> String
 
@@ -169,9 +175,11 @@ pub fn Memory::default_scope(Self) -> Scope
 pub fn Memory::delete(Self, String) -> Bool
 pub fn Memory::entries(Self) -> Array[Entry]
 pub fn Memory::entries_filtered(Self, MetadataFilter) -> Array[Entry]
+pub fn Memory::entries_of_kind(Self, String) -> Array[Entry]
 pub fn Memory::entry(Self, String) -> Entry?
 pub fn Memory::get(Self, String) -> String?
 pub fn Memory::keys(Self) -> Array[String]
+pub fn Memory::kinds(Self) -> Array[(String, Int32)]
 pub fn Memory::max_bytes(Self) -> Int64
 pub fn Memory::now(Self) -> Int64
 pub fn Memory::pin(Self, String) -> Bool
@@ -217,6 +225,7 @@ pub fn Metadata::is_valid(Self) -> Bool
 pub fn Metadata::pairs(Self) -> Array[(String, String)]
 pub fn Metadata::size(Self) -> Int32
 pub fn Metadata::values(Self, String) -> Array[String]
+pub fn Metadata::with_kind(Self, String) -> Self
 
 pub enum MetadataFilter {
   Has(String)
@@ -246,9 +255,11 @@ pub fn Scope::default_ttl(Self) -> Ttl
 pub fn Scope::delete(Self, String) -> Bool
 pub fn Scope::entries(Self) -> Array[Entry]
 pub fn Scope::entries_filtered(Self, MetadataFilter) -> Array[Entry]
+pub fn Scope::entries_of_kind(Self, String) -> Array[Entry]
 pub fn Scope::entry(Self, String) -> Entry?
 pub fn Scope::get(Self, String) -> String?
 pub fn Scope::keys(Self) -> Array[String]
+pub fn Scope::kinds(Self) -> Array[(String, Int32)]
 pub fn Scope::name(Self) -> String
 pub fn Scope::pin(Self, String) -> Bool
 pub fn Scope::put(Self, String, String) -> Bool

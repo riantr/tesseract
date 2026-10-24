@@ -261,6 +261,72 @@ test "a tie is broken by key, so the same program always evicts the same entry" 
 }
 
 ///|
+/// The largest entry goes: the policy that frees the most room at once.
+///
+/// The size is the one the byte budget counts — the value and its labels — so
+/// the entry that takes the most room is the one that goes. A store whose
+/// entries are all the same size has no use for this policy, and a store whose
+/// entries are not has every use for it.
+///
+/// The control is the other policies: `a` is written first and `b` last, so a
+/// policy that ranked by age or by use would throw `a` away and keep `b`.
+test "the largest entry goes: the policy that frees the most room at once" {
+  let m = @tesseract_memory.new_memory_with_clock(
+    @tesseract_memory.default_config()
+    .with_capacity(2)
+    .with_eviction(@tesseract_memory.evict_largest()),
+    @tesseract_memory.memory_clock_manual(0L),
+  )
+  ignore(m.put("a", "1"))
+  ignore(m.put("b", "a much longer value than the other one"))
+  ignore(m.put("c", "3"))
+  assert_eq(keys_of(m), "a,c")
+}
+
+///|
+/// The labels count towards the size, because the budget counts them.
+///
+/// The budget is about what the memory holds, and a label is something the
+/// memory holds. So the entry with the *smaller value* is the bigger entry
+/// when its labels are longer, and it is the one that goes.
+test "the labels count towards the size, because the budget counts them" {
+  let m = @tesseract_memory.new_memory_with_clock(
+    @tesseract_memory.default_config()
+    .with_capacity(2)
+    .with_eviction(@tesseract_memory.evict_largest()),
+    @tesseract_memory.memory_clock_manual(0L),
+  )
+  ignore(m.put("a", "a value of five"))
+  ignore(
+    m.put_spec(
+      "b",
+      "x",
+      @tesseract_memory.default_spec().with_metadata(
+        @tesseract_memory.new_metadata([("kind", "a-longer-kind")]),
+      ),
+    ),
+  )
+  ignore(m.put("c", "3"))
+  assert_eq(keys_of(m), "a,c")
+}
+
+///|
+/// A tie in size is broken by key, like every other policy.
+test "a tie in size is broken by key, like every other policy" {
+  let m = @tesseract_memory.new_memory_with_clock(
+    @tesseract_memory.default_config()
+    .with_capacity(2)
+    .with_eviction(@tesseract_memory.evict_largest()),
+    @tesseract_memory.memory_clock_manual(0L),
+  )
+  // The same size each, so the policy has nothing to go on but the key.
+  ignore(m.put("bbb", "1"))
+  ignore(m.put("aaa", "2"))
+  ignore(m.put("ccc", "3"))
+  assert_eq(keys_of(m), "bbb,ccc")
+}
+
+///|
 /// Words are compared by their share of the combined vocabulary.
 ///
 /// "the cat sat" and "the cat ran" share two words out of four, so the score

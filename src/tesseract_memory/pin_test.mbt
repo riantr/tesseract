@@ -260,6 +260,7 @@ test "every eviction policy respects the pin" {
     @tesseract_memory.evict_lfu(),
     @tesseract_memory.evict_soonest_expiry(),
     @tesseract_memory.evict_oldest(),
+    @tesseract_memory.evict_largest(),
   ]
   for policy in policies {
     let m = pin_memory_with(2, 0L, policy)

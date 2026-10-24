@@ -9,6 +9,10 @@
 /// - `SoonestExpiry` — what is closest to expiring anyway. An entry that never
 ///   expires is infinitely far from expiring, so it goes last.
 /// - `OldestFirst` — what was written longest ago, regardless of use.
+/// - `Largest` — what takes the most room. The size is the one the byte budget
+///   counts: the value and its labels. This is the policy for a store whose
+///   entries are not all the same size, where throwing away the smallest one
+///   would mean throwing away several of them to make the same room.
 ///
 /// Every policy breaks a tie the same way: by key. A store that evicts a
 /// different entry on two runs of the same program is a store nobody can test.
@@ -17,6 +21,7 @@ pub enum EvictionPolicy {
   LeastFrequentlyUsed
   SoonestExpiry
   OldestFirst
+  Largest
 }
 
 ///|
@@ -44,6 +49,17 @@ pub fn evict_oldest() -> EvictionPolicy {
 }
 
 ///|
+/// Evict the entry that takes the most room.
+///
+/// The room an entry takes is what the byte budget counts: the value and its
+/// labels. A store whose entries are all the same size has no use for this
+/// policy — every eviction frees the same — and a store whose entries are not
+/// has every use for it.
+pub fn evict_largest() -> EvictionPolicy {
+  Largest
+}
+
+///|
 /// The name of a policy, for a report.
 pub fn EvictionPolicy::name(self : EvictionPolicy) -> String {
   match self {
@@ -51,5 +67,6 @@ pub fn EvictionPolicy::name(self : EvictionPolicy) -> String {
     LeastFrequentlyUsed => "lfu"
     SoonestExpiry => "soonest-expiry"
     OldestFirst => "oldest"
+    Largest => "largest"
   }
 }

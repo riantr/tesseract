@@ -267,6 +267,8 @@ fn eviction_of(name : String) -> @tesseract_memory.EvictionPolicy {
     @tesseract_memory.evict_soonest_expiry()
   } else if name == "oldest" {
     @tesseract_memory.evict_oldest()
+  } else if name == "largest" {
+    @tesseract_memory.evict_largest()
   } else {
     @tesseract_memory.evict_lru()
   }
@@ -312,7 +314,9 @@ pub fn print_help(u : Usage) -> Unit {
   out(
     "  --ttl MS                  the default lifetime of a put (default: never)",
   )
-  out("  --evict NAME              lru | lfu | expiry | oldest   (default lru)")
+  out(
+    "  --evict NAME              lru | lfu | expiry | oldest | largest   (default lru)",
+  )
   out("  --by NAME                 jaccard | cosine | containment | structure")
   out(
     "  --half-life MS            halve an entry's weight every MS (0: no decay)",
@@ -345,6 +349,9 @@ pub fn print_help(u : Usage) -> Unit {
   out("  search <query...> --where k=v   only the entries with that label")
   out("  search-all <query...>     the same, over every scope")
   out("  scopes                    the scopes that hold something")
+  out(
+    "  kinds                     the kinds this scope holds, and how many of each",
+  )
   out("  scope <name>              work in another scope from here on")
   out("  sweep                     drop what has expired")
   out("  stats                     what the memory has done")
@@ -360,6 +367,7 @@ pub fn print_help(u : Usage) -> Unit {
   out(
     "  --without k=v             the entry does not have the label k with the value v",
   )
+  out("  --kind K                  the entry is of the kind K")
   out("")
 }
 
@@ -495,6 +503,17 @@ fn command(
     out(names.join(", "))
     return
   }
+  if verb == "kinds" {
+    let kinds = scope.kinds()
+    if kinds.length() == 0 {
+      out("(no kinds hold anything)")
+      return
+    }
+    for (kind, count) in kinds {
+      out("  " + kind + " " + count.to_string())
+    }
+    return
+  }
   if verb == "sweep" {
     let gone = m.sweep()
     out("dropped " + gone.to_string() + " expired")
@@ -571,6 +590,7 @@ fn put(scope : @tesseract_memory.Scope, words : Array[String]) -> Unit {
   let key = words[1]
   let mut sliding = false
   let mut pinned = false
+  let mut kind : String? = None
   let mut explicit_ms : Int64? = None
   let mut importance : Double? = None
   let meta_pairs : Array[(String, String)] = []
@@ -581,6 +601,9 @@ fn put(scope : @tesseract_memory.Scope, words : Array[String]) -> Unit {
       sliding = true
     } else if words[i] == "--pinned" {
       pinned = true
+    } else if words[i] == "--kind" && i + 1 < words.length() {
+      kind = Some(words[i + 1])
+      i = i + 1
     } else if words[i] == "--ttl" && i + 1 < words.length() {
       explicit_ms = Some(
         @tesseract.parse_int(words[i + 1]).unwrap_or(0).to_int64(),
@@ -653,8 +676,30 @@ fn put(scope : @tesseract_memory.Scope, words : Array[String]) -> Unit {
       spec = spec.with_importance(value)
     }
   }
-  if meta_pairs.length() > 0 {
-    spec = spec.with_metadata(@tesseract_memory.new_metadata(meta_pairs))
+  // The kind is the `kind` label, so it cannot be two things at once: a kind
+  // given as `--kind` and a kind given as a label have to agree, and a person
+  // who typed both deserves to be told rather than given one of them.
+  let pairs = meta_pairs.copy()
+  match kind {
+    Some(k) => {
+      if k.is_empty() {
+        warn("the kind needs a name")
+        return
+      }
+      for pair in pairs {
+        if pair.0 == @tesseract_memory.KIND_LABEL && pair.1 != k {
+          warn(
+            "the kind is given twice, and differently: " + pair.1 + " and " + k,
+          )
+          return
+        }
+      }
+      pairs.push((@tesseract_memory.KIND_LABEL, k))
+    }
+    None => ()
+  }
+  if pairs.length() > 0 {
+    spec = spec.with_metadata(@tesseract_memory.new_metadata(pairs))
   }
   if pinned {
     spec = spec.with_pinned(true)
@@ -822,6 +867,14 @@ fn query_filter_and_k(
       i = i + 1
     } else if words[i] == "--without" && i + 1 < words.length() {
       conditions.push(exclusion_of(words[i + 1]))
+      i = i + 1
+    } else if words[i] == "--kind" && i + 1 < words.length() {
+      conditions.push(
+        @tesseract_memory.filter_equals(
+          @tesseract_memory.KIND_LABEL,
+          words[i + 1],
+        ),
+      )
       i = i + 1
     } else {
       query_parts.push(words[i])

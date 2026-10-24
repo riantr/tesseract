@@ -32,6 +32,18 @@ pub struct Metadata {
 }
 
 ///|
+/// The label that says what kind of thing an entry is.
+///
+/// A **kind** is not a new field on an entry: it is the value of this label.
+/// That is the whole reason it is done this way. A store that holds notes, tasks
+/// and reminders in one place does not need three kinds of entry — it needs one
+/// kind of entry that says which it is, and the label is already the thing that
+/// says what an entry *is*. So a filter that asks for a kind is a filter like
+/// any other, a report that lists the kinds is a report over the labels, and the
+/// checkpoint that stores an entry does not have to learn what a kind is.
+pub const KIND_LABEL : String = "kind"
+
+///|
 /// Metadata with nothing in it.
 ///
 /// An entry written without metadata carries none, and a filter that asks for
@@ -145,6 +157,30 @@ pub fn Metadata::has_value(
     }
   }
   false
+}
+
+///|
+/// The same labels, with the **kind** set.
+///
+/// The kind is one value: a metadata that already carried a kind is given the
+/// new one rather than carrying both. Two kinds on one entry would be a
+/// contradiction, and a set of pairs is the only place that can be said once.
+///
+/// A kind with **no name** takes the kind away rather than writing an empty
+/// one. An entry of no kind is an entry with no kind label, and the two are
+/// not the same thing: a label with an empty value is a thing a caller can
+/// say about something else.
+pub fn Metadata::with_kind(self : Metadata, kind : String) -> Metadata {
+  let kept : Array[(String, String)] = []
+  for pair in self.pairs {
+    if pair.0 != KIND_LABEL {
+      kept.push(pair)
+    }
+  }
+  if !kind.is_empty() {
+    kept.push((KIND_LABEL, kind))
+  }
+  new_metadata(kept)
 }
 
 ///|

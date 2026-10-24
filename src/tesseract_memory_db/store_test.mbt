@@ -402,6 +402,36 @@ test "a reload does not take in an entry that is already dead" {
 }
 
 ///|
+/// The kind of an entry survives a reload, because the kind is a label.
+///
+/// The kind is not a field of its own — it is the value of the `kind` label —
+/// so the checkpoint has nothing extra to store and nothing extra to restore.
+/// The kind comes back because the labels do, and the labels come back because
+/// they are part of the entry.
+test "the kind of an entry survives a reload, because the kind is a label" {
+  let path = scratch("kind")
+  remove(path)
+  let d = open_at(path, 10, 0L)
+  ignore(
+    d
+    .put_spec(
+      "todo",
+      "ship it",
+      @tesseract_memory.default_spec().with_metadata(
+        @tesseract_memory.no_metadata().with_kind("task"),
+      ),
+    )
+    .unwrap(),
+  )
+  let again = open_at(path, 10, 0L)
+  assert_eq(again.entry("todo").unwrap().kind(), Some("task"))
+  assert_eq(again.memory().kinds().length(), 1)
+  assert_eq(again.memory().kinds()[0].0, "task")
+  assert_eq(again.memory().kinds()[0].1, 1)
+  remove(path)
+}
+
+///|
 /// A reload replaces what the store holds with what the file holds.
 test "a reload replaces what the store holds with what the file holds" {
   let path = scratch("reload")
