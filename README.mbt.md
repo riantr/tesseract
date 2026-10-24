@@ -15,7 +15,7 @@ same success flags, error codes, positions, coordinates and digits.
 ## Install
 
 ```sh
-moon add riantr/tesseract@0.1.11
+moon add riantr/tesseract@0.1.12
 ```
 
 That is a **module** dependency, and it belongs in the consumer's `moon.mod`.
@@ -23,7 +23,7 @@ That is a **module** dependency, and it belongs in the consumer's `moon.mod`.
 
 ```toml
 import {
-  "riantr/tesseract@0.1.11",
+  "riantr/tesseract@0.1.12",
 }
 ```
 
@@ -43,7 +43,7 @@ a module and takes **no version at all**. A version in a `moon.pkg` import is
 not a newer spelling — it is an import the toolchain cannot find:
 
 ```
-Cannot find import 'riantr/tesseract/src/tesseract@0.1.11' in my/app/src/thing@0.1.0
+Cannot find import 'riantr/tesseract/src/tesseract@0.1.12' in my/app/src/thing@0.1.0
 ```
 
 The `src/` in the package path is part of the package's name, not a prefix the
@@ -54,7 +54,7 @@ paths — so `riantr/tesseract/src/tesseract_memory` is a package and
 alias, below.
 
 For the same reason there is no `@latest`: the version is parsed as semver, so
-`latest`, `^0.1.11`, `>=0.1.11`, `0.1` and `v0.1.11` are all rejected. A bare
+`latest`, `^0.1.12`, `>=0.1.12`, `0.1` and `v0.1.12` are all rejected. A bare
 `moon add riantr/tesseract` resolves the newest release and pins the concrete
 version it found — that is the "latest" this toolchain has.
 
@@ -79,7 +79,7 @@ package's symbols on under a name of its own.
 are the six executables in the same module — the command line, the file-backed
 store, the short-term memory, the durable memory, the scan database and the
 window. Registry entry:
-[mooncakes.io/docs/riantr/tesseract@0.1.11](https://mooncakes.io/docs/riantr/tesseract@0.1.11).
+[mooncakes.io/docs/riantr/tesseract@0.1.12](https://mooncakes.io/docs/riantr/tesseract@0.1.12).
 
 ### What the release was checked on
 
@@ -712,6 +712,13 @@ key its place.
 | `evict_lfu()` | the entry nobody has read |
 | `evict_soonest_expiry()` | the entry closest to expiring — an entry that never expires goes last |
 | `evict_oldest()` | the entry written longest ago |
+| `evict_largest()` | the entry that takes the most **room** |
+
+The size the last one counts is the one the byte budget counts: the value and
+its labels. It is the policy for a store whose entries are not all the same
+size — throwing away the smallest one would mean throwing away several of them
+to make the same room — and a store whose entries are all the same size has no
+use for it, because every eviction frees the same.
 
 Ties are broken by the **scope** and then the **key**, so the same sequence of
 operations always evicts the same entry. A store that evicts differently on two
@@ -831,10 +838,10 @@ to exactly one of them.
 ///|
 let m = @tesseract_memory.new_memory(100)
 let work = m.scope("work")
-ignore(work.put("todo", "ship 0.1.11"))
+ignore(work.put("todo", "ship 0.1.12"))
 ignore(m.scope("notes").put("todo", "buy milk"))
 // Two entries, one key.
-assert_eq(work.get("todo"), Some("ship 0.1.11"))
+assert_eq(work.get("todo"), Some("ship 0.1.12"))
 assert_eq(m.scope("notes").get("todo"), Some("buy milk"))
 ```
 
@@ -883,7 +890,7 @@ place where there is nothing to find.
 From a shell, the scope is the partition the commands work in:
 
 ```sh
-moon run cmd/memory -- --scope work "put todo ship 0.1.11" "keys"
+moon run cmd/memory -- --scope work "put todo ship 0.1.12" "keys"
 moon run cmd/memory -- "put a the cat sat" "scope work" "put a the cat sat on the mat" "scopes"
 moon run cmd/memory -- "put a the cat sat" "scope work" "put a the cat sat on the mat" "search-all cat"
 ```
@@ -1127,6 +1134,70 @@ budget is about what the memory holds, and a label is something the memory
 holds. The key and the scope are not counted — they are the *name* of an entry
 rather than its content.
 
+### The kinds
+
+A store that holds notes, tasks and reminders holds **different kinds of
+thing**, and the kind of an entry is the value of the `kind` label.
+
+That is the whole mechanism. A kind is not a new field on an entry and not a
+new type of entry: it is a label the library gives a name to
+(`@tesseract_memory.KIND_LABEL`), so a filter that asks for a kind is a filter
+like any other, a report that lists the kinds is a report over the labels, and
+the checkpoint that stores an entry does not have to learn what a kind is.
+
+```moonbit nocheck
+///|
+let m = @tesseract_memory.new_memory(100)
+ignore(
+  m.put_spec(
+    "todo",
+    "ship 0.1.12",
+    @tesseract_memory.default_spec()
+    .with_metadata(@tesseract_memory.no_metadata().with_kind("task")),
+  ),
+)
+assert_eq(m.entry("todo").unwrap().kind(), Some("task"))
+assert_eq(m.kinds()[0].0, "task")
+```
+
+The kind is **one value**. A metadata that already carried a kind is given the
+new one rather than carrying both, and a kind with no name takes the kind away
+rather than writing an empty one: an entry of no kind is an entry with no kind
+label, and the two are not the same thing.
+
+What is new is the store's own **report** of its composition. There was no way
+to ask a memory what kinds it held — the labels were per entry and nothing
+listed them — and now there is:
+
+| | |
+|---|---|
+| `Memory::kinds` | the kinds the store holds, and how many entries of each |
+| `Memory::entries_of_kind` | the entries of one kind, in every scope |
+| `Scope::kinds` | the same, for one scope |
+| `Scope::entries_of_kind` | the entries of one kind, in one scope |
+| `Entry::kind` | what kind an entry is, or nothing |
+
+The kinds are **derived** from the labels: nothing extra is kept, so the answer
+is the answer about the entries themselves. An entry that carries no kind label
+is of no kind and is not counted. The kinds come out in the order of their
+letters, so the same store answers the same way however it was filled.
+
+The kind does **not** change what the store evicts. The labels say what an
+entry *is*, and the eviction policy says what goes — and the policy is not the
+kind. What the kind changes is the question the store can answer about itself.
+
+From the shell, `put --kind K` writes the label and `kinds` reports the
+mixture:
+
+```sh
+moon run cmd/memory -- "put todo ship 0.1.12 --kind task" "put note the cat sat --kind note" "kinds"
+moon run cmd/memory -- "put todo ship 0.1.12 --kind task" "entries --kind task"
+```
+
+`--kind` on `entries` and `search` is a spelling of `--where kind=…`, and a
+kind given twice and differently — `--kind task --meta kind=note` — is refused
+rather than resolved in favour of one of them.
+
 ### The clock is injected
 
 The memory's clock is a **value**, for the same reason the core's is: a test
@@ -1242,7 +1313,7 @@ would evict the entries that were there.
   use.
 
 The full plan and the measurements behind it are in `LOOP3.md`, `LOOP4.md`,
-`LOOP5.md`, `LOOP6.md`, `LOOP7.md`, `LOOP8.md` and `LOOP9.md`.
+`LOOP5.md`, `LOOP6.md`, `LOOP7.md`, `LOOP8.md`, `LOOP9.md` and `LOOP10.md`.
 
 ## Running it
 
@@ -1250,7 +1321,7 @@ The full plan and the measurements behind it are in `LOOP3.md`, `LOOP4.md`,
 
 ```sh
 moon check --target all     # type-check every backend
-moon test                   # 376 tests
+moon test                   # 388 tests
 moon fmt --check            # canonical formatting
 
 node cli-smoke.mjs          # the CLIs, as real processes (builds them first)
@@ -1266,8 +1337,9 @@ moon run cmd/main -- .export tsr > dump.tsr
 # the short-term memory
 moon run cmd/memory -- .help
 moon run cmd/memory -- "put greeting hello world" "get greeting"
-moon run cmd/memory -- --scope work "put todo ship 0.1.11" "keys" "scopes"
+moon run cmd/memory -- --scope work "put todo ship 0.1.12" "keys" "scopes"
 moon run cmd/memory -- "put a x --meta kind=note" "search x --where kind=note"
+moon run cmd/memory -- "put todo ship 0.1.12 --kind task" "kinds"
 moon run cmd/memory -- "put a x --pinned" "pin a" "unpin a"
 moon run cmd/memory -- demo
 
@@ -1518,10 +1590,10 @@ The gate, and the result it produced for this version:
 | `moon check --target js --deny-warn` | exit 0 |
 | `moon check --target native --deny-warn` | exit 0 |
 | `moon check --target wasm-gc --deny-warn` | exit 0 |
-| `moon test --target wasm --deny-warn` | **376 passed, 0 failed** |
+| `moon test --target wasm --deny-warn` | **388 passed, 0 failed** |
 | `moon build --target wasm` | exit 0 |
 | `typos` (v1.50.3 — the version the workflow pins) | exit 0 |
-| `node cli-smoke.mjs` | **80 passed, 0 failed** |
+| `node cli-smoke.mjs` | **87 passed, 0 failed** |
 | `node gui-smoke.mjs` | **45 passed, 0 failed** |
 
 The release workflow runs the first two check targets plus the test and build; the
