@@ -85,7 +85,18 @@ pub fn Tesseract::journal_depth(db : Tesseract) -> Int32 {
 /// correct while quietly losing a path. Adding a seventh write means adding a
 /// seventh call to this function, which is a visible omission rather than a
 /// silent one.
-pub fn Tesseract::write_cell(
+///
+/// It is **not** public, and that is the point. It writes whatever it is
+/// given, at whatever position it is given, without checking either: the
+/// check belongs to the public entry point above it, which refuses an
+/// out-of-range position with a code the caller can branch on. Published,
+/// this function was an entry point that panicked on `position = 0` (the
+/// slot it computes is `-1`) and that stored a cell whose own key, value
+/// and digit the library refuses everywhere else - a store that accepted
+/// the write and failed later, somewhere else, as a different kind of
+/// failure. Every caller is in this package, so nothing is lost by keeping
+/// it here.
+fn Tesseract::write_cell(
   db : Tesseract,
   position : Int64,
   cell : GridCell,
@@ -99,7 +110,12 @@ pub fn Tesseract::write_cell(
 /// Replaces the whole array, for the two writes that are not one cell at a time.
 ///
 /// `clear` rewrites every cell; `set_side` replaces the array and the lattice.
-pub fn Tesseract::write_all(
+///
+/// Like `write_cell`, this is not public: it swaps out the store's shape
+/// wholesale, and the shape it is given has to be one the library would have
+/// built. `set_side` builds it with `lattice_of`, which refuses an
+/// out-of-range side.
+fn Tesseract::write_all(
   db : Tesseract,
   cells : Array[GridCell],
   lattice : Lattice,

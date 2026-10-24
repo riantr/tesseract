@@ -5,3 +5,9 @@ target
 .mooncakes/
 .moonagent/
 dist/
+
+# The coverage reporter's output. `moon coverage analyze -- -f cobertura`
+# writes cobertura.xml into the working directory, and it is a measurement of
+# the tree rather than part of it.
+cobertura.xml
+_coverage/

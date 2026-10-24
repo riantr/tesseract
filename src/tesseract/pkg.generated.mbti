@@ -200,6 +200,8 @@ pub fn starts_ci(String, String) -> Bool
 
 pub fn starts_with(String, String) -> Bool
 
+pub fn sudoku_line_count(Lattice) -> Int64
+
 pub fn system_clock() -> Clock
 
 pub fn trim_ws(String) -> String
@@ -462,8 +464,6 @@ pub fn Tesseract::statement_abort(Self, Int32) -> Unit
 pub fn Tesseract::statement_commit(Self, Int32) -> Unit
 pub fn Tesseract::status(Self) -> DBStatus
 pub fn Tesseract::update(Self, String, String, Int64?, Int64?) -> DBResponse
-pub fn Tesseract::write_all(Self, Array[GridCell], Lattice, Int64) -> Unit
-pub fn Tesseract::write_cell(Self, Int64, GridCell) -> Unit
 
 pub struct TesseractLogger {
   name : String

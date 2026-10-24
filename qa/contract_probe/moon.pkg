@@ -1,0 +1,14 @@
+import {
+  "riantr/tesseract/src/tesseract_memory",
+  "riantr/tesseract/src/tesseract_memory_db",
+  "moonbit-community/sqlite3",
+  "moonbitlang/x/fs" @xfs,
+  "moonbitlang/core/builtin",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+}
+
+/// The probe reads and writes real checkpoint files, so it runs on the
+/// backends the `.db` adapter and the file layer support.
+
+supported_targets = "native+wasm"

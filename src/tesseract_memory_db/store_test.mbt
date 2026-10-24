@@ -449,3 +449,133 @@ test "a reload replaces what the store holds with what the file holds" {
   assert_eq(d.get("extra"), None)
   remove(path)
 }
+
+///|
+/// Whether a reload was refused.
+fn reload_refused(result : Result[Int32, String]) -> Bool {
+  match result {
+    Ok(_) => false
+    Err(_) => true
+  }
+}
+
+///|
+/// Rewrites the header cell of a checkpoint file.
+///
+/// The header is the cell at position 1: `key` is the name it is filed under
+/// and `value` is the JSON that carries the format version. A test that
+/// rewrites it is presenting the reader with a file it was not written to
+/// understand.
+fn rewrite_header(path : String, key : String, value : String) -> Unit raise {
+  let conn = @sqlite3.Connection::open(path)
+  defer conn.close()
+  let stmt = conn.prepare(
+    "UPDATE sudoku_cells SET key = ?, value = ? WHERE grid_position = 1",
+  )
+  defer stmt.finalize()
+  stmt.bind(index=1, key)
+  stmt.bind(index=2, value)
+  ignore(stmt.step())
+}
+
+///|
+/// Removes the header cell of a checkpoint file.
+///
+/// The entries stay where they are, so the file still holds a store's worth
+/// of data — it just no longer says what format it is in.
+fn drop_header(path : String) -> Unit raise {
+  let conn = @sqlite3.Connection::open(path)
+  defer conn.close()
+  let stmt = conn.prepare("DELETE FROM sudoku_cells WHERE grid_position = 1")
+  defer stmt.finalize()
+  ignore(stmt.step())
+}
+
+///|
+/// A checkpoint that carries a format version this build does not know is
+/// refused, not half-read.
+///
+/// `FORMAT_VERSION` promises it: "a checkpoint that carries a version this
+/// build does not know is refused rather than half-read". It used to be read
+/// anyway, and the store came back on the caller's clock — so every entry
+/// the file's own clock had already expired was gone, and nothing said so.
+test "a checkpoint with a format version this build does not know is refused" {
+  let path = scratch("version")
+  remove(path)
+  let d = open_at(path, 10, 0L)
+  ignore(d.put("k", "v").unwrap())
+  ignore(d.checkpoint().unwrap())
+  rewrite_header(
+    path, "tesseract-memory", "{\"format\":\"2\",\"clock\":\"manual\",\"now\":\"0\"}",
+  )
+  let result = @tesseract_memory_db.open_with_clock(
+    path,
+    config(10),
+    @tesseract_memory.memory_clock_manual(0L),
+  )
+  assert_eq(refused(result), true)
+  remove(path)
+}
+
+///|
+/// A file whose first cell is not this format's header is refused.
+///
+/// Any SQLite file with the right tables in it would otherwise be taken for
+/// a checkpoint, and read as one.
+test "a file whose first cell is not this format's header is refused" {
+  let path = scratch("header-key")
+  remove(path)
+  let d = open_at(path, 10, 0L)
+  ignore(d.put("k", "v").unwrap())
+  ignore(d.checkpoint().unwrap())
+  rewrite_header(path, "some-other-tool", "{\"format\":\"1\"}")
+  let result = @tesseract_memory_db.open_with_clock(
+    path,
+    config(10),
+    @tesseract_memory.memory_clock_manual(0L),
+  )
+  assert_eq(refused(result), true)
+  remove(path)
+}
+
+///|
+/// A checkpoint with no header cell at all is refused.
+///
+/// The header is what says what the file is; a file with no header is a file
+/// this build cannot make sense of.
+test "a checkpoint with no header cell at all is refused" {
+  let path = scratch("no-header")
+  remove(path)
+  let d = open_at(path, 10, 0L)
+  ignore(d.put("k", "v").unwrap())
+  ignore(d.checkpoint().unwrap())
+  drop_header(path)
+  let result = @tesseract_memory_db.open_with_clock(
+    path,
+    config(10),
+    @tesseract_memory.memory_clock_manual(0L),
+  )
+  assert_eq(refused(result), true)
+  remove(path)
+}
+
+///|
+/// A reload of a checkpoint this build cannot read is refused, and the store
+/// keeps what it held.
+///
+/// A reload empties the store before it fills it, so a refusal that came
+/// after the emptying would leave the caller with nothing and an error — and
+/// those two together are worse than either of them.
+test "a reload of a checkpoint this build cannot read is refused, and the store keeps what it held" {
+  let path = scratch("reload-version")
+  remove(path)
+  let d = open_at(path, 10, 0L)
+  ignore(d.put("k", "v").unwrap())
+  ignore(d.checkpoint().unwrap())
+  rewrite_header(
+    path, "tesseract-memory", "{\"format\":\"2\",\"clock\":\"manual\",\"now\":\"0\"}",
+  )
+  assert_eq(reload_refused(d.reload()), true)
+  assert_eq(d.get("k"), Some("v"))
+  remove(path)
+}

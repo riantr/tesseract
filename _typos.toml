@@ -1,0 +1,18 @@
+# Typos configuration.
+#
+# `childs` is not a typo — it is the key that the Mooncakes registry actually
+# uses in its published index:
+#
+#   https://assets.mooncakes.io/assets/riantr/tesseract@0.1.13/module_index.json
+#
+# The top-level keys of that document are `name`, `package` and `childs`, and
+# every nested node carries the same `childs` array. `qa/contract.mjs` walks
+# that document to compare the published public surface against the local one,
+# so it has to spell the key exactly as the registry does.
+#
+# Declaring the word here keeps the spelling check honest instead of teaching
+# the reader to ignore it: a genuine misspelling elsewhere still fails the
+# gate.
+
+[default.extend-words]
+childs = "childs"

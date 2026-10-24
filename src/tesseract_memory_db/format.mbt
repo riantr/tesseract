@@ -48,24 +48,42 @@ fn encode_header(clock : @tesseract_memory.MemoryClock) -> String {
 }
 
 ///|
-/// The clock a checkpoint carries, or `None` when the cell is not a header
-/// this build understands.
-fn decode_header(text : String) -> @tesseract_memory.MemoryClock? {
+/// The clock a checkpoint carries, or the reason it cannot be read.
+///
+/// A header that names a format version this build does not know is refused
+/// rather than half-read, which is what `FORMAT_VERSION` promises. The
+/// difference is not academic: a store that read it anyway would come back
+/// on a different clock, and every entry the file's own clock had already
+/// expired would be gone without a word — a store that silently drops half
+/// of what it was given, which is the thing the promise was made to prevent.
+fn decode_header(
+  text : String,
+) -> Result[@tesseract_memory.MemoryClock, String] {
   let obj = match parse_object(text) {
     Some(o) => o
-    None => return None
+    None => return Err("the header cell is not a JSON object")
   }
-  if field_int(obj, "format") != FORMAT_VERSION {
-    return None
+  let version = field_int(obj, "format")
+  if version != FORMAT_VERSION {
+    return Err(
+      "the checkpoint carries format version " +
+      version.to_string() +
+      " and this build reads version " +
+      FORMAT_VERSION.to_string(),
+    )
   }
   match field_str(obj, "clock") {
-    "system" => Some(@tesseract_memory.memory_clock_system())
+    "system" => Ok(@tesseract_memory.memory_clock_system())
     "manual" =>
       match parse_i64(field_str(obj, "now")) {
-        Some(now) => Some(@tesseract_memory.memory_clock_manual(now))
-        None => None
+        Some(now) => Ok(@tesseract_memory.memory_clock_manual(now))
+        None =>
+          Err("the checkpoint carries a manual clock with no readable instant")
       }
-    _ => None
+    other =>
+      Err(
+        "the checkpoint names a clock this build does not know: '" + other + "'",
+      )
   }
 }
 

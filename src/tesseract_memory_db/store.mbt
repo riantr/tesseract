@@ -109,13 +109,22 @@ pub fn open_with_clock(
     )
   }
   let lattice = new_checkpoint_lattice()
-  match load_file(path, lattice) {
-    Ok(_) => ()
+  let loaded = match load_file(path, lattice) {
+    Ok(n) => n
     Err(message) => return Err(message)
   }
-  let stored_clock = match read_header_cell(lattice) {
-    Some(c) => if c.is_manual() { c } else { clock }
-    None => clock
+  // A file that holds no cells at all is a new store, and a new store has no
+  // header yet. A file that holds cells must have a header this build
+  // understands as its first one, or it is not a checkpoint this build may
+  // read - and saying so is better than coming back with a store that
+  // quietly lost the entries the header was there to protect.
+  let stored_clock = if loaded == 0 {
+    clock
+  } else {
+    match read_header_cell(lattice, path) {
+      Ok(c) => if c.is_manual() { c } else { clock }
+      Err(message) => return Err(message)
+    }
   }
   let memory = @tesseract_memory.new_memory_with_clock(config, stored_clock)
   let entries = read_entry_cells(lattice)
@@ -185,9 +194,20 @@ pub fn DurableMemory::checkpoint(self : DurableMemory) -> Result[Int32, String] 
 /// caller holding a store that is no longer the one it opened.
 pub fn DurableMemory::reload(self : DurableMemory) -> Result[Int32, String] {
   let lattice = new_checkpoint_lattice()
-  match load_file(self.path, lattice) {
-    Ok(_) => ()
+  let loaded = match load_file(self.path, lattice) {
+    Ok(n) => n
     Err(message) => return Err(message)
+  }
+  // The header is checked **before** the store is cleared. A reload that
+  // emptied the store and then failed would leave the caller with nothing
+  // and an error, and those two together are worse than either of them: the
+  // entries are gone whether or not the reload worked. A file this build
+  // cannot read leaves the store holding exactly what it held.
+  if loaded > 0 {
+    match read_header_cell(lattice, self.path) {
+      Ok(_) => ()
+      Err(message) => return Err(message)
+    }
   }
   let entries = read_entry_cells(lattice)
   @tesseract_memory.Memory::clear(self.memory)
@@ -762,19 +782,35 @@ fn cell_key(key : String) -> String {
 }
 
 ///|
-/// The clock the checkpoint carries, or `None` when the first cell is not a
-/// header this build understands.
+/// The clock the checkpoint carries, or the reason the file is not one.
+///
+/// The header is a **guard**, not a hint. A file that holds cells but whose
+/// first cell is not a header this build understands is refused, so that the
+/// promise `FORMAT_VERSION` makes - refused rather than half-read - is kept
+/// where it matters. The two refusals are kept apart because they are
+/// different mistakes: a file that is not a checkpoint at all, and a
+/// checkpoint this build does not know how to read.
 fn read_header_cell(
   lattice : @tesseract.Tesseract,
-) -> @tesseract_memory.MemoryClock? {
+  path : String,
+) -> Result[@tesseract_memory.MemoryClock, String] {
   match @tesseract.Tesseract::cell_at(lattice, 1L) {
     Some(cell) =>
-      if cell.key == HEADER_KEY {
-        decode_header(cell.value)
+      if cell.key != HEADER_KEY {
+        Err(
+          "the file at " +
+          path +
+          " is not a tesseract-memory checkpoint: its first cell is named '" +
+          cell.key +
+          "'",
+        )
       } else {
-        None
+        decode_header(cell.value)
       }
-    None => None
+    None =>
+      Err(
+        "the file at " + path + " has no header cell, so it is not a checkpoint",
+      )
   }
 }
 

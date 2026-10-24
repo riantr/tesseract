@@ -83,6 +83,9 @@ test "a nested BEGIN is refused and names the alternative" {
   ignore(@tesseract.Tesseract::begin(db))
   let r = @tesseract.Tesseract::begin(db)
   assert_true(!r.success)
+  // The code is the part a caller branches on; the message is prose, and
+  // prose is the part that has no reason to stay put.
+  assert_eq(r.error_code, "INVALID_INPUT")
   assert_true(r.error.contains("SAVEPOINT"))
   ignore(@tesseract.Tesseract::rollback(db))
 }
@@ -137,6 +140,7 @@ test "ROLLBACK TO drops the savepoints set after it" {
   ignore(@tesseract.Tesseract::rollback_to(db, "outer"))
   let gone = @tesseract.Tesseract::rollback_to(db, "inner")
   assert_true(!gone.success)
+  assert_eq(gone.error_code, "INVALID_INPUT")
   assert_true(gone.error.contains("inner"))
   // The outer one survived, because it was set before the one rolled back to.
   assert_true(@tesseract.Tesseract::rollback_to(db, "outer").success)
@@ -151,6 +155,7 @@ test "a duplicate savepoint name is refused" {
   assert_true(@tesseract.Tesseract::savepoint(db, "sp1").success)
   let again = @tesseract.Tesseract::savepoint(db, "sp1")
   assert_true(!again.success)
+  assert_eq(again.error_code, "INVALID_INPUT")
   assert_true(again.error.contains("sp1"))
   ignore(@tesseract.Tesseract::rollback(db))
 }
@@ -164,6 +169,7 @@ test "a savepoint needs an open transaction" {
   let db = fresh_txn()
   let r = @tesseract.Tesseract::savepoint(db, "sp1")
   assert_true(!r.success)
+  assert_eq(r.error_code, "INVALID_INPUT")
   assert_true(r.error.contains("transaction"))
 }
 

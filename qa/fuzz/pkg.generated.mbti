@@ -1,0 +1,32 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "tesseract_qa_fuzz"
+
+// Values
+pub fn mutated(Rng) -> String
+
+pub let nasty : Array[String]
+
+pub fn next_statement(Rng) -> String
+
+pub fn noise(Rng) -> String
+
+pub let templates : Array[String]
+
+pub fn token_soup(Rng) -> String
+
+pub let vocabulary : Array[String]
+
+// Errors
+
+// Types and methods
+pub struct Rng {
+  mut state : Int64
+}
+pub fn Rng::below(Self, Int32) -> Int32
+pub fn Rng::next(Self) -> Int64
+pub fn Rng::pick(Self, Array[String]) -> String
+pub fn Rng::seed(Int64) -> Self
+
+// Type aliases
+
+// Traits

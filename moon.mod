@@ -41,5 +41,5 @@ import {
   "moonbit-community/sqlite3@0.2.3",
   "moonbitlang/async@0.22.5",
   "moonbitlang/x@0.5.6",
-  "riantr/moonbit_doubleML@0.164.33",
+  "riantr/moonbit_doubleML@0.164.35",
 }

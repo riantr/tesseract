@@ -171,7 +171,7 @@ fn main {
     "Tesseract 4D - " +
     @tesseract.lattice_shape_text(lat) +
     " lattice, " +
-    sudoku_line_count(lat).to_string() +
+    @tesseract.sudoku_line_count(lat).to_string() +
     " sudoku lines",
   )
   if args.length() == 0 {
@@ -223,15 +223,6 @@ fn main {
     }
     i = i + 1
   }
-}
-
-///|
-/// The number of axis-parallel lines through the lattice: `DIM * side^3`.
-///
-/// Named once because the banner and the status readout both report it, and a
-/// literal `108` in each would be two places to forget when the side changes.
-fn sudoku_line_count(lat : @tesseract.Lattice) -> Int64 {
-  lat.total / lat.side * @tesseract.DIM
 }
 
 ///|
@@ -356,7 +347,7 @@ fn print_status(db : @tesseract.Tesseract) -> Unit {
     "lattice : " +
     @tesseract.lattice_shape_text(lat) +
     " = " +
-    sudoku_line_count(lat).to_string() +
+    @tesseract.sudoku_line_count(lat).to_string() +
     " lines, " +
     (@tesseract.DIM * lat.side).to_string() +
     " slabs",

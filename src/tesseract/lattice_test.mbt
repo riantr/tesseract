@@ -99,6 +99,23 @@ test "every cell lies in exactly 4 slabs, one per axis" {
 }
 
 ///|
+/// The line count is the number of lines.
+///
+/// `sudoku_line_count` is the count of `all_lines`, without building the
+/// lines. If the two ever disagree, the count is a number that cannot be
+/// checked against the thing it counts — and the two command-line tools
+/// that report it would be reporting a number nothing in the library
+/// vouches for.
+test "the line count is the number of lines" {
+  let lat = @tesseract.default_lattice()
+  assert_eq(
+    @tesseract.sudoku_line_count(lat),
+    @tesseract.all_lines(lat).length().to_int64(),
+  )
+  assert_eq(@tesseract.sudoku_line_count(lat), 108L)
+}
+
+///|
 test "the 12 slabs are 12 distinct cell sets" {
   let lat = @tesseract.default_lattice()
   let slabs = @tesseract.all_slabs(lat)

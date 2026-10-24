@@ -114,6 +114,25 @@ function main() {
     r = run("main", [".export"], dir);
     check("`.export` on its own still defaults to .tsr", r.out.trimStart().startsWith("{"), true, r.out);
 
+    // `.quit` ends the run: everything after it is not executed. It used to
+    // `return true` and carry on, so a script that ended with `.quit` still
+    // ran everything after it. The fix was made without a test, so nothing
+    // would have noticed it coming back.
+    //
+    // The markers are the ASCII parts of the output on purpose. `records :`
+    // and the word INSERT are the same whatever language the rest of the
+    // response is in, and a test that fails when the wording changes is a
+    // test that gets deleted instead of fixed.
+    const insertEchoes = (s) => (s.match(/INSERT/g) || []).length;
+
+    r = run("main", [".status", ".quit", SQL_ADD], dir);
+    check("`.quit` stops the run", insertEchoes(r.out), 0, r.out + r.err);
+    check("...and what came before it still ran", r.out.includes("records :"), true, r.out + r.err);
+
+    r = run("persist", [".status", ".quit", SQL_ADD], dir);
+    check("`.quit` stops the persist run too", insertEchoes(r.out), 0, r.out + r.err);
+    check("...and what came before it still ran", r.out.includes("records :"), true, r.out + r.err);
+
     // ---- cmd/persist: `.open` takes a path, and it is a separate argv entry ----
     const xdb = path.join(dir, "x.db");
     r = run("persist", [".open", "x.db"], dir);

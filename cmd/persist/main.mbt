@@ -97,7 +97,7 @@ fn print_status(db : @tesseract.Tesseract) -> Unit {
     "lattice : " +
     @tesseract.lattice_shape_text(lat) +
     " = " +
-    (lat.total / lat.side * @tesseract.DIM).to_string() +
+    @tesseract.sudoku_line_count(lat).to_string() +
     " lines, " +
     (@tesseract.DIM * lat.side).to_string() +
     " slabs",

@@ -109,6 +109,22 @@ pub fn plane_through(
 }
 
 ///|
+/// The number of axis-parallel lines through the lattice: `DIM * side^3`.
+///
+/// This is `all_lines(lat).length()` without building the lines, which is
+/// what a status readout wants — the count, not the array.
+///
+/// It is the library's answer because `all_lines` is the library's. Two
+/// command-line tools used to count the lines between them: one named the
+/// count, the other wrote the arithmetic out inline. The values agreed, and
+/// the agreement was a coincidence rather than a contract, because nothing
+/// tied them together. One definition, in the package that owns the thing
+/// being counted, ties them together.
+pub fn sudoku_line_count(lat : Lattice) -> Int64 {
+  lat.total / lat.side * DIM
+}
+
+///|
 /// Every axis-parallel line, `DIM * side^3`, in a stable order.
 ///
 /// Each line is emitted once by requiring its representative to sit at
