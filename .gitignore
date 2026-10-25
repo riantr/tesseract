@@ -11,3 +11,7 @@ dist/
 # the tree rather than part of it.
 cobertura.xml
 _coverage/
+
+# The logs a measurement run writes while it runs. They are output, not part
+# of the tree, and a gate run that leaves one behind must not stage it.
+*.log

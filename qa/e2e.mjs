@@ -2,7 +2,7 @@
 //
 //   node qa/e2e.mjs
 //
-// The project has 401 unit tests, 99 CLI checks, 45 window checks and a
+// The project has 422 unit tests, 103 CLI checks, 45 window checks and a
 // Gherkin suite. Those are four numbers, and none of them says whether the
 // thing a person actually does is covered. A suite can be large and still
 // miss a command entirely.
@@ -167,7 +167,7 @@ function layers() {
       id: "cli-smoke",
       what: "the CLI smoke suite",
       text: read(path.join(ROOT, "cli-smoke.mjs")),
-      count: (read(path.join(ROOT, "cli-smoke.mjs")).match(/\bcheck\(/g) || []).length,
+      count: (read(path.join(ROOT, "cli-smoke.mjs")).match(/^\s*(?:await\s+)?check\(/gm) || []).length,
       unit: "checks",
       quoted: true,
     },
@@ -175,7 +175,7 @@ function layers() {
       id: "gui-smoke",
       what: "the window smoke suite",
       text: read(path.join(ROOT, "gui-smoke.mjs")),
-      count: (read(path.join(ROOT, "gui-smoke.mjs")).match(/\bcheck\(/g) || []).length,
+      count: (read(path.join(ROOT, "gui-smoke.mjs")).match(/^\s*(?:await\s+)?check\(/gm) || []).length,
       unit: "checks",
       quoted: true,
     },

@@ -67,15 +67,58 @@ pub const NO_DIGIT : Int64 = 0L
 /// Built only by `lattice_of`. The strides are stored rather than recomputed
 /// because `index0` is the hottest function in the library and `side^3` is three
 /// multiplications it does not need to repeat on every call.
+///
+/// The fields are **private**, and that is the load-bearing part. A lattice is
+/// eight numbers that have to agree with each other — `total` is `side^4`, the
+/// strides are the powers of `side`, `first_position` is 1 — and the library
+/// divides by the side and by the strides. A lattice with `side = 0` or
+/// `stride_y = 0` was therefore a divide by zero away, and it used to be one
+/// field assignment away: the fields were public, so a caller could hand the
+/// library a lattice it would never have built, and the failure surfaced
+/// later, somewhere else, as a different kind of failure.
+///
+/// Private fields make that impossible rather than merely discouraged. The
+/// only way to get a `Lattice` is `lattice_of`, which refuses a side it
+/// cannot address; the accessors below are how a caller reads the shape.
 pub struct Lattice {
-  side : Int64
-  total : Int64
-  first_position : Int64
-  last_position : Int64
-  max_digit : Int64
-  stride_y : Int64
-  stride_z : Int64
-  stride_w : Int64
+  priv side : Int64
+  priv total : Int64
+  priv first_position : Int64
+  priv last_position : Int64
+  priv max_digit : Int64
+  priv stride_y : Int64
+  priv stride_z : Int64
+  priv stride_w : Int64
+}
+
+///|
+/// The side: cells along each of the four axes.
+pub fn Lattice::side(self : Lattice) -> Int64 {
+  self.side
+}
+
+///|
+/// The whole lattice: `side^4` cells.
+pub fn Lattice::total(self : Lattice) -> Int64 {
+  self.total
+}
+
+///|
+/// The first position, 1-based, matching the C# `grid_position`.
+pub fn Lattice::first_position(self : Lattice) -> Int64 {
+  self.first_position
+}
+
+///|
+/// The last position, 1-based, inclusive.
+pub fn Lattice::last_position(self : Lattice) -> Int64 {
+  self.last_position
+}
+
+///|
+/// The largest digit a cell may hold: `1..side`, with `0` meaning none.
+pub fn Lattice::max_digit(self : Lattice) -> Int64 {
+  self.max_digit
 }
 
 ///|

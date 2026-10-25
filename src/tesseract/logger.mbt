@@ -96,7 +96,7 @@ pub struct TesseractLogger {
 ///|
 /// A logger that starts empty, does not print, and stamps logically.
 pub fn new_logger(name : String) -> TesseractLogger {
-  { name, logs: [], seq: 0, echo: false, clock: Logical, }
+  { name, logs: [], seq: 0, echo: false, clock: logical_clock(), }
 }
 
 ///|
@@ -162,7 +162,7 @@ pub fn TesseractLogger::add(
     details,
   }
   self.logs.push(entry)
-  if self.logs.length() > MAX_LOGS {
+  if self.count() > MAX_LOGS {
     let trimmed : Array[LogEntry] = []
     let mut i = 1
     while i < self.logs.length() {

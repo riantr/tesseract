@@ -5,7 +5,7 @@
 /// numbers, so the export assertions below - the coordinates a record carries,
 /// the position it lands on - keep describing the same three cells at any side.
 fn fixture_cells(lat : @tesseract.Lattice) -> (Int64, Int64, Int64) {
-  let high = lat.side - 1L
+  let high = lat.side() - 1L
   (
     @tesseract.position_of(lat, @tesseract.coords(0L, 0L, 0L, 0L)),
     @tesseract.position_of(lat, @tesseract.coords(1L, 1L, 0L, 0L)),
@@ -42,7 +42,7 @@ fn db_with_three() -> @tesseract.Tesseract {
       "book, one",
       "a | b\nc",
       Some(third),
-      lat.side,
+      lat.side(),
     ),
   )
   db
@@ -122,7 +122,7 @@ test "import_tsr clears first, so a load never merges into existing records" {
       db,
       "stale",
       "left over",
-      Some(lat.last_position - 21L),
+      Some(lat.last_position() - 21L),
       0L,
     ),
   )
@@ -131,7 +131,7 @@ test "import_tsr clears first, so a load never merges into existing records" {
   // `stale` is not in the file, and the load is documented to leave an empty
   // database rather than a half-overwritten one.
   assert_eq(@tesseract.Tesseract::occupancy(db), 3L)
-  assert_true(db.cells[@tesseract.slot_of(lat.last_position - 21L)].key == "")
+  assert_true(db.cells[@tesseract.slot_of(lat.last_position() - 21L)].key == "")
 }
 
 ///|
@@ -143,7 +143,7 @@ test "import refuses a record with no usable address instead of guessing the fir
       db,
       "occupant",
       "was here",
-      Some(lat.first_position),
+      Some(lat.first_position()),
       0L,
     ),
   )
@@ -157,7 +157,7 @@ test "import refuses a record with no usable address instead of guessing the fir
   // cell and still reported a clean load. The clear runs first, so the refusal
   // leaves the database empty rather than half-overwritten - which is what this
   // function documents.
-  assert_false(db.cells[@tesseract.slot_of(lat.first_position)].key == "x")
+  assert_false(db.cells[@tesseract.slot_of(lat.first_position())].key == "x")
   assert_eq(@tesseract.Tesseract::occupancy(db), 0L)
 }
 
@@ -179,7 +179,7 @@ test "import_sql reports a script that partly failed" {
 test "lattice view shows the digit, not a truncated key" {
   let lat = @tesseract.default_lattice()
   let db = db_with_three()
-  let view = @tesseract.render_lattice(db, lat.first_position)
+  let view = @tesseract.render_lattice(db, lat.first_position())
   // Keys like `cell_1` are 6 characters, so appending the digit and then
   // ellipsizing to 6 columns cut the digit off again - every solved cell used
   // to render as `cell_~`.
@@ -189,15 +189,15 @@ test "lattice view shows the digit, not a truncated key" {
       db2,
       "cell_1",
       "{\"pos\": 1}",
-      Some(lat.first_position),
-      lat.side,
+      Some(lat.first_position()),
+      lat.side(),
     ),
   )
-  let view2 = @tesseract.render_lattice(db2, lat.first_position)
+  let view2 = @tesseract.render_lattice(db2, lat.first_position())
   assert_false(view2.contains("cell_~"))
   // The key gives up one column to the digit: `ellipsize` spends 5 on `cell_1`
   // and the digit is appended after it.
-  assert_true(view2.contains("cell~" + lat.side.to_string()))
+  assert_true(view2.contains("cell~" + lat.side().to_string()))
   ignore(view)
 }
 
@@ -207,7 +207,7 @@ test "tsr export carries every record with its coordinates" {
   let (_, _, third) = fixture_cells(lat)
   let db = db_with_three()
   let text = @tesseract.export_tsr(db)
-  assert_true(text.contains("\"total_cells\": " + lat.total.to_string()))
+  assert_true(text.contains("\"total_cells\": " + lat.total().to_string()))
   assert_true(text.contains("\"dimensions\": " + @tesseract.DIM.to_string()))
   assert_true(
     text.contains(
@@ -217,7 +217,7 @@ test "tsr export carries every record with its coordinates" {
     ),
   )
   assert_true(text.contains("\"grid_position\": " + third.to_string()))
-  assert_true(text.contains("\"digit\": " + lat.side.to_string()))
+  assert_true(text.contains("\"digit\": " + lat.side().to_string()))
   // The comma and pipe in the value must survive escaping.
   assert_true(text.contains("book, one"))
 }
@@ -247,7 +247,7 @@ test "tsr round-trips content, position and digit" {
   let c = @tesseract.Tesseract::cell_at(dst, third).unwrap()
   assert_eq(c.key, "book, one")
   assert_eq(c.value, "a | b\nc")
-  assert_eq(c.digit, lat.side)
+  assert_eq(c.digit, lat.side())
   // Re-exporting the copy must reproduce the original document.
   assert_eq(@tesseract.export_tsr(dst), text)
 }
@@ -382,7 +382,7 @@ test "the lattice view names every cell once" {
   // `1 + side` lines, plus two.
   assert_eq(
     @tesseract.split(view, "\n").length().to_int64(),
-    lat.side * lat.side + lat.side + 2L,
+    lat.side() * lat.side() + lat.side() + 2L,
   )
   assert_true(view.contains("x = 0"))
   assert_true(view.contains("x = 1"))
@@ -486,8 +486,8 @@ test "a side-3 file imported into a side-4 database lands on its coordinates, no
 test "78 of the 81 side-3 positions name a different cell at side 4" {
   let (three, four) = side_pair()
   let mut moved = 0L
-  let mut p = three.first_position
-  while p <= three.last_position {
+  let mut p = three.first_position()
+  while p <= three.last_position() {
     let c = @tesseract.coords_of(three, p).unwrap()
     if @tesseract.position_of(four, c) != p {
       moved = moved + 1L

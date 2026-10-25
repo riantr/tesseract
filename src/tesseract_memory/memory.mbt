@@ -1123,6 +1123,10 @@ fn Memory::pick_victim(
 ) -> (String, String)? {
   let mut best : (String, String)? = None
   let mut best_rank = 0L
+  // One reading of the clock for the whole sweep. The idle time is measured
+  // against it, and a clock that moved in the middle of the sweep would rank
+  // two entries written at the same instant differently.
+  let now = self.now()
   for (scope, inner) in self.entries.iter() {
     for (key, entry) in inner.iter() {
       if scope == exclude_scope && key == exclude_key {
@@ -1132,7 +1136,11 @@ fn Memory::pick_victim(
         continue
       }
       let rank = match self.config.eviction {
-        LeastRecentlyUsed => entry.last_seen
+        // The entry nobody has touched for longest is the one with the
+        // **biggest** idle time, and the store evicts the *smallest* rank, so
+        // the idle time is negated here. The policy is named by what it does
+        // rather than by the timestamp it happens to compare.
+        LeastRecentlyUsed => -entry.idle_ms(now)
         LeastFrequentlyUsed => entry.hits
         SoonestExpiry =>
           if entry.window_ms == 0L {

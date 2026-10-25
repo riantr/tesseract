@@ -15,7 +15,7 @@ same success flags, error codes, positions, coordinates and digits.
 ## Install
 
 ```sh
-moon add riantr/tesseract@0.1.13
+moon add riantr/tesseract@0.1.14
 ```
 
 That is a **module** dependency, and it belongs in the consumer's `moon.mod`.
@@ -23,7 +23,7 @@ That is a **module** dependency, and it belongs in the consumer's `moon.mod`.
 
 ```toml
 import {
-  "riantr/tesseract@0.1.13",
+  "riantr/tesseract@0.1.14",
 }
 ```
 
@@ -43,7 +43,7 @@ a module and takes **no version at all**. A version in a `moon.pkg` import is
 not a newer spelling — it is an import the toolchain cannot find:
 
 ```
-Cannot find import 'riantr/tesseract/src/tesseract@0.1.13' in my/app/src/thing@0.1.0
+Cannot find import 'riantr/tesseract/src/tesseract@0.1.14' in my/app/src/thing@0.1.0
 ```
 
 The `src/` in the package path is part of the package's name, not a prefix the
@@ -54,7 +54,7 @@ paths — so `riantr/tesseract/src/tesseract_memory` is a package and
 alias, below.
 
 For the same reason there is no `@latest`: the version is parsed as semver, so
-`latest`, `^0.1.13`, `>=0.1.13`, `0.1` and `v0.1.13` are all rejected. A bare
+`latest`, `^0.1.14`, `>=0.1.14`, `0.1` and `v0.1.14` are all rejected. A bare
 `moon add riantr/tesseract` resolves the newest release and pins the concrete
 version it found — that is the "latest" this toolchain has.
 
@@ -79,7 +79,7 @@ package's symbols on under a name of its own.
 are the six executables in the same module — the command line, the file-backed
 store, the short-term memory, the durable memory, the scan database and the
 window. Registry entry:
-[mooncakes.io/docs/riantr/tesseract@0.1.13](https://mooncakes.io/docs/riantr/tesseract@0.1.13).
+[mooncakes.io/docs/riantr/tesseract@0.1.14](https://mooncakes.io/docs/riantr/tesseract@0.1.14).
 
 ### What the release was checked on
 
@@ -87,6 +87,35 @@ window. Registry entry:
 every number in this file was measured on. That is the toolchain this release
 was **verified** against, not a tested **minimum**: no older toolchain has been
 exercised here, and quoting a lower bound nobody ran would be a claim, not a fact.
+
+### What changed in 0.1.14
+
+**One breaking change**, and it is in the published surface:
+
+- **`Lattice`, `Entry` and `Hit` are opaque.** Their fields are private now, and
+  each field has an accessor: `Lattice::side()`, `Lattice::total()`,
+  `Lattice::first_position()`, `Lattice::last_position()`, `Lattice::max_digit()`;
+  `Entry::scope()`, `Entry::key()`, `Entry::value()`, `Entry::added_at()`,
+  `Entry::deadline()`, `Entry::window_ms()`, `Entry::sliding()`,
+  `Entry::last_seen()`, `Entry::hits()`; and on `Hit`, `Hit::scope()`,
+  `Hit::key()`, `Hit::value()`, `Hit::score()`, `Hit::importance()` and
+  `Hit::metadata()`. A caller that read `entry.value` now reads `entry.value()`.
+- **`Tesseract::write_cell` and `Tesseract::write_all` are no longer public.**
+  They were internal machinery that a caller could reach, and a caller that could
+  reach them could store a cell the library refuses to write anywhere else.
+- **`sudoku_line_count` was added** — the number of lines in a lattice, in the
+  package that owns the thing being counted.
+
+The reason for the first one is in
+[the store's internals are not part of the API](#the-stores-internals-are-not-part-of-the-api)
+below: a value with public fields is a value a caller can build by hand, and a
+`Lattice` built by hand can disagree with itself — a `stride_y` of zero divides by
+zero, and a `last_position` past the end asks for a billion cells. The accessors
+make the consistent lattice the only lattice there is.
+
+Everything else in this release is additive or internal. The error vocabulary is
+unchanged: unifying the prose errors with the structured ones is planned as its
+own release, rather than folded into the one that already breaks the surface.
 
 ### Packages and targets
 
@@ -145,6 +174,12 @@ cells have to stay addressable and `215^4 = 2,136,750,625` is the largest count
 that fits. With `Int64` index arithmetic alone the root would be 55108; lifting
 it needs storage that is not one flat array. `lattice_of` refuses a side above
 the limit and says which rule it applied rather than truncating.
+
+A `Lattice` is opaque: its fields are private, and the shape is read through
+`side()`, `total()`, `first_position()`, `last_position()` and `max_digit()`.
+`lattice_of` is the only way to get one, and that is the point — a lattice
+assembled from parts could disagree with itself, and a `stride_y` of zero
+divides by zero.
 
 ```sh
 moon run cmd/main -- --side 4 .status
@@ -605,7 +640,8 @@ Implemented as an **undo journal of before-images**, not a snapshot, so a
 transaction costs what it wrote rather than what the lattice holds — a copy of all
 81 cells per statement would make `side = 215` impossible in a way it currently is
 not. Every mutation goes through one function (`Tesseract::write_cell`), so a
-transaction cannot quietly cover six of the seven write paths.
+transaction cannot quietly cover six of the seven write paths. That function is
+internal — the published surface has no way to write a cell directly.
 
 Two properties worth stating separately:
 
@@ -847,10 +883,10 @@ to exactly one of them.
 ///|
 let m = @tesseract_memory.new_memory(100)
 let work = m.scope("work")
-ignore(work.put("todo", "ship 0.1.13"))
+ignore(work.put("todo", "ship 0.1.14"))
 ignore(m.scope("notes").put("todo", "buy milk"))
 // Two entries, one key.
-assert_eq(work.get("todo"), Some("ship 0.1.13"))
+assert_eq(work.get("todo"), Some("ship 0.1.14"))
 assert_eq(m.scope("notes").get("todo"), Some("buy milk"))
 ```
 
@@ -899,7 +935,7 @@ place where there is nothing to find.
 From a shell, the scope is the partition the commands work in:
 
 ```sh
-moon run cmd/memory -- --scope work "put todo ship 0.1.13" "keys"
+moon run cmd/memory -- --scope work "put todo ship 0.1.14" "keys"
 moon run cmd/memory -- "put a the cat sat" "scope work" "put a the cat sat on the mat" "scopes"
 moon run cmd/memory -- "put a the cat sat" "scope work" "put a the cat sat on the mat" "search-all cat"
 ```
@@ -952,6 +988,14 @@ of the values, would then be counting something that is no longer there. The
 limits a memory enforces are only worth anything if the store cannot be edited
 behind its own back, so the published interface is the methods and nothing
 else.
+
+The entries themselves are opaque for the same reason. `Entry` and `Hit` have
+private fields, and each field has an accessor — `entry.scope()`, `entry.key()`,
+`entry.value()`, `entry.added_at()`, `entry.deadline()`, `entry.window_ms()`,
+`entry.sliding()`, `entry.last_seen()`, `entry.hits()`, and on a hit
+`hit.scope()`, `hit.key()`, `hit.value()`, `hit.score()`, `hit.importance()`,
+`hit.metadata()`. An entry's fields are the store's own accounting: a caller
+that could set `hits` would be editing the count of its own reads.
 
 ### Similarity retrieval
 
@@ -1160,7 +1204,7 @@ let m = @tesseract_memory.new_memory(100)
 ignore(
   m.put_spec(
     "todo",
-    "ship 0.1.13",
+    "ship 0.1.14",
     @tesseract_memory.default_spec()
     .with_metadata(@tesseract_memory.no_metadata().with_kind("task")),
   ),
@@ -1199,8 +1243,8 @@ From the shell, `put --kind K` writes the label and `kinds` reports the
 mixture:
 
 ```sh
-moon run cmd/memory -- "put todo ship 0.1.13 --kind task" "put note the cat sat --kind note" "kinds"
-moon run cmd/memory -- "put todo ship 0.1.13 --kind task" "entries --kind task"
+moon run cmd/memory -- "put todo ship 0.1.14 --kind task" "put note the cat sat --kind note" "kinds"
+moon run cmd/memory -- "put todo ship 0.1.14 --kind task" "entries --kind task"
 ```
 
 `--kind` on `entries` and `search` is a spelling of `--where kind=…`, and a
@@ -1439,9 +1483,9 @@ moon run cmd/main -- .export tsr > dump.tsr
 # the short-term memory
 moon run cmd/memory -- .help
 moon run cmd/memory -- "put greeting hello world" "get greeting"
-moon run cmd/memory -- --scope work "put todo ship 0.1.13" "keys" "scopes"
+moon run cmd/memory -- --scope work "put todo ship 0.1.14" "keys" "scopes"
 moon run cmd/memory -- "put a x --meta kind=note" "search x --where kind=note"
-moon run cmd/memory -- "put todo ship 0.1.13 --kind task" "kinds"
+moon run cmd/memory -- "put todo ship 0.1.14 --kind task" "kinds"
 moon run cmd/memory -- "put a x --pinned" "pin a" "unpin a"
 moon run cmd/memory -- demo
 
@@ -1696,10 +1740,10 @@ The gate, and the result it produced for this version:
 | `moon check --target js --deny-warn` | exit 0 |
 | `moon check --target native --deny-warn` | exit 0 |
 | `moon check --target wasm-gc --deny-warn` | exit 0 |
-| `moon test --target wasm --deny-warn` | **401 passed, 0 failed** |
+| `moon test --target wasm --deny-warn` | **422 passed, 0 failed** |
 | `moon build --target wasm` | exit 0 |
 | `typos` (v1.50.3 — the version the workflow pins) | exit 0 |
-| `node cli-smoke.mjs` | **99 passed, 0 failed** |
+| `node cli-smoke.mjs` | **103 passed, 0 failed** |
 | `node gui-smoke.mjs` | **45 passed, 0 failed** |
 
 The release workflow runs the first two check targets plus the test and build; the

@@ -12,7 +12,7 @@
 
 name = "riantr/tesseract"
 
-version = "0.1.13"
+version = "0.1.14"
 
 // The file with the real content. `README.md` is a symlink to this one, so
 // naming the real file here states it rather than relying on every consumer

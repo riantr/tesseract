@@ -531,9 +531,9 @@ test "a recency weight can make an older match lose to a newer one" {
   assert_eq(hit_keys(m, "cat dog", 2), "new,old")
   let hits = m.search("cat dog", 2)
   assert_eq(hits.length(), 2)
-  assert_eq(hits[0].key, "new")
-  assert_eq(score_of(hits[0].score), "0.500")
-  assert_eq(score_of(hits[1].score), "0.250")
+  assert_eq(hits[0].key(), "new")
+  assert_eq(score_of(hits[0].score()), "0.500")
+  assert_eq(score_of(hits[1].score()), "0.250")
 }
 
 ///|
@@ -552,8 +552,8 @@ test "a search does not count as a use" {
   // test that only looked at the counters would pass even if the search
   // refreshed every entry, because a search does not count as a *get* either
   // way.
-  assert_eq(after.last_seen, before.last_seen)
-  assert_eq(after.hits, before.hits)
+  assert_eq(after.last_seen(), before.last_seen())
+  assert_eq(after.hits(), before.hits())
   assert_eq(m.stats().gets, 0L)
   assert_eq(m.get("a"), Some("cat"))
   assert_eq(m.stats().gets, 1L)
@@ -623,8 +623,8 @@ test "a search score is never above one" {
   assert_eq(m.now(), 0L)
   let hits = m.search("cat", 5)
   assert_eq(hits.length(), 1)
-  assert_true(hits[0].score <= 1.0)
-  assert_eq(score_of(hits[0].score), "1.000")
+  assert_true(hits[0].score() <= 1.0)
+  assert_eq(score_of(hits[0].score()), "1.000")
 }
 
 ///|
@@ -925,4 +925,68 @@ test "lowering the budget does not evict on the spot" {
   ignore(m.put("b", "1"))
   assert_eq(m.size_bytes(), 1L)
   assert_eq(keys_of(m), "b")
+}
+
+///|
+/// A recency policy says whether it is doing anything.
+///
+/// The store asks the policy for a weight and never asks whether the policy is
+/// on, so this is the predicate a **caller** uses: a report that says "recency:
+/// off" is saying something the store's own answer does not.
+test "a recency policy says whether it is doing anything" {
+  assert_false(@tesseract_memory.recency_none().is_active())
+  assert_true(@tesseract_memory.recency_decay(1000L).is_active())
+  // And it agrees with the weight the policy gives: an inactive policy weighs
+  // every age the same, which is what "not doing anything" means.
+  assert_eq(@tesseract_memory.recency_none().weight(0L), 1.0)
+  assert_eq(@tesseract_memory.recency_none().weight(100000L), 1.0)
+  // An active one does not: one half-life in, the weight is half.
+  assert_eq(@tesseract_memory.recency_decay(1000L).weight(1000L), 0.5)
+}
+
+///|
+/// The key-only searches answer the same as the hit searches they stand for.
+///
+/// A caller that only wants to know *what to read* does not need the scores
+/// and the values; a caller that wants the scores needs the hits. The two
+/// have to agree, or a store would answer "read these" and "here is what you
+/// get" differently — and the first is the one a caller acts on.
+test "the key-only searches answer the same as the hit searches" {
+  let m = memory_at(0L)
+  ignore(m.put("a", "cat dog"))
+  ignore(m.put("b", "cat"))
+  ignore(m.scope("work").put("c", "cat"))
+  // A filter that asks for nothing holds, so it admits every entry.
+  let everything = @tesseract_memory.filter_all([])
+
+  // The default scope only.
+  let scoped = m.search_filtered_keys("cat", 10, everything)
+  assert_eq(scoped.length(), 2)
+  assert_true(scoped.contains("a"))
+  assert_true(scoped.contains("b"))
+  // The other scope's key is not in it: a key is unique within a scope.
+  assert_false(scoped.contains("c"))
+
+  // Every scope.
+  let all = m.search_all_keys("cat", 10)
+  assert_eq(all.length(), 3)
+  let filtered_all = m.search_all_filtered_keys("cat", 10, everything)
+  assert_eq(filtered_all.length(), 3)
+
+  // And each key list is exactly the keys of the hits it stands for, in the
+  // same order.
+  let hits = m.search_all("cat", 10)
+  assert_eq(hits.length(), all.length())
+  let mut i = 0
+  while i < all.length() {
+    assert_eq(hits[i].key(), all[i])
+    i = i + 1
+  }
+  let filtered_hits = m.search_all_filtered("cat", 10, everything)
+  assert_eq(filtered_hits.length(), filtered_all.length())
+  let mut j = 0
+  while j < filtered_all.length() {
+    assert_eq(filtered_hits[j].key(), filtered_all[j])
+    j = j + 1
+  }
 }

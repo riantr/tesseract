@@ -16,19 +16,72 @@ test "index and position round-trip over all 81 cells" {
     assert_eq(@tesseract.index0(lat, c), p - 1L)
     checked = checked + 1
   }
-  assert_eq(checked, lat.total)
+  assert_eq(checked, lat.total())
+}
+
+///|
+/// The lattice's own numbers agree with each other.
+///
+/// The fields are private now, so a caller cannot hand the library eight
+/// numbers that disagree — that is a compiler guarantee, not a runtime check.
+/// What a test still has to hold is that `lattice_of` computes the agreement
+/// correctly and that the accessors report it, because the library divides by
+/// the side and by the strides on every lookup.
+///
+/// The old shape of this lattice had the side, the total, the strides and the
+/// digit range as four independent public numbers. Nothing tied them together:
+/// a caller could set the side to 3 and the stride to 0, and the division
+/// would fail far away from the assignment that caused it. Asserting the
+/// agreement here is what holds that guarantee in place.
+test "the lattice's own numbers agree with each other" {
+  for side in [1L, 2L, 3L, 4L, 7L] {
+    let lat = @tesseract.lattice_of(side).unwrap()
+    assert_eq(lat.side(), side)
+    assert_eq(lat.total(), side * side * side * side)
+    assert_eq(lat.first_position(), 1L)
+    assert_eq(lat.last_position(), lat.total())
+    assert_eq(lat.max_digit(), side)
+    // The side the library divides by is never zero, and the digit range is
+    // never empty.
+    assert_true(lat.side() >= 1L)
+    assert_true(lat.max_digit() >= 1L)
+  }
+}
+
+///|
+/// True when `lattice_of` refuses the side.
+fn side_refused(side : Int64) -> Bool {
+  match @tesseract.lattice_of(side) {
+    Ok(_) => false
+    Err(_) => true
+  }
+}
+
+///|
+/// A side that could not be addressed is refused at the door.
+///
+/// A side below 1 asks for a lattice with no cells, and the library divides by
+/// the side — so it would be a divide by zero away. A side above `MAX_SIDE`
+/// asks for more cells than the store can index with a 32-bit `Int`, and the
+/// allocation would be attempted before anyone noticed. Both are refused at
+/// `lattice_of`, which is now the only way to get a lattice at all.
+test "a side that could not be addressed is refused" {
+  assert_true(side_refused(0L))
+  assert_true(side_refused(-1L))
+  assert_true(side_refused(@tesseract.MAX_SIDE + 1L))
+  assert_false(side_refused(@tesseract.MAX_SIDE))
 }
 
 ///|
 test "positions outside the lattice are rejected, not clamped" {
   let lat = @tesseract.default_lattice()
   assert_eq(@tesseract.coords_of(lat, 0L), None)
-  assert_eq(@tesseract.coords_of(lat, lat.last_position + 1L), None)
+  assert_eq(@tesseract.coords_of(lat, lat.last_position() + 1L), None)
   assert_eq(@tesseract.coords_of(lat, -1L), None)
-  assert_true(@tesseract.position_in_bounds(lat, lat.first_position))
-  assert_true(@tesseract.position_in_bounds(lat, lat.last_position))
+  assert_true(@tesseract.position_in_bounds(lat, lat.first_position()))
+  assert_true(@tesseract.position_in_bounds(lat, lat.last_position()))
   assert_false(@tesseract.position_in_bounds(lat, 0L))
-  assert_false(@tesseract.position_in_bounds(lat, lat.last_position + 1L))
+  assert_false(@tesseract.position_in_bounds(lat, lat.last_position() + 1L))
 }
 
 ///|
@@ -56,7 +109,7 @@ test "the lattice corners sit at the ends of the row-major order" {
     Some(@tesseract.coords(0L, 0L, 0L, 0L)),
   )
   assert_eq(
-    @tesseract.coords_of(lat, lat.total),
+    @tesseract.coords_of(lat, lat.total()),
     Some(@tesseract.coords(2L, 2L, 2L, 2L)),
   )
   assert_eq(

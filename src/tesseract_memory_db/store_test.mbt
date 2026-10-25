@@ -129,10 +129,10 @@ test "the deadline is absolute, not a lifetime" {
   ignore(d.checkpoint().unwrap())
   let again = open_at(path, 10, 0L)
   let entry = again.entry("k").unwrap()
-  assert_eq(entry.window_ms, 1000L)
-  assert_eq(entry.deadline, 1500L)
+  assert_eq(entry.window_ms(), 1000L)
+  assert_eq(entry.deadline(), 1500L)
   assert_eq(again.memory().now(), 1000L)
-  assert_eq(entry.deadline - again.memory().now(), 500L)
+  assert_eq(entry.deadline() - again.memory().now(), 500L)
   remove(path)
 }
 
@@ -199,9 +199,9 @@ test "the labels, the importance and the pin survive a reload" {
   )
   let again = open_at(path, 10, 0L)
   let entry = again.entry("k").unwrap()
-  assert_eq(entry.importance, 0.5)
-  assert_eq(entry.pinned, true)
-  assert_eq(entry.metadata.has_value("kind", "task"), true)
+  assert_eq(entry.importance(), 0.5)
+  assert_eq(entry.pinned(), true)
+  assert_eq(entry.metadata().has_value("kind", "task"), true)
   remove(path)
 }
 
@@ -235,7 +235,7 @@ test "the hit count survives a reload, so the ranking survives it too" {
   ignore(d.get("k"))
   ignore(d.checkpoint().unwrap())
   let again = open_at(path, 10, 0L)
-  assert_eq(again.entry("k").unwrap().hits, 2L)
+  assert_eq(again.entry("k").unwrap().hits(), 2L)
   remove(path)
 }
 
@@ -577,5 +577,42 @@ test "a reload of a checkpoint this build cannot read is refused, and the store 
   )
   assert_eq(reload_refused(d.reload()), true)
   assert_eq(d.get("k"), Some("v"))
+  remove(path)
+}
+
+///|
+/// The checkpoint is a core lattice, and the adapter reads it back.
+///
+/// The durable store writes its checkpoint in the core's own format: a lattice
+/// of cells, in the file the `.db` adapter reads and writes. So the file can
+/// be read without the memory tier at all — by the core, through the adapter
+/// — and the entry comes back out of it.
+///
+/// A test that read the file back with the store would pass even if the two
+/// packages had stopped agreeing about the format, because each would be
+/// talking to itself. This one reads the file with the other two.
+test "the checkpoint is a core lattice the adapter can read back" {
+  let path = scratch("core-lattice")
+  remove(path)
+  let d = open_at(path, 10, 0L)
+  ignore(d.put("a", "hello").unwrap())
+  ignore(d.checkpoint().unwrap())
+  // Read the file back with the adapter and the core, with no memory tier in
+  // sight. The checkpoint's own lattice is four cells per axis, so the
+  // reading one has to be at least that big.
+  let lat = @tesseract.new_db(
+    "tesseract",
+    @tesseract.lattice_of(4L).unwrap(),
+    @tesseract.new_logger("test"),
+  )
+  let report = @tesseract_sqlite.load(path, lat)
+  // The header is the first cell and the entry is the second, and the
+  // adapter put both back where they were.
+  assert_eq(report.loaded, 2)
+  assert_eq(report.rejected, 0)
+  let header = @tesseract.Tesseract::cell_at(lat, 1L).unwrap()
+  assert_true(header.key != "")
+  let cell = @tesseract.Tesseract::cell_at(lat, 2L).unwrap()
+  assert_eq(cell.key, "a")
   remove(path)
 }

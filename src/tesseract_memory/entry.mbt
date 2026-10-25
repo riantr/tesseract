@@ -1,9 +1,13 @@
 ///|
 /// One thing the memory remembers.
 ///
-/// The fields are public so a caller can read them, and the memory owns the
-/// lifecycle: an entry is written, touched, and eventually removed. Nothing
-/// outside this package writes one.
+/// The fields are **private**, and the accessors below are how a caller reads
+/// them. The entry is a value the memory owns: it is written, touched, and
+/// eventually removed, and nothing outside this package writes one. An entry
+/// that could be assembled from outside would be one the memory had never
+/// agreed to — an entry whose deadline and window disagreed, say, which is
+/// exactly the kind of thing `Entry::make` and `Memory::restore_entry` exist
+/// to prevent.
 ///
 /// The entry says which **scope** it is in, because a key is unique only
 /// within a scope: the key `todo` in `default` and the key `todo` in `notes`
@@ -21,28 +25,86 @@
 /// still dies when its time is up, because "do not evict me" and "never die"
 /// are two different promises.
 pub struct Entry {
-  scope : String
-  key : String
-  value : String
-  added_at : Int64
-  deadline : Int64
-  window_ms : Int64
-  sliding : Bool
-  last_seen : Int64
-  hits : Int64
-  importance : Double
-  metadata : Metadata
-  pinned : Bool
+  priv scope : String
+  priv key : String
+  priv value : String
+  priv added_at : Int64
+  priv deadline : Int64
+  priv window_ms : Int64
+  priv sliding : Bool
+  priv last_seen : Int64
+  priv hits : Int64
+  priv importance : Double
+  priv metadata : Metadata
+  priv pinned : Bool
+}
+
+///|
+/// The scope the entry is in.
+///
+/// The key is unique **within** a scope, so an entry that did not say where it
+/// lived could not be told from the same key in another scope.
+pub fn Entry::scope(self : Entry) -> String {
+  self.scope
+}
+
+///|
+/// The key of the entry.
+pub fn Entry::key(self : Entry) -> String {
+  self.key
+}
+
+///|
+/// The value of the entry.
+pub fn Entry::value(self : Entry) -> String {
+  self.value
+}
+
+///|
+/// When the entry was written, in milliseconds since the Unix epoch.
+pub fn Entry::added_at(self : Entry) -> Int64 {
+  self.added_at
+}
+
+///|
+/// When the entry dies, in milliseconds since the Unix epoch.
+///
+/// A zero deadline is an ordinary deadline for an entry **with** a window, and
+/// the deadline an entry that never expires carries. `Entry::expired` decides
+/// by the window, so the two cannot be confused.
+pub fn Entry::deadline(self : Entry) -> Int64 {
+  self.deadline
+}
+
+///|
+/// How long the entry lives, in milliseconds. Zero for an entry that never
+/// expires.
+pub fn Entry::window_ms(self : Entry) -> Int64 {
+  self.window_ms
+}
+
+///|
+/// Whether a read pushes the entry's deadline forward.
+pub fn Entry::sliding(self : Entry) -> Bool {
+  self.sliding
+}
+
+///|
+/// When the entry was last read, in milliseconds since the Unix epoch.
+pub fn Entry::last_seen(self : Entry) -> Int64 {
+  self.last_seen
+}
+
+///|
+/// How many times the entry has been read.
+pub fn Entry::hits(self : Entry) -> Int64 {
+  self.hits
 }
 
 ///|
 /// An entry, built from its parts.
 ///
-/// The fields of an entry are public so a caller can **read** them, and the
-/// memory owns the lifecycle: an entry is written, touched, and eventually
-/// removed, and nothing outside this package writes one. This is the one way
-/// to build one that is not a write.
-///
+/// The fields of an entry are private, so this is the only way to build one.
 /// It exists for the store that has to put an entry back exactly as it was —
 /// a checkpoint that was read from a file, where the entry's deadline, its age
 /// and its hit count are facts that a write would change rather than

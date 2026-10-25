@@ -205,17 +205,17 @@ test "a search in a scope sees only that scope, and a search across the store sa
   // A scoped search sees that scope only.
   let scoped = m.scope("work").search("cat", 10)
   assert_eq(scoped.length(), 1)
-  assert_eq(scoped[0].scope, "work")
-  assert_eq(scoped[0].key, "cat")
+  assert_eq(scoped[0].scope(), "work")
+  assert_eq(scoped[0].key(), "cat")
   // And the memory's own search is the default scope's.
   assert_eq(m.search("cat", 10).length(), 1)
-  assert_eq(m.search("cat", 10)[0].scope, "default")
+  assert_eq(m.search("cat", 10)[0].scope(), "default")
   // The store-wide search sees both, and says which is which.
   let all = m.search_all("cat", 10)
   assert_eq(all.length(), 2)
   let names : Array[String] = []
   for hit in all {
-    names.push(hit.scope)
+    names.push(hit.scope())
   }
   names.sort_by(fn(a, b) { @tesseract.compare_text(a, b) })
   assert_eq(names.join(","), "default,work")
@@ -230,8 +230,8 @@ test "an entry says which scope it is in" {
   let m = scoped_memory_at(0L)
   ignore(m.put("a", "1"))
   ignore(m.scope("work").put("b", "2"))
-  assert_eq(m.entry("a").unwrap().scope, "default")
-  assert_eq(m.scope("work").entry("b").unwrap().scope, "work")
+  assert_eq(m.entry("a").unwrap().scope(), "default")
+  assert_eq(m.scope("work").entry("b").unwrap().scope(), "work")
 }
 
 ///|
@@ -364,4 +364,33 @@ test "the byte total stays right across scopes" {
   assert_eq(m.size_bytes(), 8L)
   ignore(m.advance(1000L))
   assert_eq(m.size_bytes(), 5L)
+}
+
+///|
+/// A scope's filtered key search answers the same as the scope's hits.
+///
+/// The scope's own search is over that scope alone, and the filtered one adds
+/// the labels on top. A caller that asks for the keys rather than the hits
+/// has to get the same answer — otherwise the scope would offer two answers
+/// to one question.
+test "a scope's filtered key search answers the same as its hits" {
+  let m = scoped_memory_at(0L)
+  let work = m.scope("work")
+  ignore(work.put("a", "cat dog"))
+  ignore(work.put("b", "cat"))
+  ignore(m.scope("other").put("c", "cat"))
+  // A filter that asks for nothing holds, so it admits every entry.
+  let everything = @tesseract_memory.filter_all([])
+  let hits = work.search_filtered("cat", 10, everything)
+  let keys = work.search_filtered_keys("cat", 10, everything)
+  assert_eq(hits.length(), keys.length())
+  assert_eq(keys.length(), 2)
+  let mut i = 0
+  while i < keys.length() {
+    assert_eq(hits[i].key(), keys[i])
+    i = i + 1
+  }
+  // The other scope's entry is not a candidate: a scope is a partition of the
+  // keyspace, not a second view of it.
+  assert_false(keys.contains("c"))
 }

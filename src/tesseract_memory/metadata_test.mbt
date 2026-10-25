@@ -48,7 +48,7 @@ fn meta_score_of(s : Double) -> String {
 fn meta_hit_keys(hits : Array[@tesseract_memory.Hit]) -> String {
   let parts : Array[String] = []
   for hit in hits {
-    parts.push(hit.key)
+    parts.push(hit.key())
   }
   parts.join(",")
 }
@@ -159,9 +159,9 @@ test "an entry carries the labels it was written with" {
     ),
   )
   let entry = m.entry("a").unwrap()
-  assert_eq(meta_pairs_of(entry.metadata), "kind=deploy")
-  assert_eq(entry.metadata.has("kind"), true)
-  assert_eq(entry.metadata.has_value("kind", "deploy"), true)
+  assert_eq(meta_pairs_of(entry.metadata()), "kind=deploy")
+  assert_eq(entry.metadata().has("kind"), true)
+  assert_eq(entry.metadata().has_value("kind", "deploy"), true)
 }
 
 ///|
@@ -169,7 +169,7 @@ test "an entry carries the labels it was written with" {
 test "an entry written without labels carries none" {
   let m = meta_memory_at(0L)
   ignore(m.put("a", "x"))
-  assert_eq(m.entry("a").unwrap().metadata.is_empty(), true)
+  assert_eq(m.entry("a").unwrap().metadata().is_empty(), true)
 }
 
 ///|
@@ -353,7 +353,7 @@ test "the filter does not change the score of what it admits" {
     10,
     @tesseract_memory.filter_has("kind"),
   )
-  assert_eq(meta_score_of(filtered[0].score), meta_score_of(plain[0].score))
+  assert_eq(meta_score_of(filtered[0].score()), meta_score_of(plain[0].score()))
 }
 
 ///|
@@ -429,7 +429,7 @@ test "the filter chooses the candidates, and the limit chooses the answer" {
   // The best entry the filter admits, not the best entry there is, and not
   // nothing at all.
   assert_eq(hits.length(), 1)
-  assert_eq(hits[0].key, "admitted_better")
+  assert_eq(hits[0].key(), "admitted_better")
   // And with room for all of them, the two admitted ones are both there.
   let both = m.search_filtered(
     "the cat sat on the mat",
@@ -471,7 +471,7 @@ test "a filtered search over every scope says which scope the hit is in" {
     @tesseract_memory.filter_equals("kind", "note"),
   )
   assert_eq(hits.length(), 1)
-  assert_eq(hits[0].scope, "work")
+  assert_eq(hits[0].scope(), "work")
 }
 
 ///|
@@ -502,7 +502,7 @@ test "the scope's own filtered search looks at that scope only" {
     .scope("work")
     .search_filtered("cat", 10, @tesseract_memory.filter_equals("kind", "note"))
   assert_eq(hits.length(), 1)
-  assert_eq(hits[0].scope, "work")
+  assert_eq(hits[0].scope(), "work")
 }
 
 ///|
@@ -533,7 +533,7 @@ test "the entries can be listed by their labels alone" {
     @tesseract_memory.filter_equals("kind", "note"),
   )
   assert_eq(listed.length(), 1)
-  assert_eq(listed[0].key, "note")
+  assert_eq(listed[0].key(), "note")
 }
 
 ///|
@@ -585,7 +585,7 @@ test "the labels survive a touch" {
     ),
   )
   assert_eq(m.touch("a"), true)
-  assert_eq(meta_pairs_of(m.entry("a").unwrap().metadata), "kind=note")
+  assert_eq(meta_pairs_of(m.entry("a").unwrap().metadata()), "kind=note")
 }
 
 ///|
@@ -613,7 +613,7 @@ test "writing the key again replaces the labels" {
       ),
     ),
   )
-  assert_eq(meta_pairs_of(m.entry("a").unwrap().metadata), "kind=task")
+  assert_eq(meta_pairs_of(m.entry("a").unwrap().metadata()), "kind=task")
 }
 
 ///|

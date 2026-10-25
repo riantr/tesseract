@@ -126,7 +126,7 @@ fn rebuild_index(path : String, m : @tesseract_memory.Memory) -> Unit {
         }
       }
       @tesseract_memory_cli.out(
-        "index " + path + ": " + rows + " rows, " + report.describe(),
+        "index " + index.path() + ": " + rows + " rows, " + report.describe(),
       )
     }
     Err(message) => @tesseract_memory_cli.warn(message)
@@ -156,7 +156,7 @@ fn find_in_index(
       if report.changed > 0 || report.added > 0 || report.removed > 0 {
         @tesseract_memory_cli.warn(
           "the index at " +
-          path +
+          index.path() +
           " is out of step with the store: " +
           report.describe() +
           " (run `index` to rebuild it)",
@@ -259,7 +259,9 @@ fn main {
     match store.checkpoint() {
       Ok(_) => ()
       Err(message) =>
-        @tesseract_memory_cli.warn("could not write the checkpoint: " + message)
+        @tesseract_memory_cli.warn(
+          "could not write the checkpoint to " + store.path() + ": " + message,
+        )
     }
     k = k + 1
   }

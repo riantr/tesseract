@@ -417,7 +417,7 @@ fn cursor_response(target : Int64?) -> RespView {
     let text = "out of range: " +
       wanted.to_string() +
       " (expected 1.." +
-      lat.last_position.to_string() +
+      lat.last_position().to_string() +
       ")"
     return RespView::{
       success: false,
@@ -462,8 +462,8 @@ fn solve_response() -> RespView {
   let digits = @tesseract.canonical_digits(lat)
   let mut filled = 0L
   let mut first_failure = ""
-  let mut p = lat.first_position
-  while p <= lat.last_position {
+  let mut p = lat.first_position()
+  while p <= lat.last_position() {
     let b = StringBuilder::StringBuilder()
     b.write_string("INSERT INTO tesseract (key, value, digit) VALUES ('cell_")
     b.write_object(p)
@@ -496,7 +496,7 @@ fn solve_response() -> RespView {
     " 个格子" +
     first_failure
   RespView::{
-    success: filled == lat.total,
+    success: filled == lat.total(),
     operation: "SOLVE",
     message: summary,
     error: first_failure,

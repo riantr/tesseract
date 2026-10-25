@@ -31,7 +31,7 @@ test "the kind is a label, so the label system does the work" {
   ignore(put_kind(m, "task", "todo", "ship it"))
   let entry = m.entry("todo").unwrap()
   // The kind is the label, and the label is there for a filter to find.
-  assert_eq(entry.metadata.has_value("kind", "task"), true)
+  assert_eq(entry.metadata().has_value("kind", "task"), true)
   assert_eq(entry.kind(), Some("task"))
   // And a filter that asks for that label admits the entry.
   let hits = m.search_filtered(
@@ -90,8 +90,8 @@ test "the entries of one kind, and only those" {
   ignore(m.put("plain", "4"))
   let tasks = m.entries_of_kind("task")
   assert_eq(tasks.length(), 2)
-  assert_eq(tasks[0].key, "a")
-  assert_eq(tasks[1].key, "c")
+  assert_eq(tasks[0].key(), "a")
+  assert_eq(tasks[1].key(), "c")
 }
 
 ///|

@@ -41,11 +41,11 @@ fn spec_hit_keys(m : @tesseract_memory.Memory, query : String) -> String {
 test "the default importance is one, and an entry counts fully by default" {
   let m = spec_memory_at(0L)
   ignore(m.put("a", "cat"))
-  assert_eq(m.entry("a").unwrap().importance, 1.0)
+  assert_eq(m.entry("a").unwrap().importance(), 1.0)
   let hits = m.search("cat", 5)
   assert_eq(hits.length(), 1)
-  assert_eq(spec_score_of(hits[0].score), "1.000")
-  assert_eq(hits[0].importance, 1.0)
+  assert_eq(spec_score_of(hits[0].score()), "1.000")
+  assert_eq(hits[0].importance(), 1.0)
 }
 
 ///|
@@ -67,11 +67,11 @@ test "an importance of half is found half as strongly" {
   let hits = m.search("cat", 10)
   assert_eq(hits.length(), 2)
   // The one that counts fully is found first.
-  assert_eq(hits[0].key, "a")
-  assert_eq(spec_score_of(hits[0].score), "1.000")
-  assert_eq(hits[1].key, "b")
-  assert_eq(spec_score_of(hits[1].score), "0.500")
-  assert_eq(hits[1].importance, 0.5)
+  assert_eq(hits[0].key(), "a")
+  assert_eq(spec_score_of(hits[0].score()), "1.000")
+  assert_eq(hits[1].key(), "b")
+  assert_eq(spec_score_of(hits[1].score()), "0.500")
+  assert_eq(hits[1].importance(), 0.5)
 }
 
 ///|
@@ -94,8 +94,8 @@ test "an importance can turn a better match into a worse one" {
   // query's vocabulary against a fifth of it.
   assert_eq(spec_hit_keys(m, "cat"), "a,b")
   let hits = m.search("cat", 10)
-  assert_eq(spec_score_of(hits[0].score), "0.200")
-  assert_eq(spec_score_of(hits[1].score), "0.100")
+  assert_eq(spec_score_of(hits[0].score()), "0.200")
+  assert_eq(spec_score_of(hits[1].score()), "0.100")
 }
 
 ///|
@@ -230,9 +230,9 @@ test "the importance survives a read" {
     ),
   )
   ignore(m.get("a"))
-  assert_eq(m.entry("a").unwrap().importance, 0.3)
+  assert_eq(m.entry("a").unwrap().importance(), 0.3)
   ignore(m.touch("a"))
-  assert_eq(m.entry("a").unwrap().importance, 0.3)
+  assert_eq(m.entry("a").unwrap().importance(), 0.3)
 }
 
 ///|
@@ -280,11 +280,11 @@ test "a scope's entries carry their importance too" {
       @tesseract_memory.default_spec().with_importance(0.25),
     ),
   )
-  assert_eq(work.entry("a").unwrap().importance, 0.25)
+  assert_eq(work.entry("a").unwrap().importance(), 0.25)
   let hits = work.search("cat", 5)
   assert_eq(hits.length(), 1)
-  assert_eq(spec_score_of(hits[0].score), "0.250")
-  assert_eq(hits[0].importance, 0.25)
+  assert_eq(spec_score_of(hits[0].score()), "0.250")
+  assert_eq(hits[0].importance(), 0.25)
   // And a spec the store cannot honour is refused in a scope as well.
   assert_false(
     work.put_spec(

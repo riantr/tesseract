@@ -445,3 +445,52 @@ test "runs accumulate and each keeps its own rows" {
   }
   remove(path)
 }
+
+///|
+/// A scan with one finding line in it, and nothing else.
+///
+/// The format is the analyzer's own: a `TARGET`, a `SCANNED` count, one file
+/// header, the finding under it, and the `SUMMARY` that says the run
+/// finished. Only the finding line is the test's to change.
+fn scan_with(finding : String) -> String {
+  let lines = [
+    "TARGET\t<ROOT>\t<ROOT>", "SCANNED\t1 files under <ROOT>", "PARTIAL\t.mbt\tdefects=1\tnotices=0\tread up to line 10, 5 after it not shown\t<ROOT>/a.mbt",
+    finding, "SUMMARY\tfiles=1\tparsed=1\tactionable=1\tnotices=0\tunreliable=0\twithheld=0\ttotal=1\t(actionable+notices+unreliable+withheld = total)",
+  ]
+  lines.join("\n")
+}
+
+///|
+/// A finding's numbers are the ones the core reads out of the line.
+///
+/// The line and the column of a finding are read with the core's own integer
+/// parser, and the core refuses anything that is not a decimal. So a line
+/// whose column is not a number is not a finding: it is dropped rather than
+/// reported with a column of zero, which would point at the wrong place in
+/// the file.
+///
+/// The message is trimmed with the core's own trimming, so the text a finding
+/// carries is the text between the separator and the family the tool appends
+/// — not the text with the tool's padding still on it.
+test "a finding's numbers are the ones the core reads out of the line" {
+  // The core's parser is the one that decides what a number is.
+  assert_eq(@tesseract.parse_int("12"), Some(12))
+  assert_eq(@tesseract.parse_int("12x"), None)
+  // A finding the parser can read comes back with the numbers it said.
+  let report = @tesseract_sa.parse(
+    scan_with(" 12:3 - error: broken (ParseError) [structural]"),
+  ).unwrap()
+  assert_eq(report.findings.length(), 1)
+  let finding = report.findings[0]
+  assert_eq(finding.line, 12)
+  assert_eq(finding.column, 3)
+  assert_eq(finding.severity, "error")
+  assert_eq(finding.family, "ParseError")
+  assert_eq(finding.lenses, "structural")
+  assert_eq(finding.message, "broken")
+  // And a line whose column is not a number is not a finding at all.
+  let broken = @tesseract_sa.parse(
+    scan_with(" 12:x - error: broken (ParseError) [structural]"),
+  ).unwrap()
+  assert_eq(broken.findings.length(), 0)
+}

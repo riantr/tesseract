@@ -35,6 +35,9 @@ import { ROOT, sourceFiles, log } from "./lib.mjs";
 
 const findings = [];
 
+/** The waivers that matched a finding on this run. */
+const usedWaivers = new Set();
+
 function finding(id, severity, what, where, why, observed) {
   findings.push({ id, severity, what, where, why, observed });
 }
@@ -476,6 +479,7 @@ function main() {
     ["A3.1", "an entry point checks the public fields of what it stores"],
     ["A4.1", "a public symbol is referenced somewhere in the module"],
     ["A4.2", "a public symbol is used by the module, not only by its tests"],
+    ["A5.1", "a waiver that no longer matches anything in the module"],
   ];
   for (const [id, what] of RULES) {
     const n = findings.filter((f) => f.id === id).length;
@@ -626,8 +630,18 @@ function auditErrorStyles(surfaces) {
       ...(styles.get("structured error type") || []),
       ...(styles.get("structured response") || []),
     ];
+    const short = pkg.replace("riantr/tesseract/", "");
+    const used = [];
     if (bare.length > 0 && structured.length > 0) {
       for (const fn of bare) {
+        const waiver = waiverFor("A2.1", `${short}::${fn.head}`);
+        if (waiver) {
+          // The vocabulary of this package has been decided on purpose. The
+          // decision is printed rather than silently applied.
+          usedWaivers.add(waiver);
+          used.push(waiver);
+          continue;
+        }
         finding(
           "A2.1",
           "MEDIUM",
@@ -638,14 +652,24 @@ function auditErrorStyles(surfaces) {
         );
       }
     } else if (bare.length > 0) {
-      finding(
-        "A2.2",
-        "LOW",
-        `every failing public call in ${pkg} reports a bare String message`,
-        surfaces.get(pkg).file,
-        "a caller can compare the failure with another failure, but cannot branch on a machine-readable code; the prose is the whole contract.",
-        `${bare.length} function(s), e.g. ${examples.get("bare string message")}`,
-      );
+      const waiver = waiverFor("A2.2", short);
+      if (waiver) {
+        usedWaivers.add(waiver);
+        used.push(waiver);
+      } else {
+        finding(
+          "A2.2",
+          "LOW",
+          `every failing public call in ${pkg} reports a bare String message`,
+          surfaces.get(pkg).file,
+          "a caller can compare the failure with another failure, but cannot branch on a machine-readable code; the prose is the whole contract.",
+          `${bare.length} function(s), e.g. ${examples.get("bare string message")}`,
+        );
+      }
+    }
+    for (const w of used) {
+      log(`      waived: ${w.symbol}`);
+      log(`        ${w.why}`);
     }
   }
   log("");
@@ -869,6 +893,249 @@ function callsValidator(body, given) {
  * A4 — the dead public surface
  * ------------------------------------------------------------------ */
 
+/**
+ * The public symbols the library deliberately does not call itself.
+ *
+ * A published package's surface is for its callers, and a symbol that only
+ * the module's own tests reference is not a symbol the library forgot to
+ * use — it is a symbol that is for somebody else. `Recency::is_active`
+ * exists so a *caller* can say whether the policy is doing anything; the
+ * store asks the policy for a weight and never asks whether it is on. That
+ * is not the library failing to use its own API, it is the API being for a
+ * consumer.
+ *
+ * Each entry says why, because a waiver whose reason stops being true is a
+ * defect: the reason is the part that has to be read. A waiver that no
+ * longer matches a finding is reported too — a stale waiver is a claim about
+ * the code that the code has stopped supporting.
+ */
+const A4_WAIVERS = [
+  {
+    symbol: "src/tesseract::all_slabs",
+    why: "the slabs of a lattice, for a caller that wants to group it; the library builds the one slab it needs through slab_through and never wants all of them at once",
+  },
+  {
+    symbol: "src/tesseract::coord_filter",
+    why: "a filter over the coordinates, which a caller hands to a query; the library's own queries name their coordinates directly",
+  },
+  {
+    symbol: "src/tesseract::fixed_clock",
+    why: "a frozen clock is a test and a reporting tool; the library stamps with the logical counter or with the host clock and never with a frozen one",
+  },
+  {
+    symbol: "src/tesseract::line_key",
+    why: "the name a caller gives a line it wants to talk about; the library names a line by the coordinates it shares",
+  },
+  {
+    symbol: "src/tesseract::neighbours",
+    why: "the cells next to a cell along one axis; the library's peer queries work on the cells that are occupied rather than on the ones that are adjacent",
+  },
+  {
+    symbol: "src/tesseract::pad_left",
+    why: "a consumer that renders a table pads its own columns; the library's own output is fixed-width and pads with pad_right",
+  },
+  {
+    symbol: "src/tesseract::parse_error_message",
+    why: "the prose a caller shows a person; the library carries the structured error, and this is its rendering",
+  },
+  {
+    symbol: "src/tesseract::peer_count",
+    why: "the number of lines through a lattice, for a status readout; the library's own queries count the peers they actually find",
+  },
+  {
+    symbol: "src/tesseract::plane_through",
+    why: "a plane is a grouping a caller asks for; the library's own sub-structures are lines and slabs",
+  },
+  {
+    symbol: "src/tesseract::solve_lattice",
+    why: "the closed-form solution, which a caller asks for as a whole; the library fills one cell at a time through the rule checks",
+  },
+  {
+    symbol: "src/tesseract::TesseractLogger::clock_of",
+    why: "which clock a logger stamps with is a question a report asks about a logger; the logger knows its own clock and never asks",
+  },
+  {
+    symbol: "src/tesseract::TesseractLogger::log_debug",
+    why: "debug is a level a caller chooses; the library logs its own outcomes at info and at error",
+  },
+  {
+    symbol: "src/tesseract_dgp::cell_count",
+    why: "the ceiling a caller sizes a dataset against; the library asks the lattice it is given and never needs the number",
+  },
+  {
+    symbol: "src/tesseract_dgp::irm_dataset",
+    why: "the IRM dataset is a caller's dataset; the library records whatever dataset it is handed",
+  },
+  {
+    symbol: "src/tesseract_dgp::plr_dataset",
+    why: "the PLR dataset is a caller's dataset; the library records whatever dataset it is handed",
+  },
+  {
+    symbol: "src/tesseract_dgp::read_back",
+    why: "reading a dataset back is a caller's check on what was recorded",
+  },
+  {
+    symbol: "src/tesseract_dgp::record",
+    why: "recording a dataset is a caller's action on a store the library hands out",
+  },
+  {
+    symbol: "src/tesseract_dgp::to_sql",
+    why: "the escape hatch for a caller who wants SQL rather than a recording",
+  },
+  {
+    symbol: "src/tesseract_memory::filter_any",
+    why: "a filter combinator, for a caller composing several conditions into one",
+  },
+  {
+    symbol: "src/tesseract_memory::new_memory",
+    why: "a convenience for a caller who wants a memory with a capacity and the host clock; the library's own tests need the clock to be a value, so they build it with new_memory_with_clock",
+  },
+  {
+    symbol: "src/tesseract_memory::Memory::entries_of_kind",
+    why: "retrieval by kind across every scope, which is a caller's query",
+  },
+  {
+    symbol: "src/tesseract_memory::Memory::search_all_filtered_keys",
+    why: "the keys of a store-wide filtered search, for a caller that only wants to know what to read",
+  },
+  {
+    symbol: "src/tesseract_memory::Memory::search_all_keys",
+    why: "the keys of a store-wide search, for a caller that only wants to know what to read",
+  },
+  {
+    symbol: "src/tesseract_memory::Memory::search_filtered_keys",
+    why: "the keys of a filtered search, for a caller that only wants to know what to read",
+  },
+  {
+    symbol: "src/tesseract_memory::Memory::search_keys",
+    why: "the keys of a search, for a caller that only wants to know what to read",
+  },
+  {
+    symbol: "src/tesseract_memory::Metadata::with_kind",
+    why: "a convenience for a caller adding the kind label to a set of labels",
+  },
+  {
+    symbol: "src/tesseract_memory::Recency::is_active",
+    why: "a predicate for a caller reporting on the policy; the store asks the policy for a weight and never asks whether it is on",
+  },
+  {
+    symbol: "src/tesseract_memory::Scope::entries_of_kind",
+    why: "retrieval by kind within one scope, which is a caller's query",
+  },
+  {
+    symbol: "src/tesseract_memory::Scope::search_filtered_keys",
+    why: "the keys of a scope's filtered search, for a caller that only wants to know what to read",
+  },
+  {
+    symbol: "src/tesseract_memory::Scope::search_keys",
+    why: "the keys of a scope's search, for a caller that only wants to know what to read",
+  },
+  {
+    symbol: "src/tesseract_memory_db::DurableMemory::reload",
+    why: "re-reading the file is a caller's action; the store writes the file on its own schedule",
+  },
+];
+
+/** The name a waiver list writes a symbol under. */
+function symbolKey(pkg, owner, name) {
+  const short = pkg.startsWith("riantr/tesseract/")
+    ? pkg.slice("riantr/tesseract/".length)
+    : pkg;
+  return `${short}::${owner ? `${owner}::` : ""}${name}`;
+}
+
+/**
+ * The error vocabulary this project has decided about.
+ *
+ * A rule that measures a **shape** cannot say whether the shape is the right
+ * one — only that it is not the shape the rule prefers. The error vocabulary
+ * of a package is a design decision, and this is the project's decision:
+ *
+ * - **A2.2** — a package whose every failure is prose is *uniform*, and
+ *   uniform is the state the rule wants for mixing. The two packages below
+ *   are uniform on purpose: every failure in them is either the file could
+ *   not be read or the store refused the operation, and every caller shows
+ *   that failure to a person. A machine-readable code would be read by
+ *   nobody, and it would be a second vocabulary to keep in step with the
+ *   first.
+ *
+ * - **A2.1** — the core package still reports some failures as prose and
+ *   some as values: `lex` and `parse_statement` return their own enums, while
+ *   the importers, the geometry and the resize return a `String`. That is a
+ *   genuine inconsistency, and unifying it is a change to eight published
+ *   signatures, their call sites, and the README's error table. It is
+ *   planned as its own change rather than folded into the release that
+ *   already breaks the surface for the opaque value types: one breaking
+ *   change per release is legible, and two unrelated ones are not.
+ *
+ * Each entry says why, because a waiver whose reason stops being true is a
+ * defect: the reason is the part that has to be read.
+ */
+const A2_WAIVERS = [
+  {
+    id: "A2.1",
+    symbol: "src/tesseract::import_markdown",
+    why: "the importers report prose and the parser reports values; unifying them is a change to eight published signatures and the README's error table, and is planned as its own release rather than folded into the one that already breaks the surface for the opaque value types",
+  },
+  {
+    id: "A2.1",
+    symbol: "src/tesseract::import_sql",
+    why: "same decision as import_markdown: the prose is what every caller shows a person, and none of them branches on it",
+  },
+  {
+    id: "A2.1",
+    symbol: "src/tesseract::import_tsr",
+    why: "same decision as import_markdown: the prose is what every caller shows a person, and none of them branches on it",
+  },
+  {
+    id: "A2.1",
+    symbol: "src/tesseract::json_path_parse",
+    why: "same decision as import_markdown: a malformed path is a prose message for the person who wrote it",
+  },
+  {
+    id: "A2.1",
+    symbol: "src/tesseract::lattice_of",
+    why: "same decision as import_markdown: the refusal names the side that was refused, which is the whole content of the failure",
+  },
+  {
+    id: "A2.1",
+    symbol: "src/tesseract::plane_through",
+    why: "same decision as import_markdown: the refusal names the axis that was refused, which is the whole content of the failure",
+  },
+  {
+    id: "A2.1",
+    symbol: "src/tesseract::Tesseract::set_side",
+    why: "same decision as import_markdown: the refusal names the side that was refused and what it would have cost",
+  },
+  {
+    id: "A2.1",
+    symbol: "src/tesseract_sa::parse",
+    why: "the scan parser reports prose and the rest of the package raises; the refusal is the analyzer's own message about a run that did not finish, and every caller shows it to a person",
+  },
+  {
+    id: "A2.2",
+    symbol: "src/tesseract_memory_db",
+    why: "every failure in this package is either the file could not be read or the store refused the operation, and every caller shows it to a person; a machine-readable code would be read by nobody and would be a second vocabulary to keep in step with the prose",
+  },
+  {
+    id: "A2.2",
+    symbol: "src/tesseract_memory_index",
+    why: "same decision as tesseract_memory_db: the index's failures are the file could not be read, or the index is out of step with the store, and both are shown to a person",
+  },
+];
+
+/** Every waiver, of every rule. */
+const ALL_WAIVERS = [...A4_WAIVERS, ...A2_WAIVERS];
+
+/** The waiver that covers a finding, if one does. */
+function waiverFor(id, key) {
+  // The A4 list is all about A4.2, so it does not name the rule on each
+  // entry; the A2 list does, because it covers two rules.
+  return ALL_WAIVERS.find(
+    (w) => (w.id || "A4.2") === id && w.symbol === key,
+  );
+}
+
 function auditDeadSurface(surfaces) {
   const files = sourceFiles();
   const stripped = new Map();
@@ -876,6 +1143,7 @@ function auditDeadSurface(surfaces) {
     stripped.set(file, stripNoise(fs.readFileSync(file, "utf8")));
   }
   const isTest = (file) => file.endsWith("_test.mbt");
+  let waived = 0;
 
   /** Where a name is referenced, outside its own definition. */
   const references = (name, owner) => {
@@ -960,8 +1228,17 @@ function auditDeadSurface(surfaces) {
           full,
         );
       } else if (refs.every((r) => r.test)) {
-        testOnly++;
         const full = `${pkg}::${sym.owner ? `${sym.owner}::` : ""}${sym.name}`;
+        const waiver = waiverFor("A4.2", symbolKey(pkg, sym.owner, sym.name));
+        if (waiver) {
+          // A symbol the library deliberately does not call itself. The
+          // finding is not raised; the waiver is printed instead, so the
+          // decision is visible rather than silent.
+          waived++;
+          usedWaivers.add(waiver);
+          continue;
+        }
+        testOnly++;
         finding(
           "A4.2",
           "LOW",
@@ -975,8 +1252,34 @@ function auditDeadSurface(surfaces) {
   }
   log(`    ${dead} symbol(s) with no reference in the module`);
   log(`    ${testOnly} symbol(s) referenced only by tests`);
+  log(`    ${waived} symbol(s) referenced only by tests, and waived`);
   log(`    ${derivedCount} symbol(s) the compiler generated from a derive`);
   log("");
+
+  log("  the waivers, and the reason each one rests on");
+  if (usedWaivers.size === 0) {
+    log("  none");
+  }
+  for (const w of usedWaivers) {
+    log(`  ${w.symbol}`);
+    log(`    ${w.why}`);
+  }
+  log("");
+
+  // A waiver that no longer covers anything is a claim about the code that
+  // the code has stopped supporting. It is a defect in the waiver list, not
+  // a quiet leftover, so it is reported.
+  for (const w of ALL_WAIVERS) {
+    if (usedWaivers.has(w)) continue;
+    finding(
+      "A5.1",
+      "LOW",
+      `a waiver no longer matches anything in the module: ${w.id} ${w.symbol}`,
+      "qa/api.mjs",
+      "the waiver says this finding has been decided on purpose, and the finding is no longer in that position — either it has gone, or it has been fixed. A waiver that covers nothing is a claim about the code that the code has stopped supporting.",
+      `${w.id} ${w.symbol}`,
+    );
+  }
 }
 
 /** The methods the compiler generates for a `derive(...)` clause. */

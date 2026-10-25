@@ -21,7 +21,7 @@ test "canonical digits are never 0 and stay in 1..side" {
   let mut bad = 0
   let mut i = 0
   while i < d.length() {
-    if d[i] < 1L || d[i] > lat.max_digit {
+    if d[i] < 1L || d[i] > lat.max_digit() {
       bad = bad + 1
     }
     i = i + 1
@@ -112,7 +112,7 @@ test "digit_at ignores out-of-range positions instead of trapping" {
   let d = @tesseract.canonical_digits(lat)
   assert_eq(@tesseract.digit_at(lat, d, 0L), @tesseract.NO_DIGIT)
   assert_eq(
-    @tesseract.digit_at(lat, d, lat.last_position + 1L),
+    @tesseract.digit_at(lat, d, lat.last_position() + 1L),
     @tesseract.NO_DIGIT,
   )
   assert_true(@tesseract.digit_at(lat, d, 1L) >= 1L)
@@ -128,7 +128,7 @@ test "the canonical solution shifts by one along every axis" {
       // The loop bound is what makes these `Some`; `coord_at` itself is
       // checked and would answer None for an axis outside 0..DIM-1.
       let here_coord = @tesseract.coord_at(c, axis).unwrap()
-      if here_coord < lat.side - 1L {
+      if here_coord < lat.side() - 1L {
         let next = @tesseract.with_coord(c, axis, here_coord + 1L)
         let here = @tesseract.digit_at(lat, d, @tesseract.position_of(lat, c))
         let there = @tesseract.digit_at(
@@ -136,7 +136,7 @@ test "the canonical solution shifts by one along every axis" {
           d,
           @tesseract.position_of(lat, next),
         )
-        assert_eq(there, here % lat.side + 1L)
+        assert_eq(there, here % lat.side() + 1L)
       }
     }
     axis = axis + 1L
@@ -158,7 +158,7 @@ test "every line of the canonical solution holds every digit" {
       }
       i = i + 1
     }
-    if seen.length().to_int64() != lat.side {
+    if seen.length().to_int64() != lat.side() {
       incomplete = incomplete + 1
     }
   }

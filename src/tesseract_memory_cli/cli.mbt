@@ -111,26 +111,38 @@ pub fn usage(
 /// command. An option that is missing its value is not an option: it is
 /// treated as a command, and a command that is not one is reported.
 pub fn parse_session(argv : ArrayView[String]) -> (Options, Array[String]) {
-  let mut capacity = 100
-  let mut max_bytes = 0L
-  let mut default_ttl = @tesseract_memory.ttl_never()
-  let mut eviction = @tesseract_memory.evict_lru()
-  let mut similarity = @tesseract_memory.similarity_jaccard()
-  let mut recency = @tesseract_memory.recency_none()
-  let mut manual = false
-  let mut scope_name = @tesseract_memory.default_scope_name()
-  let mut file : String? = None
+  // The defaults come from `default_options`, so the options a session starts
+  // with are the ones the function says it has.
+  //
+  // They used to be written out a second time here, and that was not a
+  // duplication of convenience: the two statements were independent, so a
+  // change to one of them left the other saying something else. The defaults
+  // the CLI actually used were the ones written *here*, and the ones a caller
+  // read from `default_options` were the ones written there.
+  let defaults = default_options()
+  let mut capacity = defaults.capacity
+  let mut max_bytes = defaults.max_bytes
+  let mut default_ttl = defaults.default_ttl
+  let mut eviction = defaults.eviction
+  let mut similarity = defaults.similarity
+  let mut recency = defaults.recency
+  let mut manual = defaults.manual
+  let mut scope_name = defaults.scope_name
+  let mut file : String? = defaults.file
   let commands : Array[String] = []
   let mut i = 0
   while i < argv.length() {
     let a = argv[i]
     if a == "--capacity" && i + 1 < argv.length() {
-      capacity = @tesseract.parse_int(argv[i + 1]).unwrap_or(100)
+      capacity = @tesseract.parse_int(argv[i + 1]).unwrap_or(defaults.capacity)
       i = i + 2
       continue
     }
     if a == "--max-bytes" && i + 1 < argv.length() {
-      max_bytes = @tesseract.parse_int(argv[i + 1]).unwrap_or(0).to_int64()
+      max_bytes = match @tesseract.parse_int(argv[i + 1]) {
+        Some(v) => v.to_int64()
+        None => defaults.max_bytes
+      }
       i = i + 2
       continue
     }
@@ -765,11 +777,11 @@ fn search(scope : @tesseract_memory.Scope, words : Array[String]) -> Unit {
   }
   for hit in hits {
     out(
-      hit.key +
+      hit.key() +
       "  " +
-      format_score(hit.score) +
+      format_score(hit.score()) +
       "  " +
-      hit.value +
+      hit.value() +
       labels_of(hit),
     )
   }
@@ -797,13 +809,13 @@ fn search_all(m : @tesseract_memory.Memory, words : Array[String]) -> Unit {
   }
   for hit in hits {
     out(
-      hit.scope +
+      hit.scope() +
       "  " +
-      hit.key +
+      hit.key() +
       "  " +
-      format_score(hit.score) +
+      format_score(hit.score()) +
       "  " +
-      hit.value +
+      hit.value() +
       labels_of(hit),
     )
   }
@@ -836,10 +848,10 @@ fn entries(
 ///
 /// A hit with no labels says nothing extra: the line would end in a space.
 fn labels_of(hit : @tesseract_memory.Hit) -> String {
-  if hit.metadata.is_empty() {
+  if hit.metadata().is_empty() {
     ""
   } else {
-    "  " + hit.metadata.describe()
+    "  " + hit.metadata().describe()
   }
 }
 
@@ -954,7 +966,9 @@ pub fn demo(m : @tesseract_memory.Memory) -> Unit {
   out("2. find the entries that are like 'cat'")
   out("   (the store's similarity, jaccard: shared words over combined words)")
   for hit in m.search("cat", 3) {
-    out("   " + hit.key + "  " + format_score(hit.score) + "  " + hit.value)
+    out(
+      "   " + hit.key() + "  " + format_score(hit.score()) + "  " + hit.value(),
+    )
   }
   out("")
   out("3. compare by shape instead of by words")
@@ -963,11 +977,13 @@ pub fn demo(m : @tesseract_memory.Memory) -> Unit {
   for entry in m.entries() {
     let score = @tesseract_memory.similarity_score(
       shape_query,
-      entry.value,
+      entry.value(),
       @tesseract_memory.similarity_structure(),
     )
     if score > 0.0 {
-      out("   " + entry.key + "  " + format_score(score) + "  " + entry.value)
+      out(
+        "   " + entry.key() + "  " + format_score(score) + "  " + entry.value(),
+      )
     }
   }
   out("")

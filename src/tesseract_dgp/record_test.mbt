@@ -192,17 +192,17 @@ test "a dataset larger than the lattice is refused, not wrapped" {
   let db = fresh()
   let report = @tesseract_dgp.record(db, data)
   assert_eq(report.offered, 93)
-  assert_eq(report.recorded, lat.total.to_int())
+  assert_eq(report.recorded, lat.total().to_int())
   assert_eq(report.rejected, extra.to_int())
-  assert_eq(report.stopped_at, lat.last_position + 1L)
-  assert_eq(@tesseract.Tesseract::occupancy(db), lat.total)
-  // The first `lat.total` are the first `lat.total` - the overflow must not have
+  assert_eq(report.stopped_at, lat.last_position() + 1L)
+  assert_eq(@tesseract.Tesseract::occupancy(db), lat.total())
+  // The first `lat.total()` are the first `lat.total()` - the overflow must not have
   // clobbered them.
   let rows = @tesseract_dgp.recorded(db)
   assert_eq(rows[0].key, @tesseract_dgp.observation_key(0))
   assert_eq(
-    rows[@tesseract.slot_of(lat.last_position)].key,
-    @tesseract_dgp.observation_key(lat.total.to_int() - 1),
+    rows[@tesseract.slot_of(lat.last_position())].key,
+    @tesseract_dgp.observation_key(lat.total().to_int() - 1),
   )
 }
 
@@ -280,4 +280,26 @@ test "a DGP is a function of its seed" {
   let a = @tesseract_dgp.plr_dataset(81, 4, 0.5, 7)
   let b = @tesseract_dgp.plr_dataset(81, 4, 0.5, 7)
   assert_identical(a.observations, b.observations)
+}
+
+///|
+/// The cell count is the lattice's own, not a number written into this file.
+///
+/// A dataset cannot be bigger than the lattice it is recorded into, and the
+/// lattice is whichever side the store was built at. A constant here would
+/// have been right for one side and quietly wrong for every other — the same
+/// answer for two different stores.
+test "the cell count is the lattice's own" {
+  let three = @tesseract.new_db(
+    "tesseract",
+    @tesseract.lattice_of(3L).unwrap(),
+    @tesseract.new_logger("test"),
+  )
+  assert_eq(@tesseract_dgp.cell_count(three), 81L)
+  let four = @tesseract.new_db(
+    "tesseract",
+    @tesseract.lattice_of(4L).unwrap(),
+    @tesseract.new_logger("test"),
+  )
+  assert_eq(@tesseract_dgp.cell_count(four), 256L)
 }

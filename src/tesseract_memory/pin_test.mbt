@@ -155,7 +155,7 @@ test "a pinned entry is still found by a search" {
   ignore(m.put_spec("a", "the cat sat", pinned_spec()))
   let hits = m.search("cat", 5)
   assert_eq(hits.length(), 1)
-  assert_eq(hits[0].key, "a")
+  assert_eq(hits[0].key(), "a")
 }
 
 ///|
@@ -194,13 +194,13 @@ test "pinning changes nothing else about the entry" {
   let before = m.entry("a").unwrap()
   assert_eq(m.pin("a"), true)
   let after = m.entry("a").unwrap()
-  assert_eq(after.added_at, before.added_at)
-  assert_eq(after.last_seen, before.last_seen)
-  assert_eq(after.hits, before.hits)
-  assert_eq(after.deadline, before.deadline)
-  assert_eq(after.importance, before.importance)
-  assert_eq(after.metadata.pairs().length(), 1)
-  assert_eq(after.pinned, true)
+  assert_eq(after.added_at(), before.added_at())
+  assert_eq(after.last_seen(), before.last_seen())
+  assert_eq(after.hits(), before.hits())
+  assert_eq(after.deadline(), before.deadline())
+  assert_eq(after.importance(), before.importance())
+  assert_eq(after.metadata().pairs().length(), 1)
+  assert_eq(after.pinned(), true)
 }
 
 ///|
@@ -232,7 +232,7 @@ test "the pin survives a touch" {
   let m = pin_memory_at(0L)
   ignore(m.put_spec("a", "x", pinned_spec()))
   assert_eq(m.touch("a"), true)
-  assert_eq(m.entry("a").unwrap().pinned, true)
+  assert_eq(m.entry("a").unwrap().pinned(), true)
 }
 
 ///|
@@ -244,9 +244,9 @@ test "writing the key again replaces the pin" {
   let m = pin_memory_at(0L)
   ignore(m.put_spec("a", "x", pinned_spec()))
   ignore(m.put("a", "y"))
-  assert_eq(m.entry("a").unwrap().pinned, false)
+  assert_eq(m.entry("a").unwrap().pinned(), false)
   ignore(m.put_spec("a", "z", pinned_spec()))
-  assert_eq(m.entry("a").unwrap().pinned, true)
+  assert_eq(m.entry("a").unwrap().pinned(), true)
 }
 
 ///|
@@ -310,9 +310,9 @@ test "the scope's own pin and unpin address that scope" {
   ignore(m.put("a", "x"))
   assert_eq(m.scope("work").pin("a"), false)
   assert_eq(m.pin("a"), true)
-  assert_eq(m.entry("a").unwrap().pinned, true)
+  assert_eq(m.entry("a").unwrap().pinned(), true)
   assert_eq(m.unpin("a"), true)
-  assert_eq(m.entry("a").unwrap().pinned, false)
+  assert_eq(m.entry("a").unwrap().pinned(), false)
 }
 
 ///|

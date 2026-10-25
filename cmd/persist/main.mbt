@@ -99,7 +99,7 @@ fn print_status(db : @tesseract.Tesseract) -> Unit {
     " = " +
     @tesseract.sudoku_line_count(lat).to_string() +
     " lines, " +
-    (@tesseract.DIM * lat.side).to_string() +
+    (@tesseract.DIM * lat.side()).to_string() +
     " slabs",
   )
   out("records : " + s.current_count.to_string())

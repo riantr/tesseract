@@ -8,12 +8,15 @@
 test "there are 108 lines of 3 cells, and every cell lies on exactly 4" {
   let lat = @tesseract.default_lattice()
   let lines = @tesseract.all_lines(lat)
-  assert_eq(lines.length().to_int64(), @tesseract.DIM * lat.total / lat.side)
+  assert_eq(
+    lines.length().to_int64(),
+    @tesseract.DIM * lat.total() / lat.side(),
+  )
   assert_eq(lines.length(), 108)
   let counts = @tesseract.empty_digits(lat)
   let mut i = 0
   while i < lines.length() {
-    assert_eq(lines[i].length().to_int64(), lat.side)
+    assert_eq(lines[i].length().to_int64(), lat.side())
     let mut j = 0
     while j < lines[i].length() {
       let slot = @tesseract.index0(lat, lines[i][j]).to_int()
@@ -24,7 +27,7 @@ test "there are 108 lines of 3 cells, and every cell lies on exactly 4" {
   }
   let mut wrong = 0
   let mut k = 0L
-  while k < lat.total {
+  while k < lat.total() {
     if counts[k.to_int()] != @tesseract.DIM {
       wrong = wrong + 1
     }
@@ -57,11 +60,11 @@ test "no two lines are the same set of cells" {
 test "there are 12 slabs of 27 cells" {
   let lat = @tesseract.default_lattice()
   let slabs = @tesseract.all_slabs(lat)
-  assert_eq(slabs.length().to_int64(), @tesseract.DIM * lat.side)
+  assert_eq(slabs.length().to_int64(), @tesseract.DIM * lat.side())
   assert_eq(slabs.length(), 12)
   let mut i = 0
   while i < slabs.length() {
-    assert_eq(slabs[i].length().to_int64(), lat.total / lat.side)
+    assert_eq(slabs[i].length().to_int64(), lat.total() / lat.side())
     i = i + 1
   }
 }
@@ -73,7 +76,7 @@ test "every cell lies in exactly 4 slabs, one per axis" {
   let mut axis = 0L
   while axis < @tesseract.DIM {
     let mut v = 0L
-    while v < lat.side {
+    while v < lat.side() {
       let anchor = @tesseract.with_coord(
         @tesseract.coords(0L, 0L, 0L, 0L),
         axis,
@@ -89,7 +92,7 @@ test "every cell lies in exactly 4 slabs, one per axis" {
   }
   let mut wrong = 0
   let mut k = 0L
-  while k < lat.total {
+  while k < lat.total() {
     if counts[k.to_int()] != @tesseract.DIM {
       wrong = wrong + 1
     }
@@ -169,7 +172,7 @@ test "a plane fixes two axes and holds 9 cells" {
       []
     }
   }
-  assert_eq(plane.length().to_int64(), lat.total / (lat.side * lat.side))
+  assert_eq(plane.length().to_int64(), lat.total() / (lat.side() * lat.side()))
   assert_eq(plane.length(), 9)
   let mut off_axis = 0
   let mut i = 0
@@ -236,14 +239,14 @@ test "line and slab counts follow the side, not a constant" {
     }
     assert_eq(
       @tesseract.all_lines(lat).length().to_int64(),
-      @tesseract.DIM * lat.side * lat.side * lat.side,
+      @tesseract.DIM * lat.side() * lat.side() * lat.side(),
     )
     assert_eq(
       @tesseract.all_slabs(lat).length().to_int64(),
-      @tesseract.DIM * lat.side,
+      @tesseract.DIM * lat.side(),
     )
-    assert_eq(@tesseract.peer_count(lat), @tesseract.DIM * (lat.side - 1L))
-    assert_eq(@tesseract.all_coords(lat).length().to_int64(), lat.total)
+    assert_eq(@tesseract.peer_count(lat), @tesseract.DIM * (lat.side() - 1L))
+    assert_eq(@tesseract.all_coords(lat).length().to_int64(), lat.total())
     side = side + 1L
   }
 }

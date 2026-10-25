@@ -1,12 +1,17 @@
 ///|
 /// One result of a search.
+///
+/// The fields are **private**, and the accessors below are how a caller reads
+/// them. A hit is the answer the store gives, not something a caller
+/// assembles: the score is a product of three weights the store computed, and
+/// a caller that could write one could write a score of one.
 pub struct Hit {
-  scope : String
-  key : String
-  value : String
-  score : Double
-  importance : Double
-  metadata : Metadata
+  priv scope : String
+  priv key : String
+  priv value : String
+  priv score : Double
+  priv importance : Double
+  priv metadata : Metadata
 }
 
 ///|

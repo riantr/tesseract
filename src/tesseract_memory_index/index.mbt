@@ -216,10 +216,10 @@ fn MemoryIndex::ensure_schema(self : MemoryIndex) -> Result[Unit, String] {
 /// says nothing about the entry.
 fn tokens_of(entry : @tesseract_memory.Entry) -> Array[String] {
   let words : Array[String] = []
-  for token in @tesseract_memory.tokenize(entry.value) {
+  for token in @tesseract_memory.tokenize(entry.value()) {
     words.push(token)
   }
-  for (_, value) in entry.metadata.pairs() {
+  for (_, value) in entry.metadata().pairs() {
     for token in @tesseract_memory.tokenize(value) {
       words.push(token)
     }
@@ -248,7 +248,7 @@ fn wanted_rows(
   let wanted : Array[(String, String, Array[String])] = []
   for scope in memory.scopes() {
     for entry in memory.scope(scope).entries() {
-      wanted.push((entry.scope, entry.key, tokens_of(entry)))
+      wanted.push((entry.scope(), entry.key(), tokens_of(entry)))
     }
   }
   wanted
@@ -419,7 +419,7 @@ fn put_entry(path : String, entry : @tesseract_memory.Entry) -> Unit raise {
   let conn = @sqlite3.Connection::open(path)
   defer conn.close()
   run(conn, "BEGIN")
-  write_entry_rows(conn, entry.scope, entry.key, tokens_of(entry))
+  write_entry_rows(conn, entry.scope(), entry.key(), tokens_of(entry))
   run(conn, "COMMIT")
 }
 

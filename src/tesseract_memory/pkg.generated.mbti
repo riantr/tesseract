@@ -102,29 +102,27 @@ pub fn Config::with_recency(Self, Recency) -> Self
 pub fn Config::with_similarity(Self, Similarity) -> Self
 
 pub struct Entry {
-  scope : String
-  key : String
-  value : String
-  added_at : Int64
-  deadline : Int64
-  window_ms : Int64
-  sliding : Bool
-  last_seen : Int64
-  hits : Int64
-  importance : Double
-  metadata : Metadata
-  pinned : Bool
+  // private fields
 }
+pub fn Entry::added_at(Self) -> Int64
 pub fn Entry::age_ms(Self, Int64) -> Int64
+pub fn Entry::deadline(Self) -> Int64
 pub fn Entry::describe(Self, Int64) -> String
 pub fn Entry::expired(Self, Int64) -> Bool
+pub fn Entry::hits(Self) -> Int64
 pub fn Entry::idle_ms(Self, Int64) -> Int64
 pub fn Entry::importance(Self) -> Double
+pub fn Entry::key(Self) -> String
 pub fn Entry::kind(Self) -> String?
+pub fn Entry::last_seen(Self) -> Int64
 pub fn Entry::make(String, String, String, Int64, Int64, Int64, Bool, Int64, Int64, Double, Metadata, Bool) -> Self
 pub fn Entry::metadata(Self) -> Metadata
 pub fn Entry::pinned(Self) -> Bool
+pub fn Entry::scope(Self) -> String
+pub fn Entry::sliding(Self) -> Bool
 pub fn Entry::touched(Self, Int64) -> Self
+pub fn Entry::value(Self) -> String
+pub fn Entry::window_ms(Self) -> Int64
 
 pub struct EntrySpec {
   ttl : Ttl
@@ -148,12 +146,7 @@ pub enum EvictionPolicy {
 pub fn EvictionPolicy::name(Self) -> String
 
 pub struct Hit {
-  scope : String
-  key : String
-  value : String
-  score : Double
-  importance : Double
-  metadata : Metadata
+  // private fields
 }
 pub fn Hit::importance(Self) -> Double
 pub fn Hit::key(Self) -> String

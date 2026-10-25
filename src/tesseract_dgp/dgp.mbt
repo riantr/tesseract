@@ -28,7 +28,7 @@ fn rows_from(
     for j = 0; j < dim_x; j = j + 1 {
       row.push(x.get(i, j))
     }
-    out.push({ index: i, d: d[i], y: y[i], x: row, })
+    out.push(Observation::new(i, d[i], y[i], row))
   }
   out
 }
@@ -45,12 +45,12 @@ pub fn irm_dataset(
   seed : Int32,
 ) -> Dataset {
   let raw = @moonbit_doubleML.make_irm_data(n_obs, dim_x, theta, seed)
-  {
-    source: "make_irm_data",
-    theta: raw.theta_get(),
+  Dataset::new(
+    "make_irm_data",
+    raw.theta_get(),
     dim_x,
-    observations: rows_from(raw.x_get(), raw.y_get(), raw.d_get(), n_obs),
-  }
+    rows_from(raw.x_get(), raw.y_get(), raw.d_get(), n_obs),
+  )
 }
 
 ///|
@@ -65,10 +65,10 @@ pub fn plr_dataset(
   seed : Int32,
 ) -> Dataset {
   let raw = @moonbit_doubleML.make_plr_CCDDHNR2018(n_obs, dim_x, theta, seed)
-  {
-    source: "make_plr_CCDDHNR2018",
-    theta: raw.theta_get(),
+  Dataset::new(
+    "make_plr_CCDDHNR2018",
+    raw.theta_get(),
     dim_x,
-    observations: rows_from(raw.x_get(), raw.y_get(), raw.d_get(), n_obs),
-  }
+    rows_from(raw.x_get(), raw.y_get(), raw.d_get(), n_obs),
+  )
 }

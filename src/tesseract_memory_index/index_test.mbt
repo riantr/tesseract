@@ -455,3 +455,41 @@ test "a verify of an index that is not there says the whole story" {
   assert_false(@xfs.path_exists(path))
   remove(path)
 }
+
+///|
+/// The index folds and orders the way the core does.
+///
+/// The word a lookup asks for is folded with the core's own folding, so "Cat"
+/// finds the entry that says "cat". And the answer is in the core's text
+/// order — the runtime's own comparison is length-first, and it would put
+/// "work" before "default".
+///
+/// Both are the core's decisions, and this index is only the core's index: an
+/// index that folded or ordered the text its own way would answer a lookup
+/// differently from the store it is an index of, and the two would disagree
+/// about what the entry says.
+test "the index folds and orders the way the core does" {
+  let path = scratch("fold")
+  remove(path)
+  let index = @tesseract_memory_index.open(path).unwrap()
+  let m = memory(10)
+  ignore(m.put("cat", "cat sat"))
+  ignore(m.scope("work").put("cat", "cat sat"))
+  ignore(index.rebuild(m).unwrap())
+  // The core's own folding and its own order, which are the two the index
+  // uses.
+  assert_eq(@tesseract.lower("Cat"), "cat")
+  assert_true(@tesseract.compare_text("default", "work") < 0)
+  // And the runtime's own comparison would have it the other way round: it is
+  // length-first, so "work" would come before "default". That is the whole
+  // reason the core has a text order of its own.
+  assert_true("work" < "default")
+  // The word is folded with the core's folding, so "Cat" finds the entries
+  // that say "cat".
+  let found = index.lookup("Cat").unwrap()
+  assert_eq(found.length(), 2)
+  // And the answer is in the core's text order: "default" before "work".
+  assert_eq(found[0].0, "default")
+  assert_eq(found[1].0, "work")
+  remove(path)
+}

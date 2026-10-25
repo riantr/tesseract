@@ -77,7 +77,7 @@ pub extend RecordReport with Debug::{to_repr}
 /// keeps this correct at `lattice_of(4)` instead of quietly describing a
 /// 3-per-axis lattice.
 pub fn cell_count(db : @tesseract.Tesseract) -> Int64 {
-  @tesseract.Tesseract::lattice_of_db(db).total
+  @tesseract.Tesseract::lattice_of_db(db).total()
 }
 
 ///|
@@ -231,7 +231,7 @@ pub fn record(db : @tesseract.Tesseract, data : Dataset) -> RecordReport {
   let mut stopped_at = 0L
   let mut i = 0
   for obs in data.observations {
-    let position = i.to_int64() + lat.first_position
+    let position = i.to_int64() + lat.first_position()
     if !@tesseract.position_in_bounds(lat, position) {
       rejected = rejected + 1
       if stopped_at == 0L {

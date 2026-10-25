@@ -173,7 +173,7 @@ fn truncate_to(db : Tesseract, mark : Int32) -> Unit {
 /// Inside one the records stay, because a later `ROLLBACK` needs them - and that
 /// is the whole difference between the two cases.
 pub fn Tesseract::statement_commit(db : Tesseract, mark : Int32) -> Unit {
-  if !db.txn.in_tx {
+  if !Tesseract::in_transaction(db) {
     truncate_to(db, mark)
   }
 }
@@ -196,7 +196,7 @@ pub fn Tesseract::statement_abort(db : Tesseract, mark : Int32) -> Unit {
 /// accepting a second `BEGIN` would make the two disagree about what `COMMIT`
 /// ends.
 pub fn Tesseract::begin(db : Tesseract) -> DBResponse {
-  if db.txn.in_tx {
+  if Tesseract::in_transaction(db) {
     return err_response(
       "INVALID_INPUT", "Already in a transaction; use SAVEPOINT for a nested rollback point",
     )
@@ -211,7 +211,7 @@ pub fn Tesseract::begin(db : Tesseract) -> DBResponse {
 ///|
 /// Ends a transaction and keeps its work.
 pub fn Tesseract::commit(db : Tesseract) -> DBResponse {
-  if !db.txn.in_tx {
+  if !Tesseract::in_transaction(db) {
     return err_response("INVALID_INPUT", "No transaction is open")
   }
   db.txn.in_tx = false
@@ -224,7 +224,7 @@ pub fn Tesseract::commit(db : Tesseract) -> DBResponse {
 ///|
 /// Ends a transaction and undoes every statement in it.
 pub fn Tesseract::rollback(db : Tesseract) -> DBResponse {
-  if !db.txn.in_tx {
+  if !Tesseract::in_transaction(db) {
     return err_response("INVALID_INPUT", "No transaction is open")
   }
   undo_to(db, 0)
@@ -241,7 +241,7 @@ pub fn Tesseract::rollback(db : Tesseract) -> DBResponse {
 /// Requires an open transaction: a savepoint outside one would be a name for a
 /// journal the next statement truncates, so it would name nothing.
 pub fn Tesseract::savepoint(db : Tesseract, name : String) -> DBResponse {
-  if !db.txn.in_tx {
+  if !Tesseract::in_transaction(db) {
     return err_response("INVALID_INPUT", "SAVEPOINT needs an open transaction")
   }
   let mut i = 0
@@ -282,7 +282,7 @@ fn find_savepoint(db : Tesseract, name : String) -> Int32 {
 /// journal, and a savepoint naming a position the journal no longer reaches is a
 /// name for nothing.
 pub fn Tesseract::rollback_to(db : Tesseract, name : String) -> DBResponse {
-  if !db.txn.in_tx {
+  if !Tesseract::in_transaction(db) {
     return err_response(
       "INVALID_INPUT", "ROLLBACK TO needs an open transaction",
     )
@@ -312,7 +312,7 @@ pub fn Tesseract::release_savepoint(
   db : Tesseract,
   name : String,
 ) -> DBResponse {
-  if !db.txn.in_tx {
+  if !Tesseract::in_transaction(db) {
     return err_response("INVALID_INPUT", "RELEASE needs an open transaction")
   }
   let at = find_savepoint(db, name)

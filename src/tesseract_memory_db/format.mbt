@@ -91,19 +91,19 @@ fn decode_header(
 /// One entry, as the JSON object a cell holds.
 fn encode_entry(entry : @tesseract_memory.Entry) -> String {
   let obj : Map[String, @builtin.Json] = Map([])
-  obj.set("scope", @json.to_json(entry.scope))
-  obj.set("key", @json.to_json(entry.key))
-  obj.set("value", @json.to_json(entry.value))
-  obj.set("added_at", @json.to_json(entry.added_at))
-  obj.set("deadline", @json.to_json(entry.deadline))
-  obj.set("window_ms", @json.to_json(entry.window_ms))
-  obj.set("sliding", @json.to_json(entry.sliding))
-  obj.set("last_seen", @json.to_json(entry.last_seen))
-  obj.set("hits", @json.to_json(entry.hits))
-  obj.set("importance", @json.to_json(entry.importance))
-  obj.set("pinned", @json.to_json(entry.pinned))
+  obj.set("scope", @json.to_json(entry.scope()))
+  obj.set("key", @json.to_json(entry.key()))
+  obj.set("value", @json.to_json(entry.value()))
+  obj.set("added_at", @json.to_json(entry.added_at()))
+  obj.set("deadline", @json.to_json(entry.deadline()))
+  obj.set("window_ms", @json.to_json(entry.window_ms()))
+  obj.set("sliding", @json.to_json(entry.sliding()))
+  obj.set("last_seen", @json.to_json(entry.last_seen()))
+  obj.set("hits", @json.to_json(entry.hits()))
+  obj.set("importance", @json.to_json(entry.importance()))
+  obj.set("pinned", @json.to_json(entry.pinned()))
   let pairs : Array[@builtin.Json] = []
-  for (k, v) in entry.metadata.pairs() {
+  for (k, v) in entry.metadata().pairs() {
     let pair : Map[String, @builtin.Json] = Map([])
     pair.set("k", @json.to_json(k))
     pair.set("v", @json.to_json(v))

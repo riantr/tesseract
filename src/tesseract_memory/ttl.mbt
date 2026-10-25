@@ -65,11 +65,9 @@ pub fn Ttl::is_never(self : Ttl) -> Bool {
 /// live forever. So the shortest lifetime there is one millisecond, and
 /// `ttl_never` is how a caller says "no deadline".
 pub fn Ttl::is_valid(self : Ttl) -> Bool {
-  match self {
-    Never => true
-    Absolute(ms) => ms > 0L
-    Sliding(ms) => ms > 0L
-  }
+  // `Never` is the one kind with no lifetime at all, and it is valid. Every
+  // other kind has a lifetime, and it has to be a positive one.
+  self.is_never() || self.window_ms() > 0L
 }
 
 ///|
@@ -125,11 +123,16 @@ fn instant_after(now_ms : Int64, ms : Int64) -> Int64 {
 /// a window is an ordinary deadline, because whether an entry expires is
 /// decided by its window.
 pub fn Ttl::deadline(self : Ttl, now_ms : Int64) -> (Int64, Bool) {
-  match self {
-    Never => (0L, false)
-    Absolute(ms) => (instant_after(now_ms, ms), false)
-    Sliding(ms) => (instant_after(now_ms, ms), true)
+  let deadline = match self {
+    Never => 0L
+    Absolute(ms) => instant_after(now_ms, ms)
+    Sliding(ms) => instant_after(now_ms, ms)
   }
+  // The second value says whether a read moves the deadline, and that is
+  // exactly what "sliding" means. Asking the predicate rather than repeating
+  // the case keeps one place deciding which lifetimes slide, so the predicate
+  // and the deadline cannot come to disagree.
+  (deadline, self.is_sliding())
 }
 
 ///|

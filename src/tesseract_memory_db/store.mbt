@@ -718,7 +718,7 @@ fn write_checkpoint(
   let mut position = 2L
   for scope in memory.scopes() {
     for entry in memory.scope(scope).entries() {
-      insert_cell(lattice, position, cell_key(entry.key), encode_entry(entry))
+      insert_cell(lattice, position, cell_key(entry.key()), encode_entry(entry))
       position = position + 1L
     }
   }
@@ -822,7 +822,7 @@ fn read_entry_cells(
   let out : Array[@tesseract_memory.Entry] = []
   let lat = @tesseract.Tesseract::lattice_of_db(lattice)
   let mut position = 2L
-  while position <= lat.last_position {
+  while position <= lat.last_position() {
     match @tesseract.Tesseract::cell_at(lattice, position) {
       Some(cell) =>
         match decode_entry(cell.value) {
@@ -842,8 +842,8 @@ fn total_bytes(entries : Array[@tesseract_memory.Entry]) -> Int64 {
   let mut total = 0L
   for entry in entries {
     total = total +
-      @tesseract_memory.utf8_bytes(entry.value) +
-      entry.metadata.bytes()
+      @tesseract_memory.utf8_bytes(entry.value()) +
+      entry.metadata().bytes()
   }
   total
 }

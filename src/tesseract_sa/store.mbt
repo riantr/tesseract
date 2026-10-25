@@ -42,11 +42,11 @@ fn outcome_text(o : FileOutcome) -> String {
 /// than one that claims a finding that may not be there.
 fn outcome_of(s : String) -> FileOutcome {
   if s == "clean" {
-    Clean
+    FileOutcome::clean()
   } else if s == "partial" {
-    Partial
+    FileOutcome::partial()
   } else {
-    Found
+    FileOutcome::found()
   }
 }
 
@@ -250,20 +250,26 @@ pub fn list_runs(path : String) -> Array[RunSummary] raise {
   defer sel.finalize()
   let rows : Array[RunSummary] = []
   while sel.step() {
-    rows.push({
-      id: read_int(sel, 0),
-      target: read_text(sel, 1),
-      root: read_text(sel, 2),
-      files: read_int(sel, 3),
-      parsed: read_int(sel, 4),
-      parsed_pct: read_text(sel, 5),
-      partial_files: read_int(sel, 6),
-      actionable: read_int(sel, 7),
-      notices: read_int(sel, 8),
-      unreliable: read_int(sel, 9),
-      withheld: read_int(sel, 10),
-      total: read_int(sel, 11),
-    })
+    // The constructor, not a literal: the summary has twelve columns and the
+    // constructor is the one place that says which order they are in. A
+    // literal beside it could put them in a different order and still read
+    // like the same thing.
+    rows.push(
+      RunSummary::new(
+        read_int(sel, 0),
+        read_text(sel, 1),
+        read_text(sel, 2),
+        read_int(sel, 3),
+        read_int(sel, 4),
+        read_text(sel, 5),
+        read_int(sel, 6),
+        read_int(sel, 7),
+        read_int(sel, 8),
+        read_int(sel, 9),
+        read_int(sel, 10),
+        read_int(sel, 11),
+      ),
+    )
   }
   rows
 }
@@ -298,27 +304,36 @@ pub fn load(path : String, run_id : Int32) -> ScanReport? raise {
   if !head.step() {
     return None
   }
-  let report = {
-    target: read_text(head, 0),
-    root: read_text(head, 1),
-    files: read_int(head, 2),
-    parsed: read_int(head, 3),
-    parsed_pct: read_text(head, 4),
-    partial_files: read_int(head, 5),
-    actionable: read_int(head, 6),
-    notices: read_int(head, 7),
-    unreliable: read_int(head, 8),
-    withheld: read_int(head, 9),
-    total: read_int(head, 10),
-    file_results: [],
-    findings: [],
-    unparsed: [],
-    by_kind: [],
-  }
-  read_files(conn, run_id, report.file_results)
-  read_findings(conn, run_id, report.findings)
-  read_unparsed(conn, run_id, report.unparsed)
-  read_by_kind(conn, run_id, report.by_kind)
+  // The four collections are filled in after the header is read, so they are
+  // made here and handed to the constructor. `Array` is a reference, so what
+  // the readers push into them is what the report holds.
+  let file_results : Array[FileResult] = []
+  let findings : Array[Finding] = []
+  let unparsed : Array[UnparsedGroup] = []
+  let by_kind : Array[ByKind] = []
+  // The constructor, not a literal: the report has fifteen fields and the
+  // constructor is the one place that says which order they are in.
+  let report = ScanReport::new(
+    read_text(head, 0),
+    read_text(head, 1),
+    read_int(head, 2),
+    read_int(head, 3),
+    read_text(head, 4),
+    read_int(head, 5),
+    read_int(head, 6),
+    read_int(head, 7),
+    read_int(head, 8),
+    read_int(head, 9),
+    read_int(head, 10),
+    file_results,
+    findings,
+    unparsed,
+    by_kind,
+  )
+  read_files(conn, run_id, file_results)
+  read_findings(conn, run_id, findings)
+  read_unparsed(conn, run_id, unparsed)
+  read_by_kind(conn, run_id, by_kind)
   Some(report)
 }
 
@@ -334,16 +349,18 @@ fn read_files(
   defer sel.finalize()
   sel.bind(index=1, run_id)
   while sel.step() {
-    into.push({
-      kind: read_text(sel, 0),
-      path: read_text(sel, 1),
-      outcome: outcome_of(read_text(sel, 2)),
-      defects: read_int(sel, 3),
-      notices: read_int(sel, 4),
-      shown: read_int(sel, 5),
-      read_up_to: read_int(sel, 6),
-      not_shown: read_int(sel, 7),
-    })
+    into.push(
+      FileResult::new(
+        read_text(sel, 0),
+        read_text(sel, 1),
+        outcome_of(read_text(sel, 2)),
+        read_int(sel, 3),
+        read_int(sel, 4),
+        read_int(sel, 5),
+        read_int(sel, 6),
+        read_int(sel, 7),
+      ),
+    )
   }
 }
 
@@ -359,15 +376,19 @@ fn read_findings(
   defer sel.finalize()
   sel.bind(index=1, run_id)
   while sel.step() {
-    into.push({
-      path: read_text(sel, 0),
-      line: read_int(sel, 1),
-      column: read_int(sel, 2),
-      severity: read_text(sel, 3),
-      family: read_text(sel, 4),
-      lenses: read_text(sel, 5),
-      message: read_text(sel, 6),
-    })
+    // The constructor, not a literal: the finding has seven columns and the
+    // constructor is the one place that says which order they are in.
+    into.push(
+      Finding::new(
+        read_text(sel, 0),
+        read_int(sel, 1),
+        read_int(sel, 2),
+        read_text(sel, 3),
+        read_text(sel, 4),
+        read_text(sel, 5),
+        read_text(sel, 6),
+      ),
+    )
   }
 }
 
@@ -389,7 +410,7 @@ fn read_unparsed(
     } else {
       @tesseract.split(text, "\n")
     }
-    into.push({ reason: read_text(sel, 0), count: read_int(sel, 1), examples, })
+    into.push(UnparsedGroup::new(read_text(sel, 0), read_int(sel, 1), examples))
   }
 }
 
@@ -405,12 +426,14 @@ fn read_by_kind(
   defer sel.finalize()
   sel.bind(index=1, run_id)
   while sel.step() {
-    into.push({
-      kind: read_text(sel, 0),
-      files: read_int(sel, 1),
-      parsed: read_int(sel, 2),
-      defects: read_int(sel, 3),
-      notices: read_int(sel, 4),
-    })
+    into.push(
+      ByKind::new(
+        read_text(sel, 0),
+        read_int(sel, 1),
+        read_int(sel, 2),
+        read_int(sel, 3),
+        read_int(sel, 4),
+      ),
+    )
   }
 }

@@ -31,7 +31,7 @@ fn fresh() -> @tesseract.Tesseract {
 fn geometry(lat : @tesseract.Lattice) -> (Int64, Int64, Int64, Int64) {
   (
     @tesseract.position_of(lat, @tesseract.coords(0L, 0L, 0L, 0L)),
-    @tesseract.position_of(lat, @tesseract.coords(0L, 0L, 0L, lat.side - 1L)),
+    @tesseract.position_of(lat, @tesseract.coords(0L, 0L, 0L, lat.side() - 1L)),
     @tesseract.position_of(lat, @tesseract.coords(1L, 1L, 0L, 0L)),
     @tesseract.position_of(lat, @tesseract.coords(1L, 0L, 0L, 0L)),
   )
@@ -42,13 +42,13 @@ test "a new database is a whole lattice of empty cells with the cursor at 1" {
   let lat = @tesseract.default_lattice()
   let db = fresh()
   let s = @tesseract.Tesseract::status(db)
-  assert_eq(s.total_cells, lat.total)
+  assert_eq(s.total_cells, lat.total())
   assert_eq(s.current_count, 0L)
-  assert_eq(s.current_position, lat.first_position)
+  assert_eq(s.current_position, lat.first_position())
   assert_eq(s.digit_count, 0L)
   assert_eq(@tesseract.Tesseract::occupancy(db), 0L)
   assert_eq(
-    @tesseract.Tesseract::cell_at(db, lat.last_position).unwrap().key,
+    @tesseract.Tesseract::cell_at(db, lat.last_position()).unwrap().key,
     "",
   )
 }
@@ -57,9 +57,9 @@ test "a new database is a whole lattice of empty cells with the cursor at 1" {
 test "insert without a target follows the cursor and advances it" {
   let lat = @tesseract.default_lattice()
   let db = fresh()
-  let first = lat.first_position
-  let second = lat.first_position + 1L
-  let third = lat.first_position + 2L
+  let first = lat.first_position()
+  let second = lat.first_position() + 1L
+  let third = lat.first_position() + 2L
   let r = @tesseract.Tesseract::insert(db, "a", "1", None, 0L)
   assert_true(r.success)
   assert_eq(r.position, first)
@@ -74,12 +74,12 @@ test "insert without a target follows the cursor and advances it" {
 test "insert with an explicit target leaves the cursor alone" {
   let lat = @tesseract.default_lattice()
   let db = fresh()
-  let target = lat.first_position + 41L
+  let target = lat.first_position() + 41L
   let r = @tesseract.Tesseract::insert(db, "a", "1", Some(target), 0L)
   assert_eq(r.position, target)
   assert_eq(
     @tesseract.Tesseract::status(db).current_position,
-    lat.first_position,
+    lat.first_position(),
   )
   assert_eq(@tesseract.Tesseract::cell_at(db, target).unwrap().key, "a")
 }
@@ -89,21 +89,21 @@ test "the cursor wraps after one full cycle of cyclic inserts" {
   let lat = @tesseract.default_lattice()
   let db = fresh()
   let mut i = 0L
-  while i < lat.total {
+  while i < lat.total() {
     ignore(@tesseract.Tesseract::insert(db, "k" + i.to_string(), "v", None, 0L))
     i = i + 1L
   }
   assert_eq(
     @tesseract.Tesseract::status(db).current_position,
-    lat.first_position,
+    lat.first_position(),
   )
-  assert_eq(@tesseract.Tesseract::occupancy(db), lat.total)
+  assert_eq(@tesseract.Tesseract::occupancy(db), lat.total())
   ignore(@tesseract.Tesseract::insert(db, "wrap", "v", None, 0L))
   assert_eq(
-    @tesseract.Tesseract::cell_at(db, lat.first_position).unwrap().key,
+    @tesseract.Tesseract::cell_at(db, lat.first_position()).unwrap().key,
     "wrap",
   )
-  assert_eq(@tesseract.Tesseract::occupancy(db), lat.total)
+  assert_eq(@tesseract.Tesseract::occupancy(db), lat.total())
 }
 
 ///|
@@ -125,7 +125,13 @@ test "out-of-range positions and digits are rejected" {
   let lat = @tesseract.default_lattice()
   let db = fresh()
   assert_eq(
-    @tesseract.Tesseract::insert(db, "k", "v", Some(lat.last_position + 1L), 0L).error_code,
+    @tesseract.Tesseract::insert(
+      db,
+      "k",
+      "v",
+      Some(lat.last_position() + 1L),
+      0L,
+    ).error_code,
     "INVALID_POSITION",
   )
   assert_eq(
@@ -133,7 +139,7 @@ test "out-of-range positions and digits are rejected" {
     "INVALID_POSITION",
   )
   assert_eq(
-    @tesseract.Tesseract::insert(db, "k", "v", None, lat.side + 1L).error_code,
+    @tesseract.Tesseract::insert(db, "k", "v", None, lat.side() + 1L).error_code,
     "INVALID_DIGIT",
   )
 }
@@ -147,29 +153,29 @@ test "occupancy stays truthful across a wrap and a delete" {
   // `extra` rows past the cell count is enough to wrap the ring by nine cells.
   let extra = 9L
   let mut i = 0L
-  while i < lat.total + extra {
+  while i < lat.total() + extra {
     ignore(@tesseract.Tesseract::insert(db, "k" + i.to_string(), "v", None, 0L))
     i = i + 1L
   }
-  assert_eq(@tesseract.Tesseract::occupancy(db), lat.total)
+  assert_eq(@tesseract.Tesseract::occupancy(db), lat.total())
   // After the wrap the first `extra` cells hold the last `extra` keys, so k0 and
   // k1 no longer exist and deleting them must miss.
   assert_eq(
     @tesseract.Tesseract::delete(db, "k0", None).error_code,
     "KEY_NOT_FOUND",
   )
-  ignore(@tesseract.Tesseract::delete(db, "k" + lat.total.to_string(), None))
+  ignore(@tesseract.Tesseract::delete(db, "k" + lat.total().to_string(), None))
   ignore(@tesseract.Tesseract::delete(db, "k" + (extra + 1L).to_string(), None))
-  assert_eq(@tesseract.Tesseract::occupancy(db), lat.total - 2L)
-  assert_eq(@tesseract.Tesseract::status(db).current_count, lat.total - 2L)
+  assert_eq(@tesseract.Tesseract::occupancy(db), lat.total() - 2L)
+  assert_eq(@tesseract.Tesseract::status(db).current_count, lat.total() - 2L)
 }
 
 ///|
 test "select by key returns every cell carrying it, and the position filter reaches any of them" {
   let lat = @tesseract.default_lattice()
   let db = fresh()
-  let first = lat.first_position
-  let second = lat.first_position + 1L
+  let first = lat.first_position()
+  let second = lat.first_position() + 1L
   ignore(@tesseract.Tesseract::insert(db, "k", "1", Some(first), 0L))
   ignore(@tesseract.Tesseract::insert(db, "k", "2", Some(second), 0L))
   let all = @tesseract.Tesseract::select(
@@ -203,8 +209,8 @@ test "select by key returns every cell carrying it, and the position filter reac
 test "select by key intersects with the value pattern instead of ignoring it" {
   let lat = @tesseract.default_lattice()
   let db = fresh()
-  let first = lat.first_position
-  let second = lat.first_position + 1L
+  let first = lat.first_position()
+  let second = lat.first_position() + 1L
   ignore(@tesseract.Tesseract::insert(db, "k", "alpha", Some(first), 0L))
   ignore(@tesseract.Tesseract::insert(db, "k", "beta", Some(second), 0L))
   let r = @tesseract.Tesseract::select(
@@ -226,8 +232,8 @@ test "select by key intersects with the value pattern instead of ignoring it" {
 test "update refuses a position whose cell carries a different key" {
   let lat = @tesseract.default_lattice()
   let db = fresh()
-  let mine = lat.first_position
-  let theirs = lat.first_position + 4L
+  let mine = lat.first_position()
+  let theirs = lat.first_position() + 4L
   ignore(@tesseract.Tesseract::insert(db, "a", "1", Some(mine), 0L))
   ignore(@tesseract.Tesseract::insert(db, "b", "2", Some(theirs), 0L))
   // `WHERE key='a' AND grid_position=5` names two conditions. Taking only the
@@ -242,13 +248,13 @@ test "update refuses a position whose cell carries a different key" {
 test "select by key with a mismatched position returns nothing" {
   let lat = @tesseract.default_lattice()
   let db = fresh()
-  let first = lat.first_position
+  let first = lat.first_position()
   ignore(@tesseract.Tesseract::insert(db, "k", "1", Some(first), 0L))
   let r = @tesseract.Tesseract::select(
     db,
     "k",
     "",
-    Some(lat.first_position + 8L),
+    Some(lat.first_position() + 8L),
     @tesseract.no_filter(),
     None,
   )
@@ -273,7 +279,7 @@ test "select by pattern is case-insensitive and value-based" {
       db,
       "a",
       "Hello World",
-      Some(lat.first_position),
+      Some(lat.first_position()),
       0L,
     ),
   )
@@ -282,7 +288,7 @@ test "select by pattern is case-insensitive and value-based" {
       db,
       "b",
       "goodbye",
-      Some(lat.first_position + 1L),
+      Some(lat.first_position() + 1L),
       0L,
     ),
   )
@@ -303,14 +309,20 @@ test "an unwrapped LIKE pattern is equality, not a match-everything wildcard" {
   let lat = @tesseract.default_lattice()
   let db = fresh()
   ignore(
-    @tesseract.Tesseract::insert(db, "a", "hello", Some(lat.first_position), 0L),
+    @tesseract.Tesseract::insert(
+      db,
+      "a",
+      "hello",
+      Some(lat.first_position()),
+      0L,
+    ),
   )
   ignore(
     @tesseract.Tesseract::insert(
       db,
       "b",
       "goodbye",
-      Some(lat.first_position + 1L),
+      Some(lat.first_position() + 1L),
       0L,
     ),
   )
@@ -342,7 +354,7 @@ test "select with no filter returns only occupied cells" {
       db,
       "a",
       "1",
-      Some(lat.first_position + 2L),
+      Some(lat.first_position() + 2L),
       0L,
     ),
   )
@@ -351,7 +363,7 @@ test "select with no filter returns only occupied cells" {
       db,
       "b",
       "2",
-      Some(lat.last_position - 41L),
+      Some(lat.last_position() - 41L),
       0L,
     ),
   )
@@ -370,7 +382,7 @@ test "select with no filter returns only occupied cells" {
 test "coordinate filters narrow to the right cells" {
   let lat = @tesseract.default_lattice()
   let db = fresh()
-  let far = lat.side - 1L
+  let far = lat.side() - 1L
   ignore(
     @tesseract.Tesseract::insert(
       db,
@@ -412,7 +424,7 @@ test "coordinate filters narrow to the right cells" {
 test "update by key and by position both work, and miss cleanly" {
   let lat = @tesseract.default_lattice()
   let db = fresh()
-  let target = lat.first_position + 4L
+  let target = lat.first_position() + 4L
   ignore(@tesseract.Tesseract::insert(db, "a", "1", Some(target), 0L))
   let by_key = @tesseract.Tesseract::update(db, "a", "9", None, None)
   assert_true(by_key.success)
@@ -430,7 +442,7 @@ test "update by key and by position both work, and miss cleanly" {
       db,
       "",
       "x",
-      Some(lat.last_position - 4L),
+      Some(lat.last_position() - 4L),
       None,
     ).error_code,
     "POSITION_NOT_FOUND",
@@ -440,7 +452,7 @@ test "update by key and by position both work, and miss cleanly" {
       db,
       "",
       "x",
-      Some(lat.last_position + 1000L),
+      Some(lat.last_position() + 1000L),
       None,
     ).error_code,
     "POSITION_OUT_OF_RANGE",
@@ -456,7 +468,7 @@ test "delete by key removes every cell carrying it" {
       db,
       "dup",
       "1",
-      Some(lat.first_position + 2L),
+      Some(lat.first_position() + 2L),
       0L,
     ),
   )
@@ -465,7 +477,7 @@ test "delete by key removes every cell carrying it" {
       db,
       "dup",
       "2",
-      Some(lat.first_position + 8L),
+      Some(lat.first_position() + 8L),
       0L,
     ),
   )
@@ -474,7 +486,7 @@ test "delete by key removes every cell carrying it" {
       db,
       "dup",
       "3",
-      Some(lat.first_position + 26L),
+      Some(lat.first_position() + 26L),
       0L,
     ),
   )
@@ -483,7 +495,7 @@ test "delete by key removes every cell carrying it" {
       db,
       "keep",
       "1",
-      Some(lat.first_position + 3L),
+      Some(lat.first_position() + 3L),
       0L,
     ),
   )
@@ -501,14 +513,14 @@ test "delete by key removes every cell carrying it" {
 test "delete by position, and full clear resetting the cursor" {
   let lat = @tesseract.default_lattice()
   let db = fresh()
-  let target = lat.first_position + 6L
+  let target = lat.first_position() + 6L
   ignore(@tesseract.Tesseract::insert(db, "a", "1", Some(target), 0L))
   ignore(
     @tesseract.Tesseract::insert(
       db,
       "b",
       "2",
-      Some(lat.first_position + 7L),
+      Some(lat.first_position() + 7L),
       0L,
     ),
   )
@@ -519,13 +531,13 @@ test "delete by position, and full clear resetting the cursor" {
     @tesseract.Tesseract::delete(db, "", Some(target)).error_code,
     "POSITION_EMPTY",
   )
-  @tesseract.Tesseract::set_position(db, lat.last_position - 41L)
+  @tesseract.Tesseract::set_position(db, lat.last_position() - 41L)
   let cleared = @tesseract.Tesseract::delete(db, "", None)
   assert_true(cleared.success)
   assert_eq(@tesseract.Tesseract::occupancy(db), 0L)
   assert_eq(
     @tesseract.Tesseract::status(db).current_position,
-    lat.first_position,
+    lat.first_position(),
   )
   assert_eq(cleared.affected_rows, 0L)
 }
@@ -582,10 +594,13 @@ test "setting a digit through update is conflict-checked too" {
     "b",
     "2",
     Some(along_w),
-    Some(lat.side),
+    Some(lat.side()),
   )
   assert_true(good.success)
-  assert_eq(@tesseract.Tesseract::cell_at(db, along_w).unwrap().digit, lat.side)
+  assert_eq(
+    @tesseract.Tesseract::cell_at(db, along_w).unwrap().digit,
+    lat.side(),
+  )
 }
 
 ///|
@@ -610,7 +625,7 @@ test "line, slab and peer queries return the right neighbourhoods" {
   let peers = @tesseract.Tesseract::peer_query(db, origin)
   assert_eq(peers.total_records, 2L)
   assert_eq(
-    @tesseract.Tesseract::line_query(db, lat.last_position + 1L, 0L).error_code,
+    @tesseract.Tesseract::line_query(db, lat.last_position() + 1L, 0L).error_code,
     "POSITION_OUT_OF_RANGE",
   )
 }
@@ -626,7 +641,7 @@ test "the logger keeps at most 100 entries" {
         db,
         "k" + i.to_string(),
         "v",
-        Some(i % (lat.total - 1L) + lat.first_position),
+        Some(i % (lat.total() - 1L) + lat.first_position()),
         0L,
       ),
     )
@@ -677,8 +692,8 @@ test "a carried-over side-3 solution is measured against the side-4 rule" {
   let three = @tesseract.default_lattice()
   // Exactly what `.solve` stores at side 3.
   let digits = @tesseract.canonical_digits(three)
-  let mut p = three.first_position
-  while p <= three.last_position {
+  let mut p = three.first_position()
+  while p <= three.last_position() {
     ignore(
       @tesseract.Tesseract::insert(
         db,
@@ -698,8 +713,8 @@ test "a carried-over side-3 solution is measured against the side-4 rule" {
   // Read the digits back out of the store, not off the old fixture, so this
   // measures what the store actually holds after the resize.
   let carried = @tesseract.empty_digits(four)
-  let mut q = four.first_position
-  while q <= four.last_position {
+  let mut q = four.first_position()
+  while q <= four.last_position() {
     match @tesseract.Tesseract::cell_at(db, q) {
       Some(cell) => @tesseract.set_digit(four, carried, q, cell.digit)
       None => ()
@@ -745,7 +760,7 @@ test "widening the lattice carries records by coordinate, not by position number
   assert_eq(report.kept, 1L)
   assert_eq(report.dropped, 0L)
   let now = @tesseract.Tesseract::lattice_of_db(db)
-  assert_eq(now.side, 4L)
+  assert_eq(now.side(), 4L)
   assert_eq(@tesseract.Tesseract::occupancy(db), 1L)
   let landed = @tesseract.position_of(now, cell)
   assert_true(landed != was)
@@ -806,7 +821,7 @@ test "an out-of-range side is refused and changes nothing" {
     }
     Err(message) => assert_true(message.contains("215"))
   }
-  assert_eq(@tesseract.Tesseract::lattice_of_db(db).side, 3L)
+  assert_eq(@tesseract.Tesseract::lattice_of_db(db).side(), 3L)
   assert_eq(@tesseract.Tesseract::occupancy(db), 1L)
   assert_eq(@tesseract.Tesseract::cell_at(db, 1L).unwrap().key, "a")
 }

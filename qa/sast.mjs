@@ -90,10 +90,10 @@ const RULES = [
  *
  * Every reason here names the precondition it rests on. The lattice is the
  * one the library built — `lattice_of` refuses a side it cannot address, and
- * every consumer in this repository builds its lattice that way. A caller
- * that hand-builds a `Lattice` can break these invariants, because MoonBit's
- * `pub struct` exposes its fields; that gap is measured and reported by the
- * API audit (rule A3.1) rather than papered over here.
+ * `Lattice`'s fields are **private**, so a caller cannot hand-build one that
+ * says otherwise. The invariant is therefore the compiler's to hold, not this
+ * file's to argue for: a caller that could build its own lattice would break
+ * these reasons, and the compiler now refuses to let it.
  */
 const WAIVERS = [
   {
@@ -109,7 +109,7 @@ const WAIVERS = [
   {
     file: "src/tesseract/exec.mbt",
     needle: "coords: coords_of(lat, lat.first_position).unwrap(),",
-    why: "the lattice is the one the library built: lattice_of refuses side < 1 and so sets first_position = 1 and total = side^4 >= 1, so the first position is inside the lattice. A caller that hand-builds a Lattice breaks this, which is the API audit's A3.1 finding",
+    why: "the lattice is the one the library built: lattice_of refuses side < 1 and so sets first_position = 1 and total = side^4 >= 1, so the first position is inside the lattice. Lattice's fields are private, so a caller cannot hand-build one that says otherwise",
   },
   {
     file: "cmd/main/main.mbt",

@@ -349,7 +349,7 @@ fn print_status(db : @tesseract.Tesseract) -> Unit {
     " = " +
     @tesseract.sudoku_line_count(lat).to_string() +
     " lines, " +
-    (@tesseract.DIM * lat.side).to_string() +
+    (@tesseract.DIM * lat.side()).to_string() +
     " slabs",
   )
   out("records : " + s.current_count.to_string())
@@ -392,7 +392,7 @@ fn move_cursor(db : @tesseract.Tesseract, arg : String) -> Unit {
           "out of range: " +
           p.to_string() +
           " (expected 1.." +
-          lat.last_position.to_string() +
+          lat.last_position().to_string() +
           ")",
         )
       }
@@ -406,14 +406,14 @@ fn solve(db : @tesseract.Tesseract) -> Unit {
   let lat = @tesseract.Tesseract::lattice_of_db(db)
   out(
     "filling every cell from digit(x,y,z,w) = (x+y+z+w) mod " +
-    lat.side.to_string() +
+    lat.side().to_string() +
     " + 1",
   )
   let digits = @tesseract.canonical_digits(lat)
-  let mut p = lat.first_position
+  let mut p = lat.first_position()
   let mut ok = 0
   let mut first_failure = ""
-  while p <= lat.last_position {
+  while p <= lat.last_position() {
     let b = StringBuilder::StringBuilder()
     b.write_string("INSERT INTO tesseract (key, value, digit) VALUES ('cell_")
     b.write_object(p)
@@ -451,8 +451,8 @@ fn solve(db : @tesseract.Tesseract) -> Unit {
 fn verify(db : @tesseract.Tesseract) -> Unit {
   let lat = @tesseract.Tesseract::lattice_of_db(db)
   let digits = @tesseract.empty_digits(lat)
-  let mut p = lat.first_position
-  while p <= lat.last_position {
+  let mut p = lat.first_position()
+  while p <= lat.last_position() {
     match @tesseract.Tesseract::cell_at(db, p) {
       Some(cell) => @tesseract.set_digit(lat, digits, p, cell.digit)
       None => ()
@@ -466,7 +466,7 @@ fn verify(db : @tesseract.Tesseract) -> Unit {
   out("slab imbalances : " + sv.length().to_string())
   report(sv)
   if lv.length() == 0 && sv.length() == 0 {
-    out("OK - every axis-parallel line holds 1.." + lat.max_digit.to_string())
+    out("OK - every axis-parallel line holds 1.." + lat.max_digit().to_string())
   }
 }
 

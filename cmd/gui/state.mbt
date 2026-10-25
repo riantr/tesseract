@@ -240,9 +240,9 @@ fn plane_cells(x : Int64, y : Int64) -> Array[CellView] {
   let lat = lattice()
   let out : Array[CellView] = []
   let mut row = 0L
-  while row < lat.side {
+  while row < lat.side() {
     let mut col = 0L
-    while col < lat.side {
+    while col < lat.side() {
       out.push(cell_view(lat, @tesseract.coords(x, y, row, col)))
       col = col + 1L
     }
@@ -304,8 +304,8 @@ fn puzzle_view() -> PuzzleView {
   let lat = lattice()
   let d = @tesseract.empty_digits(lat)
   let mut placed = 0L
-  let mut p = lat.first_position
-  while p <= lat.last_position {
+  let mut p = lat.first_position()
+  while p <= lat.last_position() {
     match @tesseract.Tesseract::cell_at(db, p) {
       Some(cell) =>
         if cell.digit != @tesseract.NO_DIGIT {
@@ -335,7 +335,7 @@ fn state_resp(x : Int32, y : Int32) -> StateResp {
   let plane_y = clamp_axis(y.to_int64())
   StateResp::{
     status: status_view(),
-    side: lat.side.to_int(),
+    side: lat.side().to_int(),
     plane_x: plane_x.to_int(),
     plane_y: plane_y.to_int(),
     cells: plane_cells(plane_x, plane_y),
@@ -352,7 +352,7 @@ fn state_resp(x : Int32, y : Int32) -> StateResp {
 /// still clamped rather than rejected, because a plane is a *view* choice and
 /// there is no cell it could write to the wrong place.
 fn clamp_axis(v : Int64) -> Int64 {
-  if v < 0L || v >= lattice().side {
+  if v < 0L || v >= lattice().side() {
     0L
   } else {
     v
