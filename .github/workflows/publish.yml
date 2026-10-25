@@ -145,10 +145,19 @@ jobs:
         # `src/tesseract_dgp`, `src/tesseract_sqlite`, `cmd/*` all carry a
         # moon.pkg and no moon.mod, so the registry shows them as children of
         # this one module -- which is what the README's import paths assume.
+        #
+        # `qa/` is excluded, and it is not a blanket exclusion of anything
+        # that looks like a module: everything under it is a test fixture with
+        # its own gate. `qa/fuzz` and `qa/contract_probe` are nested modules --
+        # they carry their own moon.mod, the parent module's build never sees
+        # them, and they can never be published. A moon.mod anywhere else in
+        # the tree still fails this step, loudly, which is the point of the
+        # step: the v0.1.14 run failed here because the QA sweep added those
+        # two nested modules after v0.1.13 was tagged.
         run: |
           set -euo pipefail
           n=$(find . -name moon.mod -not -path "./_build/*" \
-                -not -path "./.mooncakes/*" | wc -l)
+                -not -path "./.mooncakes/*" -not -path "./qa/*" | wc -l)
           if [ "$n" -ne 1 ]; then
             echo "::error::found $n moon.mod files; this workflow publishes the"
             echo "single root module. If the layout changed, update this workflow"
