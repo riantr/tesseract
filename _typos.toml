@@ -3,7 +3,7 @@
 # `childs` is not a typo — it is the key that the Mooncakes registry actually
 # uses in its published index:
 #
-#   https://assets.mooncakes.io/assets/riantr/tesseract@0.1.13/module_index.json
+#   https://assets.mooncakes.io/assets/riantr/tesseract@0.1.14/module_index.json
 #
 # The top-level keys of that document are `name`, `package` and `childs`, and
 # every nested node carries the same `childs` array. `qa/contract.mjs` walks

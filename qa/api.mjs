@@ -4,7 +4,7 @@
 //
 // A published package's public surface is not only a list of names: it is the
 // set of promises a caller writes code against. This audit looks at the
-// **local** source and reports four kinds of problem in that surface:
+// **local** source and reports five kinds of problem in that surface:
 //
 //   A1  naming      a public symbol whose name does not follow the convention
 //                   the module itself uses. The convention is *learned* from the
@@ -21,7 +21,16 @@
 //                   though the library refuses those values somewhere else.
 //
 //   A4  dead        a public symbol that is exported but never referenced
-//                   anywhere else in the module.
+//                   anywhere else in the module, or referenced only by the
+//                   module's own tests.
+//
+//   A5  waivers     a waiver that no longer matches anything in the module.
+//
+// A finding that is a **decision** rather than a defect can be waived, and a
+// waiver is one item with the reason it rests on — not a blank switch. The
+// waivers that matched are printed on every run, and A5 reports the ones that
+// have gone stale, so a waiver cannot quietly outlive the thing it was
+// written for.
 //
 // The counts per package come from the `pkg.generated.mbti` files, which are
 // what `moon info` generates and therefore exactly what the registry sees.

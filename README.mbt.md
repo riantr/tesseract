@@ -83,10 +83,17 @@ window. Registry entry:
 
 ### What the release was checked on
 
-`moon 0.1.20261016` — the toolchain the release workflow installs, and the one
-every number in this file was measured on. That is the toolchain this release
+`moon 0.1.20261023` — the toolchain every number in this file was measured on,
+and the one the release workflow's runner had when it built and published
+0.1.14.
+
+The workflow installs the toolchain from the official install script, which
+serves the **current** release, so the runner's version moves with it. The log
+of the run that published 0.1.14 records `moon 0.1.20261023`, and that is the
+same build the numbers here were measured on. That is the toolchain this release
 was **verified** against, not a tested **minimum**: no older toolchain has been
-exercised here, and quoting a lower bound nobody ran would be a claim, not a fact.
+exercised here, and quoting a lower bound nobody ran would be a claim, not a
+fact.
 
 ### What changed in 0.1.14
 

@@ -4,10 +4,12 @@
 // makes to somebody who is not looking at this repository:
 //
 //   1. The **published surface** — what the registry's `module_index.json`
-//      advertises for `riantr/tesseract@0.1.13`, against what the local
-//      source actually exposes. A package on mooncakes.io is a contract: if
-//      the index advertises a symbol the source no longer has, a consumer's
-//      code breaks at a version boundary nobody noticed.
+//      advertises for the published version, against what the local source
+//      actually exposes. A package on mooncakes.io is a contract: if the
+//      index advertises a symbol the source no longer has, a consumer's
+//      code breaks at a version boundary nobody noticed. The version is the
+//      one the probe module pins, so this audit and the probe always
+//      measure the same artifact.
 //   2. The **checkpoint format** — the durable memory's file format: its
 //      constants, whether a file this build writes comes back out of this
 //      build's reader, and what the reader does with a file whose header it
