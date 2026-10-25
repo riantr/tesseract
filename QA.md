@@ -14,8 +14,8 @@ below was re-measured afterwards.
 that measures what a consumer actually gets now passes **9 of 9** against it: the
 four checkpoint defects are closed in the artifact, not only in the tree, and
 every accessor of the two opaque value types returns the number the contract
-names. Getting there took two fixes to the release and three to the audit
-itself — see "The release failed" below.
+names. Getting there took a fix to the release, five fixes to the audit, and
+one hole in the house gate — see "The release failed" below.
 
 ---
 
@@ -210,7 +210,12 @@ Both ends of that are proven by mutation:
 | the probe against | the result |
 |---|---|
 | the published **0.1.14** | **9 / 9 pass** — the reload is refused, the store keeps its 2 entries, and every accessor returns the number the contract names |
-| the published **0.1.13** | **4 / 8 fail**, including *"a reload of a checkpoint with an unknown version was accepted"* |
+| the published **0.1.13**, the 8-test probe of the refusals alone | **4 / 8 fail**, including *"a reload of a checkpoint with an unknown version was accepted"* |
+| the published **0.1.13**, with the accessor test added | the module **does not compile** — *"Type `Lattice` has no method `side`"* — because 0.1.13 has no accessors at all |
+
+The last row is the probe reporting the release from the other side: 0.1.14
+added the accessors, and a consumer that had them must have had 0.1.13 or
+earlier.
 
 ### 8. The published surface was advertised but never called
 
