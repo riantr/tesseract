@@ -69,6 +69,20 @@ pub fn opt_str(value : String?) -> String {
 pub const PROBE_NOW : Int64 = 1700000000000L
 
 ///|
+/// Removes a probe file if it is there.
+///
+/// The probe's files land in a directory that survives the run — the host's
+/// temporary directory, or the one the harness names — so a probe that
+/// inherits the last run's file is not measuring what it says it measures. A
+/// checkpoint left with a rewritten header cannot be opened, and the run that
+/// follows reports the *previous* run's corruption as its own result.
+pub fn remove_probe_file(path : String) -> Unit {
+  @xfs.remove_file(path) catch {
+    _ => ()
+  }
+}
+
+///|
 /// Writes a checkpoint holding one entry that lives for a minute and one that
 /// never expires.
 ///
@@ -76,6 +90,7 @@ pub const PROBE_NOW : Int64 = 1700000000000L
 /// clock it was written on, and a reader that throws that away reads the
 /// entries against a different timeline.
 pub fn write_checkpoint(path : String, ttl : @tesseract_memory.Ttl) -> Unit {
+  remove_probe_file(path)
   let config = @tesseract_memory.default_config()
   let clock = @tesseract_memory.memory_clock_manual(PROBE_NOW)
   let store = match @tesseract_memory_db.open_with_clock(path, config, clock) {
@@ -85,7 +100,8 @@ pub fn write_checkpoint(path : String, ttl : @tesseract_memory.Ttl) -> Unit {
       return
     }
   }
-  match @tesseract_memory_db.DurableMemory::put_with_ttl(store, "alpha", "1", ttl) {
+  match
+    @tesseract_memory_db.DurableMemory::put_with_ttl(store, "alpha", "1", ttl) {
     Ok(_) => ()
     Err(message) => println("PROBE write_error " + message)
   }
@@ -104,7 +120,9 @@ pub fn write_checkpoint(path : String, ttl : @tesseract_memory.Ttl) -> Unit {
 pub fn read_header_value(path : String) -> String raise {
   let conn = @sqlite3.Connection::open(path)
   defer conn.close()
-  let stmt = conn.prepare("SELECT value FROM sudoku_cells WHERE grid_position = 1")
+  let stmt = conn.prepare(
+    "SELECT value FROM sudoku_cells WHERE grid_position = 1",
+  )
   defer stmt.finalize()
   if stmt.step() {
     let value : String = stmt.column(index=0)
@@ -118,7 +136,9 @@ pub fn read_header_value(path : String) -> String raise {
 pub fn read_header_key(path : String) -> String raise {
   let conn = @sqlite3.Connection::open(path)
   defer conn.close()
-  let stmt = conn.prepare("SELECT key FROM sudoku_cells WHERE grid_position = 1")
+  let stmt = conn.prepare(
+    "SELECT key FROM sudoku_cells WHERE grid_position = 1",
+  )
   defer stmt.finalize()
   if stmt.step() {
     let key : String = stmt.column(index=0)
@@ -135,12 +155,12 @@ pub fn read_header_key(path : String) -> String raise {
 pub fn rewrite_header_version(path : String, version : String) -> Unit raise {
   let conn = @sqlite3.Connection::open(path)
   defer conn.close()
-  let stmt = conn.prepare("SELECT value FROM sudoku_cells WHERE grid_position = 1")
+  let stmt = conn.prepare(
+    "SELECT value FROM sudoku_cells WHERE grid_position = 1",
+  )
   defer stmt.finalize()
   let old = if stmt.step() { stmt.column(index=0) } else { "" }
-  let parsed = @json.parse(old) catch {
-    _ => return
-  }
+  let parsed = @json.parse(old) catch { _ => return }
   match parsed {
     @builtin.Json::Object(obj) => {
       obj.set("format", @json.to_json(version))
@@ -161,7 +181,9 @@ pub fn rewrite_header_version(path : String, version : String) -> Unit raise {
 pub fn rewrite_header_key(path : String, key : String) -> Unit raise {
   let conn = @sqlite3.Connection::open(path)
   defer conn.close()
-  let stmt = conn.prepare("UPDATE sudoku_cells SET key = ? WHERE grid_position = 1")
+  let stmt = conn.prepare(
+    "UPDATE sudoku_cells SET key = ? WHERE grid_position = 1",
+  )
   defer stmt.finalize()
   stmt.bind(index=1, key)
   ignore(stmt.step())
@@ -181,8 +203,7 @@ pub fn delete_header_row(path : String) -> Unit raise {
 /// Writes a file that is not a database at all.
 pub fn write_garbage(path : String) -> Unit {
   @xfs.write_string_to_file(
-    path,
-    "this is not a database, it is a sentence about one",
+    path, "this is not a database, it is a sentence about one",
   ) catch {
     _ => ()
   }

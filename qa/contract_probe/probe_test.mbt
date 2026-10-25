@@ -11,7 +11,9 @@
 ///|
 /// The format's constants, as the published package declares them.
 test "the format's constants are the ones the contract names" {
-  println("PROBE format_version " + @tesseract_memory_db.FORMAT_VERSION.to_string())
+  println(
+    "PROBE format_version " + @tesseract_memory_db.FORMAT_VERSION.to_string(),
+  )
   println("PROBE header_key " + @tesseract_memory_db.HEADER_KEY)
   assert_eq(@tesseract_memory_db.FORMAT_VERSION, 1L)
   assert_eq(@tesseract_memory_db.HEADER_KEY, "tesseract-memory")
@@ -32,12 +34,10 @@ test "a checkpoint written now is read back now" {
   )
   println("PROBE roundtrip_path " + path)
   println(
-    "PROBE header_value " +
-    @tesseract_qa_contract_probe.read_header_value(path),
+    "PROBE header_value " + @tesseract_qa_contract_probe.read_header_value(path),
   )
   println(
-    "PROBE header_row_key " +
-    @tesseract_qa_contract_probe.read_header_key(path),
+    "PROBE header_row_key " + @tesseract_qa_contract_probe.read_header_key(path),
   )
   let config = @tesseract_memory.default_config()
   let store = match @tesseract_memory_db.open(path, config) {
@@ -54,7 +54,9 @@ test "a checkpoint written now is read back now" {
   let clock = @tesseract_memory_db.DurableMemory::memory(store).clock()
   println("PROBE roundtrip_open ok")
   println("PROBE roundtrip_entries " + entries.to_string())
-  println("PROBE roundtrip_alpha " + @tesseract_qa_contract_probe.opt_str(alpha))
+  println(
+    "PROBE roundtrip_alpha " + @tesseract_qa_contract_probe.opt_str(alpha),
+  )
   println("PROBE roundtrip_beta " + @tesseract_qa_contract_probe.opt_str(beta))
   println("PROBE roundtrip_clock " + clock.name())
   println("PROBE roundtrip_now " + clock.read().to_string())
@@ -103,7 +105,9 @@ test "a checkpoint with an unknown format version is refused" {
   println("PROBE bad_version_open ok")
   println("PROBE bad_version_entries " + entries.to_string())
   println("PROBE bad_version_clock " + clock.name())
-  fail("a checkpoint whose format version is unknown was accepted rather than refused")
+  fail(
+    "a checkpoint whose format version is unknown was accepted rather than refused",
+  )
 }
 
 ///|
@@ -116,7 +120,10 @@ test "a checkpoint with an unknown format version is refused" {
 /// mistaken for the cause.
 test "a file whose header key is not this format's is refused" {
   let path = @tesseract_qa_contract_probe.probe_path("bad-key.db")
-  @tesseract_qa_contract_probe.write_checkpoint(path, @tesseract_memory.ttl_never())
+  @tesseract_qa_contract_probe.write_checkpoint(
+    path,
+    @tesseract_memory.ttl_never(),
+  )
   @tesseract_qa_contract_probe.rewrite_header_key(path, "some-other-tool")
   println(
     "PROBE bad_key_header_row_key " +
@@ -134,14 +141,19 @@ test "a file whose header key is not this format's is refused" {
   let entries = @tesseract_memory_db.DurableMemory::size(store)
   println("PROBE bad_key_open ok")
   println("PROBE bad_key_entries " + entries.to_string())
-  fail("a file whose header is not a tesseract-memory header was accepted as one")
+  fail(
+    "a file whose header is not a tesseract-memory header was accepted as one",
+  )
 }
 
 ///|
 /// A checkpoint with no header row at all is refused.
 test "a checkpoint with no header row is refused" {
   let path = @tesseract_qa_contract_probe.probe_path("no-header.db")
-  @tesseract_qa_contract_probe.write_checkpoint(path, @tesseract_memory.ttl_never())
+  @tesseract_qa_contract_probe.write_checkpoint(
+    path,
+    @tesseract_memory.ttl_never(),
+  )
   @tesseract_qa_contract_probe.delete_header_row(path)
   let config = @tesseract_memory.default_config()
   let store = match @tesseract_memory_db.open(path, config) {
@@ -210,31 +222,59 @@ test "an empty file opens as an empty store" {
 ///
 /// `reload` replaces what the store holds with what the file holds, so a file
 /// the reader does not understand empties the store as well.
+///
+/// The store is opened on a **good** file, and the file is corrupted
+/// afterwards. That order matters: a build that refuses the bad file at the
+/// open never reaches the reload, so a probe that only ever opened the bad
+/// file would be measuring the open twice and the reload never. Opening the
+/// good file first is the only way to reach the reload on a build that
+/// refuses early — and to reach it at all is the point.
+///
+/// The corruption is read back before the reload, because a probe that
+/// measured nothing must say so rather than pass.
 test "a reload of a checkpoint with an unknown version is refused" {
   let path = @tesseract_qa_contract_probe.probe_path("reload-bad-version.db")
-  @tesseract_qa_contract_probe.write_checkpoint(path, @tesseract_memory.ttl_never())
-  @tesseract_qa_contract_probe.rewrite_header_version(path, "999")
+  @tesseract_qa_contract_probe.write_checkpoint(
+    path,
+    @tesseract_memory.ttl_never(),
+  )
   let config = @tesseract_memory.default_config()
   let store = match @tesseract_memory_db.open(path, config) {
     Ok(s) => s
     Err(message) => {
       println("PROBE reload_open err")
       println("PROBE reload_message " + message)
-      return
+      fail(
+        "the good checkpoint could not be opened, so the reload was never measured",
+      )
     }
   }
   let before = @tesseract_memory_db.DurableMemory::size(store)
+  println("PROBE reload_open ok")
+  println("PROBE reload_before " + before.to_string())
+  @tesseract_qa_contract_probe.rewrite_header_version(path, "999")
+  let header = @tesseract_qa_contract_probe.read_header_value(path)
+  if !header.contains("999") {
+    println("PROBE reload_corrupt failed")
+    fail(
+      "the header version could not be rewritten, so the reload was never measured",
+    )
+  }
+  println("PROBE reload_corrupt ok")
   match @tesseract_memory_db.DurableMemory::reload(store) {
     Ok(n) => {
       println("PROBE reload_ok")
       println("PROBE reload_entries " + n.to_string())
-      println("PROBE reload_before " + before.to_string())
       fail("a reload of a checkpoint with an unknown version was accepted")
     }
     Err(message) => {
       println("PROBE reload_err")
       println("PROBE reload_message " + message)
-      println("PROBE reload_before " + before.to_string())
+      let after = @tesseract_memory_db.DurableMemory::size(store)
+      println("PROBE reload_after " + after.to_string())
+      if after != before {
+        fail("the store lost what it held when the reload was refused")
+      }
     }
   }
 }

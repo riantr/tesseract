@@ -33,12 +33,34 @@ import fs from "node:fs";
 import path from "node:path";
 import { ROOT, log, scratch, cleanup } from "./lib.mjs";
 
-const PUBLISHED_VERSION = "0.1.13";
+const PROBE_DIR = path.join(ROOT, "qa", "contract_probe");
+
+/**
+ * The published version this audit measures.
+ *
+ * It is read out of the **probe module's own pin**, not written down here.
+ * The probe and this audit have to measure the same artifact: if each
+ * carried its own copy of the version, a release would bump one of them and
+ * the audit would go on measuring the last release -- which is exactly what
+ * happened at 0.1.14, where the probe had moved to the new version and the
+ * audit's own copy had not.
+ */
+function readPublishedVersion() {
+  try {
+    const mod = fs.readFileSync(path.join(PROBE_DIR, "moon.mod"), "utf8");
+    const m = /"riantr\/tesseract@([^"]+)"/.exec(mod);
+    if (m) return m[1];
+  } catch (e) {
+    // Fall through: the version is reported as unknown rather than guessed.
+  }
+  return null;
+}
+
+const PUBLISHED_VERSION = readPublishedVersion();
 const INDEX_URL =
   `https://assets.mooncakes.io/assets/riantr/tesseract@${PUBLISHED_VERSION}/module_index.json`;
 const REGISTRY_URL = "https://mooncakes.io/api/v0/modules/riantr/tesseract";
 
-const PROBE_DIR = path.join(ROOT, "qa", "contract_probe");
 /** The published package, as `moon` fetched it for the probe's dependency. */
 const PUBLISHED_CACHE = path.join(
   PROBE_DIR,
@@ -357,6 +379,15 @@ async function checkPublishedSurface() {
   log("");
   log("=== CHECK 1: published surface vs local surface ===");
 
+  if (!PUBLISHED_VERSION) {
+    skip(
+      ID,
+      "published surface vs local surface",
+      "the probe module pins no published version of riantr/tesseract, so there is nothing to measure",
+    );
+    return;
+  }
+
   let index = null;
   try {
     const res = await fetch(INDEX_URL, {
@@ -646,6 +677,14 @@ function checkCheckpointFormat() {
   const ID = "C2";
   log("");
   log("=== CHECK 2: checkpoint format contract ===");
+  if (!PUBLISHED_VERSION) {
+    skip(
+      ID,
+      "checkpoint format contract",
+      "the probe module pins no published version of riantr/tesseract, so there is nothing to measure",
+    );
+    return;
+  }
   log(
     `     measured against the PUBLISHED artifact riantr/tesseract@${PUBLISHED_VERSION}`,
   );
@@ -802,11 +841,18 @@ function checkCheckpointFormat() {
       id: "C2.6",
       probe: "reload",
       title: "a reload of a checkpoint with an unknown version",
-      refused: () => facts.has("reload_err"),
+      // The refusal may land at the open or at the reload, and refusing
+      // earlier is the stronger answer: a build that will not open the file
+      // cannot reload it either. What the contract forbids is the file being
+      // read, not the step that notices it.
+      refused: () =>
+        facts.has("reload_err") || facts.get("reload_open") === "err",
       describe: () =>
-        `reload=accepted entries=${facts.get(
+        `reload=${facts.has("reload_err") ? "refused" : "accepted"} entries=${facts.get(
           "reload_entries",
-        )} store_had=${facts.get("reload_before")}`,
+        )} store_had=${facts.get("reload_before")} store_kept=${facts.get(
+          "reload_after",
+        )}`,
       contract:
         "src/tesseract_memory_db/store.mbt:186-198 — reload replaces what the store holds with what the file holds",
       why: "a reload is the operation that empties a store, so a file the reader does not understand empties it as well.",
@@ -881,7 +927,8 @@ function checkCheckpointFormat() {
 /**
  * The refusals the working tree has to make.
  *
- * These are the four cases the published artifact gets wrong (CHECK 2). The
+ * These are the four cases of the checkpoint format contract, and the
+ * published artifact is measured against the same four in CHECK 2. The
  * working tree is measured by its own tests, and the test names are pinned
  * here: a refusal test that is renamed or deleted shows up as a *missing*
  * refusal rather than as a silent pass.
@@ -951,7 +998,7 @@ function checkWorkingTreeCheckpoint() {
   if (missing.length === 0 && failing.length === 0 && summary[3] === "0") {
     pass(
       ID,
-      `the working tree refuses all ${TREE_REFUSALS.length} case(s) the published artifact reads`,
+      `the working tree refuses all ${TREE_REFUSALS.length} case(s) of the checkpoint contract`,
       TREE_REFUSALS.map((n) => `ok: ${n}`).join("\n"),
     );
     return;
@@ -959,7 +1006,7 @@ function checkWorkingTreeCheckpoint() {
 
   fail(
     ID,
-    "the working tree does not refuse every case the published artifact reads",
+    "the working tree does not refuse every case of the checkpoint contract",
     [
       missing.length ? `no such test: ${missing.join(", ")}` : "",
       failing.length ? `failing: ${failing.join(", ")}` : "",

@@ -2,7 +2,7 @@
 //
 // This is a **nested module**: it has its own `moon.mod`, so the parent
 // module's build never sees it and it can never be published. It depends on
-// the **published** `riantr/tesseract@0.1.13` — the same way `qa/fuzz` does —
+// the **published** `riantr/tesseract@0.1.14` — the same way `qa/fuzz` does —
 // so what it measures is the surface a consumer actually gets, not the surface
 // sitting in the working tree.
 //
@@ -20,7 +20,7 @@ version = "0.1.0"
 description = "A probe of the published tesseract package's checkpoint format contract."
 
 import {
-  "riantr/tesseract@0.1.13",
+  "riantr/tesseract@0.1.14",
   "moonbit-community/sqlite3@0.2.3",
   "moonbitlang/x@0.5.6",
 }

@@ -5,5 +5,5 @@ version = "0.1.0"
 description = "A property fuzz of the published tesseract package."
 
 import {
-  "riantr/tesseract@0.1.13",
+  "riantr/tesseract@0.1.14",
 }

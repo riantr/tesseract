@@ -8,8 +8,13 @@ instead of carrying an estimate.
 The sweep that found the defects ran against 0.1.13. This round **acted on what it
 found**: the findings that were defects are fixed, the findings that were questions
 about what the package should offer are answered and recorded, and every number
-below was re-measured afterwards. The registry still carried 0.1.13 while the round
-ran, and the report says plainly which defects that means.
+below was re-measured afterwards.
+
+**v0.1.14 is published.** The registry's latest version is 0.1.14, and the probe
+that measures what a consumer actually gets now passes **8 of 8** against it: the
+four checkpoint defects are closed in the artifact, not only in the tree. Getting
+there took two fixes to the release and to the audit itself — see "The release
+failed" below.
 
 ---
 
@@ -23,7 +28,7 @@ ran, and the report says plainly which defects that means.
 | 4 | **Unit** | **422 tests, 422 passed, 0 failed**, on 4 check targets under `--deny-warn` | `moon test --target wasm --deny-warn` |
 | 5 | **Integration** | **22** production edges across 14 packages (+1 test-only); **11** crossed by an in-tree test that names the other package; **11** covered only from outside the package | `node qa/integration.mjs` |
 | 6 | **API** | **523** public symbols (62 types, 169 fns, 285 methods, 7 consts); naming **100 %** conformant; **0 findings** (75 in the 0.1.13 sweep) | `node qa/api.mjs` |
-| 7 | **Contract** | **508** published symbols matched (175 values, 62 types, 271 methods); **2** published symbols deliberately no longer exposed and **15** new ones, all drift; **12** error codes, **12/12** documented and **12/12** asserted on the code; **0** findings in the working tree | `node qa/contract.mjs` |
+| 7 | **Contract** | **523** published symbols matched, **0** mismatched; the published package's own interface files **15 identical, 0 differing**; the probe of the published artifact: **8 tests, 8 passed**; **12** error codes, **12/12** documented and **12/12** asserted on the code; **0** findings in the working tree, **3** in the published artifact, **0** drift | `node qa/contract.mjs` |
 | 8 | **Component** | **8** library packages, coverage from **15.6 %** to **98.5 %**; **0** API findings across the module's packages | `node qa/api.mjs`, `node qa/coverage.mjs` |
 | 9 | **Gherkin** | **7** features, **54** scenarios, **222** steps, **54/54** pass | `node qa/gherkin.mjs` |
 | 10 | **E2E** | **72** commands across **5** CLIs mapped onto **4** layers; **0** exercised by no layer; **5** exercised only by the unit suite | `node qa/e2e.mjs` |
@@ -157,6 +162,54 @@ included the `function check(` definition and the word `check(` inside a failure
 message — **105** and **47** where the suites run **103** and **45**. The count now
 matches the calls, and the tool's own header comment no longer quotes the numbers
 of a previous round.
+
+### 7. The release failed, and the audit was measuring a version that had moved on
+
+The v0.1.14 publish run failed in **15 seconds**, at the step that asserts there
+is exactly one module to publish: it found **three**. There was one before the QA
+sweep and there are three now, because `qa/fuzz` and `qa/contract_probe` are
+nested modules with their own `moon.mod`, and the QA sweep added them *after*
+v0.1.13 was tagged.
+
+The guard was right to fire — a second module in the tree is exactly what it is
+there to catch — so it was taught about `qa/`, where every file is a test fixture
+with its own gate, and it still fails loudly about a module anywhere else. The
+release was then re-run against the same tag: **published, and the GitHub Release
+is live.**
+
+Three more things turned up while the round was closing, and all three were
+defects in the *measurement*, not in the module:
+
+- **The audit measured a version that no longer existed.** `qa/contract.mjs` carried
+  its own copy of the published version (`0.1.13`) while the probe module had
+  already been moved to `0.1.14` — so the audit compared the tree against the last
+  release and reported a drift of 2 removed and 15 added symbols that had already
+  shipped. The version is now read out of the **probe module's own pin**, so the
+  two cannot disagree: there is one place to bump.
+- **The audit did not recognise a refusal that came earlier.** C2.6 asked whether
+  the probe printed `reload_err` — the fact a build emits when it refuses at the
+  *reload*. A build that refuses the bad file at the *open* never reaches the
+  reload, so the refusal happened and the audit called it a failure. The check now
+  asks whether the probe refused at all, and says where.
+- **The probe inherited the last run's file.** The probe's files live in a
+  directory that survives the run, and a checkpoint left with a rewritten header
+  cannot be opened — so the run after a failed one reported the *previous* run's
+  corruption as its own result. Every probe file is removed before it is written
+  now.
+
+And one thing the probe was not measuring at all: it opened the *bad* file and
+then reloaded it, so on a build that refuses early it was measuring the open
+twice and the reload never. The probe now opens the **good** file, corrupts it
+afterwards, reads the corruption back to be sure it took, and then reloads — which
+is the only order that reaches the reload on a build that refuses at the open. It
+also asserts that the store kept what it held when the reload was refused.
+
+Both ends of that are proven by mutation:
+
+| the probe against | the result |
+|---|---|
+| the published **0.1.14** | **8 / 8 pass** — the reload is refused, the store keeps its 2 entries |
+| the published **0.1.13** | **4 / 8 fail**, including *"a reload of a checkpoint with an unknown version was accepted"* |
 
 ---
 
@@ -334,20 +387,33 @@ Gherkin features, which drive the binaries as real processes — a stronger
 crossing than a test in the same package. **Every library-to-library edge is
 crossed by an in-tree test**; that was the half this round closed.
 
-### The published artifact still carries the four checkpoint defects
+### The registry's index names the executables' types — 3 LOW findings
 
-They are fixed in the tree and proven there, but the registry carries 0.1.13
-until this release lands. A consumer reading mooncakes.io today gets the old
-reader. **v0.1.14 closes them** — and it is the release that carries the
-opaque value types, so a consumer has one breaking change to make, not two.
+The published index lists 22 types in the `cmd/*` packages — `Cli`, `StateReq`,
+`CellView` and their kin — that no consumer can reach, because an executable
+package cannot be imported at all. The registry builds that index from the
+packages' own interface files, so every re-publish reproduces it, and it is not
+this repo's to fix. The three findings are `LOW`, they are about the registry's
+index rather than about the module's code, and they do not make the exit code
+non-zero: the exit code means *the working tree has a defect*.
+
+### The four checkpoint defects are closed in the artifact, not only in the tree
+
+They were fixed in the tree in the previous round and were closed in the
+published package by this one. The probe of the published 0.1.14 passes 8 of 8:
+the unknown version, the wrong header key, the missing header and the reload are
+all refused, and the store keeps what it held when the reload is refused.
 
 ---
 
 ## What is not claimed
 
-- **The published 0.1.13 is not clean.** It carries the four checkpoint
-  defects. The tree is clean; the artifact is not, and the artifact is what
-  consumers have until this release lands.
+- **The published 0.1.14 is clean where it was measured, and that is not the
+  same as audited.** The probe covers the checkpoint contract's four refusals
+  and the round trip, and the published package's interface files are
+  byte-identical to the tree's. The 3 `LOW` findings against the published
+  artifact are about the registry's index, not about the module's code, and
+  every re-publish reproduces them.
 - **Coverage of `cmd/` is 0 %.** The binaries have no in-process tests; they
   are driven as processes by `cli-smoke.mjs` (**103** checks) and `gui-smoke.mjs`
   (**45** checks), and the line-coverage tool cannot see that.
@@ -399,10 +465,12 @@ cd qa/fuzz && moon test --target native   # fuzz, against the published package
 `qa/fuzz` and `qa/contract_probe` are **nested modules**: they have their own
 `moon.mod`, so the parent module's build never sees them, they carry their own
 gate, and they can never be published. `qa/fuzz` and `qa/contract_probe` both
-depend on the **published** `riantr/tesseract@0.1.13`, so they measure what a
+depend on the **published** `riantr/tesseract@0.1.14`, so they measure what a
 consumer gets rather than what is sitting in the working tree — which is why the
-checkpoint contract reports 7 findings against the published artifact and 0
-against the tree.
+checkpoint contract reports its findings against the published artifact and none
+against the tree. The version is pinned in `qa/contract_probe/moon.mod`, and the
+contract audit reads it from there: one place to bump when the next release
+lands.
 
 The house gate, unchanged and green at the end of this round:
 
