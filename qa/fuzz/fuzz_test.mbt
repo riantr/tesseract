@@ -20,32 +20,20 @@
 /// The error codes this port is allowed to produce. The list is the README's,
 /// and a code outside it is a bug in the port or a bug in the list.
 let allowed_codes : Array[String] = [
-  "INVALID_INPUT",
-  "INVALID_DIGIT",
-  "INVALID_POSITION",
-  "INVALID_COLUMNS",
-  "INVALID_SYNTAX",
-  "KEY_NOT_FOUND",
-  "POSITION_NOT_FOUND",
-  "POSITION_EMPTY",
-  "POSITION_OUT_OF_RANGE",
-  "SUDOKU_CONFLICT",
-  "UNSUPPORTED_SQL",
-  "EMPTY_SQL",
+  "INVALID_INPUT", "INVALID_DIGIT", "INVALID_POSITION", "INVALID_COLUMNS", "INVALID_SYNTAX",
+  "KEY_NOT_FOUND", "POSITION_NOT_FOUND", "POSITION_EMPTY", "POSITION_OUT_OF_RANGE",
+  "SUDOKU_CONFLICT", "UNSUPPORTED_SQL", "EMPTY_SQL",
 ]
 
 ///|
 /// The codes the parser itself produces. The executor adds the rest.
 let parser_codes : Array[String] = [
-  "INVALID_SYNTAX",
-  "EMPTY_SQL",
-  "UNSUPPORTED_SQL",
-  "INVALID_COLUMNS",
+  "INVALID_SYNTAX", "EMPTY_SQL", "UNSUPPORTED_SQL", "INVALID_COLUMNS",
 ]
 
 ///|
 /// How many statements one run of the fuzz draws.
-const ROUNDS : Int = 3000
+const ROUNDS : Int32 = 3000
 
 ///|
 /// A store with nothing in it.
@@ -95,11 +83,10 @@ test "the parser's own error codes stay closed" {
     let sql = @tesseract_qa_fuzz.next_statement(rng)
     match @tesseract.parse_statement(sql) {
       Ok(_) => ()
-      Err(e) => {
+      Err(e) =>
         if !parser_codes.contains(e.code) {
           assert_eq(e.code, "<one of the four parser codes>")
         }
-      }
     }
     i = i + 1
   }
@@ -141,12 +128,11 @@ test "a statement the lexer rejects is a syntax error" {
     let sql = @tesseract_qa_fuzz.next_statement(rng)
     match @tesseract.lex(sql) {
       Ok(_) => ()
-      Err(_) => {
+      Err(_) =>
         match @tesseract.parse_statement(sql) {
           Ok(_) => assert_true(false)
           Err(e) => assert_eq(e.code, "INVALID_SYNTAX")
         }
-      }
     }
     i = i + 1
   }
@@ -195,8 +181,7 @@ test "a refused statement leaves the store alone" {
     // on, and a refused one has something to disturb.
     ignore(
       @tesseract.execute(
-        db,
-        "INSERT INTO tesseract (key,value) VALUES ('seed','v') AT 1;",
+        db, "INSERT INTO tesseract (key,value) VALUES ('seed','v') AT 1;",
       ),
     )
     let before = @tesseract.Tesseract::occupancy(db)

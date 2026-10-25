@@ -83,6 +83,21 @@ You can browse and install extra skills here:
   working directory and looks for `proton.project.json` there — so it has to be
   run **from the repository root** or the app never starts.
 
+- **The nested modules carry their own gate, and the gate above does not see
+  them.** `qa/fuzz` and `qa/contract_probe` have their own `moon.mod`, so the
+  root module's `moon fmt --check` and `moon check` never touch them — and
+  both of them were unformatted for as long as they existed. Each one has to
+  be gated separately:
+
+  ```
+  cd qa/contract_probe && moon fmt --check && moon check --target native --deny-warn && moon test --target native
+  cd qa/fuzz && moon fmt --check && moon check --target native --deny-warn && moon test --target native
+  ```
+
+  They are also the only two places that build against the **published**
+  package rather than the tree, so their tests are the only ones that can see
+  a release breaking a consumer.
+
 - **The order of a release is fixed.** Update the dependencies, get the gate
   green, *then* update the README, and only then cut the tag. A README that
   describes a version the registry does not carry is worse than a stale one.

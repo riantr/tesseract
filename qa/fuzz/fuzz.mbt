@@ -32,7 +32,7 @@ pub struct Rng {
 /// A generator on a seed. A seed of zero is replaced, because zero is the one
 /// state xorshift cannot leave.
 pub fn Rng::seed(value : Int64) -> Rng {
-  { state: if value == 0L { 88172645463325252L } else { value } }
+  { state: if value == 0L { 88172645463325252L } else { value }, }
 }
 
 ///|
@@ -48,9 +48,13 @@ pub fn Rng::next(self : Rng) -> Int64 {
 
 ///|
 /// A number in `0..n`.
-pub fn Rng::below(self : Rng, n : Int) -> Int {
+pub fn Rng::below(self : Rng, n : Int32) -> Int32 {
   let v = self.next() % n.to_int64()
-  if v < 0L { (-v).to_int() } else { v.to_int() }
+  if v < 0L {
+    (-v).to_int()
+  } else {
+    v.to_int()
+  }
 }
 
 ///|
@@ -62,47 +66,35 @@ pub fn Rng::pick(self : Rng, items : Array[String]) -> String {
 ///|
 /// The words the SQL vocabulary is made of.
 pub let vocabulary : Array[String] = [
-  "SELECT", "INSERT", "INTO", "UPDATE", "DELETE", "CREATE", "DROP", "TABLE",
-  "tesseract", "WHERE", "SET", "VALUES", "KEY", "VALUE", "DIGIT", "POSITION",
-  "AND", "OR", "NOT", "NULL", "IS", "LIKE", "BETWEEN", "IN", "EXISTS",
-  "LIMIT", "OFFSET", "ORDER", "BY", "GROUP", "HAVING", "ASC", "DESC",
-  "AT", "COORDS", "BEGIN", "COMMIT", "ROLLBACK", "SAVEPOINT", "RELEASE",
-  "TO", "TRUE", "FALSE", "json_extract", "count", "sum", "min", "max", "avg",
-  "line", "slab", "peers", "left", "right", "structure", "json",
-  "'a'", "'b'", "'k'", "0", "1", "2", "3", "42", "-1", "1.5", "x",
-  "=", "==", "!=", "<", ">", "<=", ">=", "+", "-", "*", "/", "%",
-  "(", ")", ",", ";", ".", "?", ":", "'", "\"", "`", " ",
+  "SELECT", "INSERT", "INTO", "UPDATE", "DELETE", "CREATE", "DROP", "TABLE", "tesseract",
+  "WHERE", "SET", "VALUES", "KEY", "VALUE", "DIGIT", "POSITION", "AND", "OR", "NOT",
+  "NULL", "IS", "LIKE", "BETWEEN", "IN", "EXISTS", "LIMIT", "OFFSET", "ORDER", "BY",
+  "GROUP", "HAVING", "ASC", "DESC", "AT", "COORDS", "BEGIN", "COMMIT", "ROLLBACK",
+  "SAVEPOINT", "RELEASE", "TO", "TRUE", "FALSE", "json_extract", "count", "sum",
+  "min", "max", "avg", "line", "slab", "peers", "left", "right", "structure", "json",
+  "'a'", "'b'", "'k'", "0", "1", "2", "3", "42", "-1", "1.5", "x", "=", "==", "!=",
+  "<", ">", "<=", ">=", "+", "-", "*", "/", "%", "(", ")", ",", ";", ".", "?", ":",
+  "'", "\"", "`", " ",
 ]
 
 ///|
 /// The statements the mutations are made from. Each one is a statement the
 /// dialect serves, so a ruined one is a statement that is *nearly* right.
 pub let templates : Array[String] = [
-  "SELECT * FROM tesseract;",
-  "SELECT * FROM tesseract WHERE key = 'a';",
-  "SELECT key, value FROM tesseract WHERE digit = 1 ORDER BY key DESC;",
-  "SELECT count(*) FROM tesseract;",
-  "SELECT json_extract(value, '$.a') FROM tesseract;",
-  "INSERT INTO tesseract (key,value) VALUES ('k','v') AT 1;",
-  "INSERT INTO tesseract (key,value,digit) VALUES ('k','v',2) AT (1,2,3,4);",
-  "UPDATE tesseract SET value = 'x' WHERE key = 'k';",
-  "DELETE FROM tesseract WHERE key = 'k';",
-  "BEGIN;",
-  "COMMIT;",
-  "ROLLBACK;",
-  "SAVEPOINT s1;",
-  "ROLLBACK TO s1;",
-  "RELEASE s1;",
+  "SELECT * FROM tesseract;", "SELECT * FROM tesseract WHERE key = 'a';", "SELECT key, value FROM tesseract WHERE digit = 1 ORDER BY key DESC;",
+  "SELECT count(*) FROM tesseract;", "SELECT json_extract(value, '$.a') FROM tesseract;",
+  "INSERT INTO tesseract (key,value) VALUES ('k','v') AT 1;", "INSERT INTO tesseract (key,value,digit) VALUES ('k','v',2) AT (1,2,3,4);",
+  "UPDATE tesseract SET value = 'x' WHERE key = 'k';", "DELETE FROM tesseract WHERE key = 'k';",
+  "BEGIN;", "COMMIT;", "ROLLBACK;", "SAVEPOINT s1;", "ROLLBACK TO s1;", "RELEASE s1;",
   "CREATE DATABASE t;",
 ]
 
 ///|
 /// The characters a mutation likes to use.
 pub let nasty : Array[String] = [
-  "'", "\"", "`", ";", ",", "(", ")", "*", "-", "/", "%", "=", "<", ">", ".",
-  "?", ":", "!", "&", "|", "^", "~", "$", "@", "#", "\\", "{", "}", "[", "]",
-  "\n", "\t", "\r", " ", "0", "9", "x", "SELECT", "FROM", "苹果", "🍎",
-  " ", " ", "﻿",
+  "'", "\"", "`", ";", ",", "(", ")", "*", "-", "/", "%", "=", "<", ">", ".", "?",
+  ":", "!", "&", "|", "^", "~", "$", "@", "#", "\\", "{", "}", "[", "]", "\n", "\t",
+  "\r", " ", "0", "9", "x", "SELECT", "FROM", "苹果", "🍎", " ", " ", "﻿",
 ]
 
 ///|

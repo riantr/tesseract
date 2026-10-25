@@ -675,6 +675,120 @@ function parseProbeOutput(text) {
   return facts;
 }
 
+/**
+ * The probe module's own facts, and the run they came from.
+ *
+ * The probe is run **once**, and the checks that read it share the result.
+ * It is a nested module, so every run of it is a build against the published
+ * package — a run is not cheap, and a second one would measure the same thing
+ * twice.
+ */
+const probe = {
+  facts: new Map(),
+  ran: false,
+  exit: null,
+  dir: null,
+  out: "",
+};
+
+function runProbeModule() {
+  const dir = scratch("contract");
+  probe.dir = dir;
+  const r = spawnSync("moon", ["-C", PROBE_DIR, "test"], {
+    cwd: ROOT,
+    encoding: "utf8",
+    shell: false,
+    maxBuffer: 64 * 1024 * 1024,
+    timeout: 300000,
+    env: { ...process.env, TESSERACT_PROBE_DIR: dir },
+  });
+  probe.out = `${r.stdout || ""}${r.stderr || ""}`;
+  probe.exit = r.status;
+  probe.facts = parseProbeOutput(probe.out);
+  probe.ran = probe.facts.size > 0;
+  return probe;
+}
+
+/**
+ * CHECK 1b — the published surface, *called*.
+ *
+ * CHECK 1 compares the registry's index with the tree, which proves the index
+ * advertises the right **names**. It says nothing about whether a consumer can
+ * call them: an accessor that the index names and the package does not have
+ * breaks the consumer's build, and one that returns the wrong value breaks it
+ * quietly.
+ *
+ * 0.1.14 made the value types opaque, so the whole release is a set of
+ * accessors, and this is the check that exercises them against the published
+ * artifact rather than against the tree.
+ */
+function checkPublishedSurfaceCallable() {
+  const ID = "C1b";
+  log("");
+  log("=== CHECK 1b: the published surface, called ===");
+  if (!probe.ran) {
+    skip(
+      ID,
+      "the published surface, called",
+      `the probe produced no facts (exit ${probe.exit}); it did not run`,
+    );
+    return;
+  }
+
+  // The lattice, and the entry: the two value types 0.1.14 made opaque.
+  const expected = [
+    ["lattice_side", "4"],
+    ["lattice_total", "256"],
+    ["lattice_first", "1"],
+    ["lattice_last", "256"],
+    ["lattice_max_digit", "4"],
+    ["entry_scope", "default"],
+    ["entry_key", "probe-key"],
+    ["entry_value", "probe-value"],
+    ["entry_hits", "0"],
+    ["entry_sliding", "false"],
+  ];
+
+  const wrong = [];
+  const absent = [];
+  for (const [name, want] of expected) {
+    const got = probe.facts.get(name);
+    if (got === undefined) absent.push(name);
+    else if (got !== want) wrong.push(`${name}=${got} (expected ${want})`);
+  }
+
+  if (absent.length === 0 && wrong.length === 0) {
+    pass(
+      ID,
+      "every accessor of the published package returns the number the contract names",
+      expected.map(([n, v]) => `${n}=${v}`).join(", "),
+    );
+    return;
+  }
+
+  const detail = [
+    absent.length ? `not reported by the probe: ${absent.join(", ")}` : "",
+    wrong.length ? `wrong: ${wrong.join(", ")}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+  // This is a defect in the **published** artifact, not in the tree, so it is
+  // reported in the published scope and does not fail the tree's audit.
+  failPublished(
+    ID,
+    "the published package's accessors do not return the numbers the contract names",
+    detail,
+  );
+  publishedFinding(
+    "C1.8",
+    "HIGH",
+    "the published package's accessors do not return the numbers the contract names",
+    `riantr/tesseract@${PUBLISHED_VERSION}`,
+    "an accessor that returns the wrong value breaks a consumer quietly, and one that is missing breaks its build at the version boundary.",
+    detail,
+  );
+}
+
 function checkCheckpointFormat() {
   const ID = "C2";
   log("");
@@ -709,36 +823,20 @@ function checkCheckpointFormat() {
   const keyHex = [...keyBytes].map((b) => b.toString(16).padStart(2, "0")).join(" ");
   log(`     HEADER_KEY bytes (utf-8): ${keyHex}`);
 
-  const dir = scratch("contract");
-  let r;
-  try {
-    r = spawnSync("moon", ["-C", PROBE_DIR, "test"], {
-      cwd: ROOT,
-      encoding: "utf8",
-      shell: false,
-      maxBuffer: 64 * 1024 * 1024,
-      timeout: 300000,
-      env: { ...process.env, TESSERACT_PROBE_DIR: dir },
-    });
-  } finally {
-    // The files are read below, so the directory is removed at the end of the
-    // check rather than here.
-  }
-
-  const out = `${r.stdout || ""}${r.stderr || ""}`;
-  const facts = parseProbeOutput(out);
-  if (facts.size === 0) {
+  const dir = probe.dir;
+  const facts = probe.facts;
+  if (!probe.ran) {
     skip(
       ID,
       "checkpoint format contract",
-      `the probe produced no facts (exit ${r.status}); it did not run`,
+      `the probe produced no facts (exit ${probe.exit}); it did not run`,
     );
-    cleanup(dir);
+    if (dir) cleanup(dir);
     return;
   }
 
   const summary = /Total tests:\s*(\d+),\s*passed:\s*(\d+),\s*failed:\s*(\d+)/.exec(
-    out,
+    probe.out,
   );
   if (summary) {
     log(
@@ -1382,7 +1480,12 @@ function checkErrorCodes() {
  * main
  * ------------------------------------------------------------------ */
 
+// The probe is run once, and the two checks that read its facts share the
+// result: it is a nested module, so a run is a build against the published
+// package and is not cheap.
+runProbeModule();
 await checkPublishedSurface();
+checkPublishedSurfaceCallable();
 checkCheckpointFormat();
 checkWorkingTreeCheckpoint();
 checkErrorCodes();

@@ -9,6 +9,61 @@
 /// that the format does not do what its own documentation says it does.
 
 ///|
+/// The published package's opaque value types, read through their accessors.
+///
+/// 0.1.14 made `Lattice`, `Entry` and `Hit` opaque: their fields are private
+/// and every field has an accessor. The registry's index *advertises* those
+/// accessors, and the contract audit compares that index with the tree — which
+/// proves the index is not lying about a name, and nothing about whether a
+/// consumer can call it or what it returns.
+///
+/// This test does both. It is compiled against the **published** package, so
+/// an accessor that is missing or renamed is a compile error, and it asserts
+/// the numbers, so an accessor that returns the wrong thing fails the run.
+test "the published package's accessors return the numbers the contract names" {
+  // The lattice. A side of 4 is 256 cells, addressed 1..256, with digits
+  // 1..4.
+  let shape = match @tesseract_qa_contract_probe.lattice_shape(4L) {
+    Ok(s) => s
+    Err(message) => {
+      println("PROBE lattice_error " + message)
+      fail("the published package could not build a lattice of side 4")
+    }
+  }
+  println("PROBE lattice_side " + shape.side.to_string())
+  println("PROBE lattice_total " + shape.total.to_string())
+  println("PROBE lattice_first " + shape.first_position.to_string())
+  println("PROBE lattice_last " + shape.last_position.to_string())
+  println("PROBE lattice_max_digit " + shape.max_digit.to_string())
+  assert_eq(shape.side, 4L)
+  assert_eq(shape.total, 256L)
+  assert_eq(shape.first_position, 1L)
+  assert_eq(shape.last_position, 256L)
+  assert_eq(shape.max_digit, 4L)
+
+  // The entry. A `put` with the default spec lands in the default scope, never
+  // expires, and has not been read yet — so its hit count is zero.
+  let facts = match
+    @tesseract_qa_contract_probe.entry_facts("probe-key", "probe-value") {
+    Ok(f) => f
+    Err(message) => {
+      println("PROBE entry_error " + message)
+      fail("the entry the probe wrote could not be read back")
+    }
+  }
+  println("PROBE entry_scope " + facts.scope)
+  println("PROBE entry_key " + facts.key)
+  println("PROBE entry_value " + facts.value)
+  println("PROBE entry_hits " + facts.hits.to_string())
+  println("PROBE entry_sliding " + facts.sliding.to_string())
+  assert_eq(facts.scope, "default")
+  assert_eq(facts.key, "probe-key")
+  assert_eq(facts.value, "probe-value")
+  assert_eq(facts.hits, 0L)
+  assert_eq(facts.sliding, false)
+}
+
+///|
 /// The format's constants, as the published package declares them.
 test "the format's constants are the ones the contract names" {
   println(

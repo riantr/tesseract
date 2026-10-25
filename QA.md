@@ -11,10 +11,11 @@ about what the package should offer are answered and recorded, and every number
 below was re-measured afterwards.
 
 **v0.1.14 is published.** The registry's latest version is 0.1.14, and the probe
-that measures what a consumer actually gets now passes **8 of 8** against it: the
-four checkpoint defects are closed in the artifact, not only in the tree. Getting
-there took two fixes to the release and to the audit itself — see "The release
-failed" below.
+that measures what a consumer actually gets now passes **9 of 9** against it: the
+four checkpoint defects are closed in the artifact, not only in the tree, and
+every accessor of the two opaque value types returns the number the contract
+names. Getting there took two fixes to the release and three to the audit
+itself — see "The release failed" below.
 
 ---
 
@@ -28,7 +29,7 @@ failed" below.
 | 4 | **Unit** | **422 tests, 422 passed, 0 failed**, on 4 check targets under `--deny-warn` | `moon test --target wasm --deny-warn` |
 | 5 | **Integration** | **22** production edges across 14 packages (+1 test-only); **11** crossed by an in-tree test that names the other package; **11** covered only from outside the package | `node qa/integration.mjs` |
 | 6 | **API** | **523** public symbols (62 types, 169 fns, 285 methods, 7 consts); naming **100 %** conformant; **0 findings** (75 in the 0.1.13 sweep) | `node qa/api.mjs` |
-| 7 | **Contract** | **523** published symbols matched, **0** mismatched; the published package's own interface files **15 identical, 0 differing**; the probe of the published artifact: **8 tests, 8 passed**; **12** error codes, **12/12** documented and **12/12** asserted on the code; **0** findings in the working tree, **3** in the published artifact, **0** drift | `node qa/contract.mjs` |
+| 7 | **Contract** | **523** published symbols matched, **0** mismatched; the published package's own interface files **15 identical, 0 differing**; every published accessor **returns the number the contract names**; the probe of the published artifact: **9 tests, 9 passed**; **12** error codes, **12/12** documented and **12/12** asserted on the code; **0** findings in the working tree, **3** in the published artifact, **0** drift | `node qa/contract.mjs` |
 | 8 | **Component** | **8** library packages, coverage from **15.6 %** to **98.5 %**; **0** API findings across the module's packages | `node qa/api.mjs`, `node qa/coverage.mjs` |
 | 9 | **Gherkin** | **7** features, **54** scenarios, **222** steps, **54/54** pass | `node qa/gherkin.mjs` |
 | 10 | **E2E** | **72** commands across **5** CLIs mapped onto **4** layers; **0** exercised by no layer; **5** exercised only by the unit suite | `node qa/e2e.mjs` |
@@ -208,8 +209,61 @@ Both ends of that are proven by mutation:
 
 | the probe against | the result |
 |---|---|
-| the published **0.1.14** | **8 / 8 pass** — the reload is refused, the store keeps its 2 entries |
+| the published **0.1.14** | **9 / 9 pass** — the reload is refused, the store keeps its 2 entries, and every accessor returns the number the contract names |
 | the published **0.1.13** | **4 / 8 fail**, including *"a reload of a checkpoint with an unknown version was accepted"* |
+
+### 8. The published surface was advertised but never called
+
+0.1.14 is a release whose whole content is a set of **accessors**: `Lattice`,
+`Entry` and `Hit` became opaque, and the published surface grew one accessor
+per field. The contract audit compared the registry's index with the tree, which
+proves the index *advertises* the right names — and says nothing about whether
+a consumer can **call** them. An accessor the index names and the package does
+not have breaks the consumer's build; one that returns the wrong value breaks
+it quietly.
+
+Nothing in the tree exercised the published accessors, because the probes read
+the *checkpoint* format and the fuzz suite builds a default lattice without
+reading its shape. So the release's headline change had never been run by a
+consumer.
+
+The probe now does it, against the published package:
+
+| the check | what it asserts |
+|---|---|
+| **C1b** — the published surface, *called* | `lattice_of(4)` gives `side() = 4`, `total() = 256`, `first_position() = 1`, `last_position() = 256`, `max_digit() = 4`; a `put` gives `scope() = "default"`, `key()`, `value()`, `hits() = 0`, `sliding() = false` |
+
+Three mutations, three failures:
+
+| the mutation | what it produced |
+|---|---|
+| the probe's expected side changed to 5 | the probe failed: `4 != 5` |
+| the probe pinned **0.1.13** | the probe **did not compile** — *"Type `Lattice` has no method `side`"* — because 0.1.13 has no accessors at all. The probe is reading the published package, not the tree. |
+| the probe printed a wrong `lattice_side` | the audit reported `FAIL [C1b] (published 0.1.14) … wrong: lattice_side=999 (expected 4)` and recorded a **HIGH** published finding |
+
+The audit's C1b failure is reported in the **published** scope and does not fail
+the tree's exit code, which is the audit's own rule: the exit code means *the
+tree has a defect*, and a published artifact is not the tree. The probe now
+runs **once** and both checks read its facts — it is a nested module, so a run
+is a build against the published package and is not cheap.
+
+### 9. Two nested modules were never gated at all
+
+`qa/fuzz` and `qa/contract_probe` have their own `moon.mod`, so the root
+module's `moon fmt --check` and `moon check` **never see them**. Both had been
+unformatted for as long as they existed: the probe module's files and the fuzz
+module's files were both written by hand and never run through `moon fmt`.
+
+The fuzz module's formatter pass is not cosmetic. It reflowed the statement
+vocabulary and the mutation templates onto the toolchain's own line width, and
+it normalised one signature from `Int` to `Int32` — the same type under a
+different spelling, which is the kind of thing a formatter settles and a human
+reviewer never notices.
+
+The house gate now gates the nested modules too, and `AGENTS.md` says so. The
+two of them are also the only places in the repository that build against the
+**published** package rather than the tree, so their tests are the only ones
+that can see a release breaking a consumer.
 
 ---
 
@@ -400,20 +454,21 @@ non-zero: the exit code means *the working tree has a defect*.
 ### The four checkpoint defects are closed in the artifact, not only in the tree
 
 They were fixed in the tree in the previous round and were closed in the
-published package by this one. The probe of the published 0.1.14 passes 8 of 8:
+published package by this one. The probe of the published 0.1.14 passes 9 of 9:
 the unknown version, the wrong header key, the missing header and the reload are
-all refused, and the store keeps what it held when the reload is refused.
+all refused, the store keeps what it held when the reload is refused, and every
+accessor of the two opaque value types returns the number the contract names.
 
 ---
 
 ## What is not claimed
 
 - **The published 0.1.14 is clean where it was measured, and that is not the
-  same as audited.** The probe covers the checkpoint contract's four refusals
-  and the round trip, and the published package's interface files are
-  byte-identical to the tree's. The 3 `LOW` findings against the published
-  artifact are about the registry's index, not about the module's code, and
-  every re-publish reproduces them.
+  same as audited.** The probe covers the checkpoint contract's four refusals,
+  the round trip, and the accessors of the two opaque value types; the
+  published package's interface files are byte-identical to the tree's. The 3
+  `LOW` findings against the published artifact are about the registry's index,
+  not about the module's code, and every re-publish reproduces them.
 - **Coverage of `cmd/` is 0 %.** The binaries have no in-process tests; they
   are driven as processes by `cli-smoke.mjs` (**103** checks) and `gui-smoke.mjs`
   (**45** checks), and the line-coverage tool cannot see that.
@@ -485,4 +540,11 @@ moon build --target wasm
 typos
 node cli-smoke.mjs                      # 103 checks
 node gui-smoke.mjs                      # 45 checks
+```
+
+And the two nested modules, which the gate above does not see:
+
+```sh
+cd qa/contract_probe && moon fmt --check && moon check --target native --deny-warn && moon test --target native   # 9 passed
+cd qa/fuzz && moon fmt --check && moon check --target native --deny-warn && moon test --target native               # 6 passed
 ```

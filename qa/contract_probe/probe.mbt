@@ -69,6 +69,72 @@ pub fn opt_str(value : String?) -> String {
 pub const PROBE_NOW : Int64 = 1700000000000L
 
 ///|
+/// The shape of a lattice, as the published package's accessors report it.
+///
+/// 0.1.14 made `Lattice` opaque: its fields are private and every field has an
+/// accessor. A consumer reads the shape through those accessors, so the probe
+/// reads it the same way — and the test asserts the numbers.
+///
+/// The facts live here rather than in the test file because the core package
+/// is a dependency of *this* package: a `_test.mbt` file is a separate
+/// blackbox package, so a dependency used only by the test file reads as an
+/// unused package here.
+pub struct LatticeShape {
+  side : Int64
+  total : Int64
+  first_position : Int64
+  last_position : Int64
+  max_digit : Int64
+}
+
+///|
+/// The shape of a lattice of `side` cells per axis.
+pub fn lattice_shape(side : Int64) -> Result[LatticeShape, String] {
+  let lattice = match @tesseract.lattice_of(side) {
+    Ok(l) => l
+    Err(message) => return Err(message)
+  }
+  Ok({
+    side: lattice.side(),
+    total: lattice.total(),
+    first_position: lattice.first_position(),
+    last_position: lattice.last_position(),
+    max_digit: lattice.max_digit(),
+  })
+}
+
+///|
+/// The facts about an entry the published package stores.
+///
+/// `Entry` is opaque in the published package too, so the facts are read
+/// through its accessors rather than off its fields.
+pub struct EntryFacts {
+  scope : String
+  key : String
+  value : String
+  hits : Int64
+  sliding : Bool
+}
+
+///|
+/// Writes one entry and reads it back through the published accessors.
+pub fn entry_facts(key : String, value : String) -> Result[EntryFacts, String] {
+  let memory = @tesseract_memory.new_memory(10)
+  ignore(memory.put(key, value))
+  let entry = match memory.entry(key) {
+    Some(e) => e
+    None => return Err("the entry the probe wrote could not be read back")
+  }
+  Ok({
+    scope: entry.scope(),
+    key: entry.key(),
+    value: entry.value(),
+    hits: entry.hits(),
+    sliding: entry.sliding(),
+  })
+}
+
+///|
 /// Removes a probe file if it is there.
 ///
 /// The probe's files land in a directory that survives the run — the host's
