@@ -12,7 +12,7 @@
 
 name = "riantr/tesseract"
 
-version = "0.1.14"
+version = "0.1.15"
 
 // The file with the real content. `README.md` is a symlink to this one, so
 // naming the real file here states it rather than relying on every consumer
@@ -27,7 +27,7 @@ readme = "README.mbt.md"
 
 repository = "https://github.com/riantr/tesseract"
 
-license = "Apache-2.0"
+license = "MIT"
 
 keywords = [ "sudoku", "database", "key-value", "lattice", "4d" ]
 

@@ -1,4 +1,6 @@
-# Tesseract — 4D, 3 cells per axis by default
+# Tesseract
+
+![tesseract](tesseract.png)
 
 [![mooncakes](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fmooncakes.io%2Fapi%2Fv0%2Fmodules%2Friantr%2Ftesseract&query=%24.version&label=mooncakes&prefix=v)](https://mooncakes.io/docs/riantr/tesseract)
 [![release](https://img.shields.io/github/v/release/riantr/tesseract)](https://github.com/riantr/tesseract/releases)
@@ -12,10 +14,101 @@ project itself has been lifted to the same 4D lattice. The two implementations
 were run against the same 26-statement sequence and produce **identical** output —
 same success flags, error codes, positions, coordinates and digits.
 
+One lattice: 4 axes · 81 cells by default · up to 215 per axis. One SQL
+dialect: 12 error codes. One memory: TTL, byte budget, scopes, labels,
+similarity.
+
+## Features
+
+* A lattice that is a shape, not a table
+
+  `side` — how many cells each of the four axes has — is a value rather than a
+  constant. Three per axis is the default (81 cells) because every existing
+  `.tsr` and `.db` file was written under it; `--side 4` gives 256 cells and
+  digits 1..4. The range is **1..215**, and the upper bound is storage rather
+  than arithmetic: `Array` is indexed by a 32-bit `Int`, so `side^4` cells have
+  to stay addressable. `lattice_of` refuses a side it cannot address and says
+  which rule it applied rather than truncating.
+
+* A SQL surface that is its own parser, AST and executor
+
+  `lexer.mbt` → `parser.mbt` → `exec.mbt`. Not SQLite, and not a hand-rolled
+  scan either — the earlier version was 932 lines of repeated string scanning
+  whose `WHERE` was a struct holding at most one predicate per field, and the
+  shape of that struct was the bug. **The rule the executor is built around: a
+  clause the parser accepts is a clause the executor applies, or the statement
+  is refused.** The version it replaced parsed `LIMIT 1` and `ORDER BY key DESC`
+  as *nothing*, dropped them, and reported success. Twelve error codes, every
+  one of them reachable, and nothing outside the set is produced.
+
+* A memory with a lifetime, a budget and a policy
+
+  TTL as absolute, sliding or never; a byte budget over the UTF-8 content; four
+  eviction policies (LRU, LFU, oldest, largest) with pinned entries never
+  thrown away; scopes as a partition of the keyspace; labels as filters; and a
+  similarity that is **exact** — the same two texts always give the same score,
+  with no model to drift. The clock is injected, so a test is byte-comparable
+  between runs.
+
+* A durable memory whose checkpoint is refused when it cannot be read
+
+  The checkpoint is a file with a format: a header cell carrying a version and
+  a clock, and one cell per entry after it. The format's own words are *"a
+  checkpoint that carries a version this build does not know is refused rather
+  than half-read"*, and the code does that — a file with an unknown version, a
+  foreign header key or no header at all is refused, and a `reload` checks the
+  header **before** it clears the store, so a refused reload leaves the store
+  holding exactly what it held.
+
+* An index that is derivative, and says so
+
+  The SQL index holds no word the entries do not, so a rebuild gives back the
+  same thing. It is not maintained behind the caller's back: the writes go
+  through the memory's own API, so the rebuild is the caller's to run, and a
+  lookup checks the index against the store first rather than answering from a
+  stale one. The rebuild costs less than the store it was built from.
+
+* A window, and six executables
+
+  `cmd/main`, `cmd/persist`, `cmd/memory`, `cmd/memory_db`, `cmd/sa` and
+  `cmd/gui` — the command line, the file-backed store, the short-term memory,
+  the durable memory, the scan database, and a
+  [proton](https://moonbit-community.github.io/proton/) window over the same
+  library.
+
+## What you get
+
+The module is a library, so "what you get" is a set of **data structures and
+reports**, not a running service. Concretely:
+
+| You call | You get back | Shape |
+|---|---|---|
+| `@tesseract.lattice_of(side)` | the shape, or the rule that refused it | `Result[Lattice, String]` |
+| `@tesseract.execute(db, "SELECT …")` | the rows that matched, with the status of the statement | `DBResponse` |
+| `@tesseract.all_lines(lattice)` | the lattice's lines | `Array[Array[Coords]]` |
+| `@tesseract_memory.new_memory(capacity)` | a store | `Memory` |
+| `@tesseract_memory.Memory::search(query, limit)` | the hits, best first | `Array[Hit]` |
+| `@tesseract_memory.Memory::entries()` | everything the store holds | `Array[Entry]` |
+| `@tesseract_memory_db.open(path, config)` | a durable store, or the reason there is none | `Result[DurableMemory, String]` |
+| `@tesseract_memory_index.open(path)` | the index | `Result[MemoryIndex, String]` |
+| `@tesseract_sa.parse(text)` | the findings of a scan | `Result[ScanReport, String]` |
+
+Every one of those is a **pure function or an explicit data value**. There is no
+hidden global state and no network: the same inputs give the same bytes, which
+is why `moon test` can assert on them and why the gate can check the
+repository's own claims.
+
+The value types are **opaque**, and that is a promise rather than a detail:
+`Lattice`, `Entry` and `Hit` have private fields, and every field has an
+accessor, so a caller cannot build a lattice that disagrees with itself or
+write an entry's accounting behind the store's back. `Tesseract::write_cell`
+and `Tesseract::write_all` are package-private: the published surface has no
+way to write a cell directly.
+
 ## Install
 
 ```sh
-moon add riantr/tesseract@0.1.14
+moon add riantr/tesseract@0.1.15
 ```
 
 That is a **module** dependency, and it belongs in the consumer's `moon.mod`.
@@ -23,7 +116,7 @@ That is a **module** dependency, and it belongs in the consumer's `moon.mod`.
 
 ```toml
 import {
-  "riantr/tesseract@0.1.14",
+  "riantr/tesseract@0.1.15",
 }
 ```
 
@@ -43,7 +136,7 @@ a module and takes **no version at all**. A version in a `moon.pkg` import is
 not a newer spelling — it is an import the toolchain cannot find:
 
 ```
-Cannot find import 'riantr/tesseract/src/tesseract@0.1.14' in my/app/src/thing@0.1.0
+Cannot find import 'riantr/tesseract/src/tesseract@0.1.15' in my/app/src/thing@0.1.0
 ```
 
 The `src/` in the package path is part of the package's name, not a prefix the
@@ -54,7 +147,7 @@ paths — so `riantr/tesseract/src/tesseract_memory` is a package and
 alias, below.
 
 For the same reason there is no `@latest`: the version is parsed as semver, so
-`latest`, `^0.1.14`, `>=0.1.14`, `0.1` and `v0.1.14` are all rejected. A bare
+`latest`, `^0.1.15`, `>=0.1.15`, `0.1` and `v0.1.15` are all rejected. A bare
 `moon add riantr/tesseract` resolves the newest release and pins the concrete
 version it found — that is the "latest" this toolchain has.
 
@@ -79,7 +172,7 @@ package's symbols on under a name of its own.
 are the six executables in the same module — the command line, the file-backed
 store, the short-term memory, the durable memory, the scan database and the
 window. Registry entry:
-[mooncakes.io/docs/riantr/tesseract@0.1.14](https://mooncakes.io/docs/riantr/tesseract@0.1.14).
+[mooncakes.io/docs/riantr/tesseract@0.1.15](https://mooncakes.io/docs/riantr/tesseract@0.1.15).
 
 ### What the release was checked on
 
@@ -94,6 +187,30 @@ same build the numbers here were measured on. That is the toolchain this release
 was **verified** against, not a tested **minimum**: no older toolchain has been
 exercised here, and quoting a lower bound nobody ran would be a claim, not a
 fact.
+
+### What changed in 0.1.15
+
+Two changes, and **neither one breaks the published surface**:
+
+- **The license is MIT.** It was Apache-2.0. MIT is the shorter and more
+  permissive of the two, and it is what the sibling
+  [`riantr/pyroduct`](https://mooncakes.io/docs/riantr/pyroduct@0.1.35) uses.
+  The change is in `LICENSE` and in `moon.mod`'s `license` field, which is
+  what the registry publishes — so **0.1.14 on the registry still says
+  Apache-2.0**, and only 0.1.15 says MIT. A consumer that reads the license
+  off the registry has to read it off the version it actually depends on.
+- **There is a logo.** `tesseract.png` is what the README shows and what the
+  registry's docs page renders; `tesseract_Logo.png` is the same artwork at
+  1024×1024, for anyone who wants the full-resolution file. Both are published
+  with the module, and the README's image path is relative, so the registry
+  rewrites it to the asset URL.
+
+The README was restructured in this release to match the shape
+[`riantr/pyroduct`](https://mooncakes.io/docs/riantr/pyroduct@0.1.35) uses —
+title, logo, intro, `Features`, `What you get`, then `Quick Start`, `Example`,
+`Gates and drift detectors`, `Used By` and `Attribution` — because a reader who
+has seen one of those modules should not have to learn a second layout. The
+technical content is the same content; the sections around it are new.
 
 ### What changed in 0.1.14
 
@@ -890,10 +1007,10 @@ to exactly one of them.
 ///|
 let m = @tesseract_memory.new_memory(100)
 let work = m.scope("work")
-ignore(work.put("todo", "ship 0.1.14"))
+ignore(work.put("todo", "ship 0.1.15"))
 ignore(m.scope("notes").put("todo", "buy milk"))
 // Two entries, one key.
-assert_eq(work.get("todo"), Some("ship 0.1.14"))
+assert_eq(work.get("todo"), Some("ship 0.1.15"))
 assert_eq(m.scope("notes").get("todo"), Some("buy milk"))
 ```
 
@@ -942,7 +1059,7 @@ place where there is nothing to find.
 From a shell, the scope is the partition the commands work in:
 
 ```sh
-moon run cmd/memory -- --scope work "put todo ship 0.1.14" "keys"
+moon run cmd/memory -- --scope work "put todo ship 0.1.15" "keys"
 moon run cmd/memory -- "put a the cat sat" "scope work" "put a the cat sat on the mat" "scopes"
 moon run cmd/memory -- "put a the cat sat" "scope work" "put a the cat sat on the mat" "search-all cat"
 ```
@@ -1211,7 +1328,7 @@ let m = @tesseract_memory.new_memory(100)
 ignore(
   m.put_spec(
     "todo",
-    "ship 0.1.14",
+    "ship 0.1.15",
     @tesseract_memory.default_spec()
     .with_metadata(@tesseract_memory.no_metadata().with_kind("task")),
   ),
@@ -1250,8 +1367,8 @@ From the shell, `put --kind K` writes the label and `kinds` reports the
 mixture:
 
 ```sh
-moon run cmd/memory -- "put todo ship 0.1.14 --kind task" "put note the cat sat --kind note" "kinds"
-moon run cmd/memory -- "put todo ship 0.1.14 --kind task" "entries --kind task"
+moon run cmd/memory -- "put todo ship 0.1.15 --kind task" "put note the cat sat --kind note" "kinds"
+moon run cmd/memory -- "put todo ship 0.1.15 --kind task" "entries --kind task"
 ```
 
 `--kind` on `entries` and `search` is a spelling of `--where kind=…`, and a
@@ -1474,7 +1591,7 @@ The full plan and the measurements behind it are in `LOOP3.md`, `LOOP4.md`,
 
 ```sh
 moon check --target all     # type-check every backend
-moon test                   # 401 tests
+moon test                   # 422 tests
 moon fmt --check            # canonical formatting
 
 node cli-smoke.mjs          # the CLIs, as real processes (builds them first)
@@ -1490,9 +1607,9 @@ moon run cmd/main -- .export tsr > dump.tsr
 # the short-term memory
 moon run cmd/memory -- .help
 moon run cmd/memory -- "put greeting hello world" "get greeting"
-moon run cmd/memory -- --scope work "put todo ship 0.1.14" "keys" "scopes"
+moon run cmd/memory -- --scope work "put todo ship 0.1.15" "keys" "scopes"
 moon run cmd/memory -- "put a x --meta kind=note" "search x --where kind=note"
-moon run cmd/memory -- "put todo ship 0.1.14 --kind task" "kinds"
+moon run cmd/memory -- "put todo ship 0.1.15 --kind task" "kinds"
 moon run cmd/memory -- "put a x --pinned" "pin a" "unpin a"
 moon run cmd/memory -- demo
 
@@ -1875,7 +1992,129 @@ Stated plainly, because "it has a SQL surface" invites the wrong assumption.
   for the `.tsr` reader. The memory tier adds `@math.pow` from
   `moonbitlang/core/math`, also the toolchain.
 
-Apache-2.0. Provenance of the ported behaviour is in
-[Deliberate departures](#deliberate-departures-from-the-c-original) below, which
-records every place the MoonBit version answers differently from the C# original
-and why.
+## Quick Start
+
+Add the module:
+
+```sh
+moon add riantr/tesseract
+```
+
+The library is the package `riantr/tesseract/src/tesseract`, and it is imported
+by name — see [Install](#install) for the module-versus-package rule, which is
+the one thing that trips people up here.
+
+From this repository, the suite and every layer:
+
+```sh
+moon test             # Total tests: 422, passed: 422, failed: 0.
+
+moon run cmd/main -- .demo                        # a store, a statement, a report
+moon run cmd/main -- .solve .verify               # the sudoku solver, and the check
+moon run cmd/memory -- demo                       # the short-term memory
+moon run cmd/memory_db --target native -- --file notes.db "put greeting hello world" "get greeting"
+moon run cmd/persist --target native -- .open sudoku.db "INSERT INTO tesseract (key,value) VALUES ('a','1') AT 1;" .save .status
+moon run cmd/sa --target native -- store scan.tsv scan.db
+```
+
+The sixth executable, `cmd/gui`, is the window, and it needs `proton_cli dev`
+running — see [The window](#the-window).
+
+## Example
+
+```moonbit nocheck
+// The lattice: four axes, 81 cells by default, up to 215 per axis
+let lat   = @tesseract.lattice_of(3).unwrap()
+let cells : Int64 = @tesseract.Lattice::total(lat)     // 81
+let lines : Int64 = @tesseract.sudoku_line_count(lat)  // 108  (4 · side³)
+
+// The SQL surface: its own lexer, parser, AST and executor
+let db  = @tesseract.new_db("demo", lat, @tesseract.new_logger("demo"))
+let put = @tesseract.execute(db, "INSERT INTO tesseract (key,value) VALUES ('a','1') AT 5;")
+let got = @tesseract.execute(db, "SELECT * FROM tesseract WHERE key = 'a';")
+
+// The memory: TTL, a byte budget, scopes, labels, and an exact similarity
+let mem  = @tesseract_memory.new_memory(100)
+let work = @tesseract_memory.Memory::scope(mem, "work")
+ignore(work.put("todo", "ship 0.1.15"))
+let hits : Array[@tesseract_memory.Hit] = @tesseract_memory.Memory::search(mem, "todo", 10)
+
+// The durable memory: the same store, with a checkpoint file behind it
+let dur = @tesseract_memory_db.open("notes.db", @tesseract_memory.default_config()).unwrap()
+ignore(@tesseract_memory_db.DurableMemory::put(dur, "greeting", "hello world"))
+```
+
+Two of those calls are where the opacity pays for itself. `Lattice` has no
+public fields, so `lat` above is the only kind of lattice that exists — a
+`Lattice` whose `stride_y` was zero cannot be built at all, and `lattice_of`
+is the only way in. The same holds for `Entry` and `Hit`: `work.put(...)`
+returns a `Bool`, and the entry it stored is read back through accessors, so a
+caller cannot set an entry's accounting behind the store's back.
+
+## Gates and drift detectors
+
+`moon fmt --check`, the four `moon check` targets, `moon test` (422 wasm tests)
+and `moon build --target wasm` are the baseline, and `typos` guards the prose.
+Eleven detectors run on top, because a green suite says nothing about a claim
+written in prose:
+
+| Detector | Catches |
+|---|---|
+| `node qa/sast.mjs` | the rules the compiler cannot know: an `unwrap` nobody proved safe, a SQL statement built by concatenation, an `Int64` narrowed into a 32-bit `Int` |
+| `node qa/dast.mjs` | a binary that falls over on hostile arguments instead of refusing them — the malformed, the oversized, the path-traversing |
+| `node qa/deps.mjs` | a pin that does not resolve to the version it names, a yanked dependency, an NVD advisory that is actually reachable from this tree |
+| `node qa/integration.mjs` | a package boundary that no in-tree test crosses — an edge declared in a `moon.pkg` and exercised only from outside the package that owns it |
+| `node qa/api.mjs` | a public surface that does not keep its promises: a value whose public fields a caller can build by hand, a symbol nothing holds in place, a naming that does not conform, a waiver that has gone stale |
+| `node qa/contract.mjs` | the published artifact drifting from the tree: a symbol the registry advertises and the source does not have, a checkpoint the contract names and the code does not implement |
+| `node qa/e2e.mjs` | a command no layer exercises — the map from the 72 commands the CLIs accept onto the four layers that implement them |
+| `node qa/gherkin.mjs` | a feature file whose steps describe something the CLI does not do |
+| `node qa/dup.mjs` | the same block of code in two places, which is one bug waiting to happen twice |
+| `node qa/coverage.mjs` | a coverage number that cannot be checked, because it lives only in a terminal scrollback |
+| `node qa/perf.mjs` | a cost that grows faster than the work does — an exponent above 1 where there should be none |
+
+Two more live in nested modules, because they have to build against the
+**published** package rather than the tree:
+
+| Detector | Catches |
+|---|---|
+| `cd qa/contract_probe && moon test --target native` | a release that broke a consumer: the probe calls the published accessors and the published checkpoint, and its 9 tests are what found the four checkpoint defects in the published 0.1.13 artifact |
+| `cd qa/fuzz && moon test --target native` | a statement the parser accepts and the executor does not apply: 6 properties × 3000 rounds, and the error vocabulary has to stay closed |
+
+Each was written after a specific drift went unnoticed — a stale test count in a
+tool's own description, a pin that had moved under a version that still named
+the old one, a published artifact that was not the tree it was cut from.
+
+**None of them runs in CI.** The release workflow (`.github/workflows/publish.yml`)
+runs the compile gate — `moon fmt --check`, the `wasm` and `js` checks,
+`moon test --target wasm`, `moon build --target wasm` and `typos` — and nothing
+more; the `native` and `wasm-gc` checks and the two smoke tests are run by hand
+and are listed in [Verification](#verification) because they were run, not
+because CI depends on them. The detectors are run by hand too, and the numbers
+in this file come from that manual run. A detector that only runs when someone
+remembers it is a detector that drifts, and that gap is worth closing rather
+than papering over.
+
+## Used By
+
+- `cmd/main`, `cmd/persist`, `cmd/memory`, `cmd/memory_db`, `cmd/sa` and
+  `cmd/gui` — the six executables in this module, each one a different surface
+  over the same library: the command line, the `.db` adapter, the short-term
+  memory, the durable memory, the scan database and the window.
+- `qa/fuzz` and `qa/contract_probe` — two nested modules that build against the
+  **published** package rather than the tree, so their tests are the only ones
+  that can see a release breaking a consumer.
+- The C#/Avalonia `tesseract` project — the original this is a port of, and the
+  other half of the 26-statement parity comparison.
+
+Outside this repository: **none that the registry knows about.** The registry
+lists **0 dependents** for `riantr/tesseract`, and nothing is claimed here that
+cannot be named.
+
+## Attribution
+
+- License: MIT (see `LICENSE`).
+- Ported from: the C#/Avalonia `tesseract` project — the same 4D lattice, the
+  same `.tsr` format, the same export shapes. Every place the MoonBit version
+  answers differently from the C# original is recorded in
+  [Deliberate departures](#deliberate-departures-from-the-c-original), with
+  the reason for each one.
