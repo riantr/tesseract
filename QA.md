@@ -1,6 +1,6 @@
 # QA — a deep sweep across sixteen dimensions
 
-Measured against the tree that ships as **v0.1.14** — the revision that follows the
+Measured against the tree that ships as **v0.1.15** — the revision that follows the
 0.1.13 sweep. Every number below was produced by a tool in `qa/`, and every tool
 prints where its number came from. A number that could not be measured says so
 instead of carrying an estimate.
@@ -10,12 +10,19 @@ found**: the findings that were defects are fixed, the findings that were questi
 about what the package should offer are answered and recorded, and every number
 below was re-measured afterwards.
 
-**v0.1.14 is published.** The registry's latest version is 0.1.14, and the probe
+**v0.1.15 is published.** The registry's latest version is 0.1.15, and the probe
 that measures what a consumer actually gets now passes **9 of 9** against it: the
 four checkpoint defects are closed in the artifact, not only in the tree, and
 every accessor of the two opaque value types returns the number the contract
 names. Getting there took a fix to the release, five fixes to the audit, and
 one hole in the house gate — see "The release failed" below.
+
+0.1.15 itself carries no behaviour change: it is the **logo** (the artwork from
+the attachment, at 438×438 and 1024×1024), the move from **Apache-2.0 to MIT**,
+and a README restructured to the shape `riantr/pyroduct@0.1.35` uses. The
+published surface is identical to 0.1.14's — 523 symbols, 0 mismatches, 0
+drift — which is the point: a release that changes the documentation and the
+license should not change what a consumer's code has to compile against.
 
 ---
 
@@ -209,7 +216,7 @@ Both ends of that are proven by mutation:
 
 | the probe against | the result |
 |---|---|
-| the published **0.1.14** | **9 / 9 pass** — the reload is refused, the store keeps its 2 entries, and every accessor returns the number the contract names |
+| the published **0.1.15** | **9 / 9 pass** — the reload is refused, the store keeps its 2 entries, and every accessor returns the number the contract names |
 | the published **0.1.13**, the 8-test probe of the refusals alone | **4 / 8 fail**, including *"a reload of a checkpoint with an unknown version was accepted"* |
 | the published **0.1.13**, with the accessor test added | the module **does not compile** — *"Type `Lattice` has no method `side`"* — because 0.1.13 has no accessors at all |
 
@@ -269,6 +276,41 @@ The house gate now gates the nested modules too, and `AGENTS.md` says so. The
 two of them are also the only places in the repository that build against the
 **published** package rather than the tree, so their tests are the only ones
 that can see a release breaking a consumer.
+
+### 10. The logo, the license, and a README that reads like the sibling's
+
+0.1.15 is the release that carries no behaviour change, which makes it the
+release where a mistake is easiest to make and hardest to see: a logo that
+does not render, a license the registry still reports as the old one, and a
+README that describes a version the registry does not carry.
+
+- **The logo renders.** `tesseract.png` (438×438, 139 932 bytes) is what the
+  README shows; `tesseract_Logo.png` (1024×1024, 954 185 bytes) is the same
+  artwork at full size. The registry publishes both at
+  `https://assets.mooncakes.io/source/riantr/tesseract@0.1.15/<file>`, and the
+  docs page rewrites the README's relative path to that URL — measured on the
+  rendered page, not assumed from the source:
+  `<img src="https://assets.mooncakes.io/source/riantr/tesseract@0.1.15/tesseract.png" alt="tesseract">`.
+- **The license is MIT, and only in this version.** `moon.mod`'s `license`
+  field is published metadata, so the registry's record for **0.1.14 still
+  says `"license": "Apache-2.0"`** and the record for 0.1.15 says `"MIT"`. A
+  consumer that reads the license off the registry has to read it off the
+  version it actually depends on, which is why the README says so explicitly.
+- **The surface did not move.** 523 published symbols matched, 15 interface
+  files identical, 0 differing, 0 drift, and the probe passes 9 of 9 against
+  the published 0.1.15 — so the release that changed the documentation and the
+  license changed nothing a consumer's code has to compile against.
+- **The probes were repointed, and the audit followed them.** Both nested
+  modules pinned 0.1.14, so the contract audit was still measuring the
+  previous release: the run right after the publish reported
+  `[C1.7] (MEDIUM) the registry's latest version is 0.1.15, not the 0.1.14 this
+  check reads`. Repointing `qa/contract_probe/moon.mod` and `qa/fuzz/moon.mod`
+  and re-running took it back to 0 findings in the tree and 3 standing
+  registry-index findings in the artifact — the same 3 that 0.1.14 had.
+
+One correction the README carried and the release did not: the "Running it"
+section claimed `moon test # 401 tests` while the suite has 422. It had been
+right once and was left behind when the count moved.
 
 ---
 
@@ -356,7 +398,7 @@ mutation was run.
 confirmed by the diff of `moon.mod`. The whole gate was then run *under the new
 pins*, which is the part that matters: green under the old ones would have
 been green about code that is no longer the code that ships. Every direct pin is
-current at 0.1.14.
+current at 0.1.15.
 
 ### 6. The line count had two spellings — 1
 
@@ -459,7 +501,7 @@ non-zero: the exit code means *the working tree has a defect*.
 ### The four checkpoint defects are closed in the artifact, not only in the tree
 
 They were fixed in the tree in the previous round and were closed in the
-published package by this one. The probe of the published 0.1.14 passes 9 of 9:
+published package by this one. The probe of the published 0.1.15 passes 9 of 9:
 the unknown version, the wrong header key, the missing header and the reload are
 all refused, the store keeps what it held when the reload is refused, and every
 accessor of the two opaque value types returns the number the contract names.
@@ -468,7 +510,7 @@ accessor of the two opaque value types returns the number the contract names.
 
 ## What is not claimed
 
-- **The published 0.1.14 is clean where it was measured, and that is not the
+- **The published 0.1.15 is clean where it was measured, and that is not the
   same as audited.** The probe covers the checkpoint contract's four refusals,
   the round trip, and the accessors of the two opaque value types; the
   published package's interface files are byte-identical to the tree's. The 3
@@ -525,12 +567,13 @@ cd qa/fuzz && moon test --target native   # fuzz, against the published package
 `qa/fuzz` and `qa/contract_probe` are **nested modules**: they have their own
 `moon.mod`, so the parent module's build never sees them, they carry their own
 gate, and they can never be published. `qa/fuzz` and `qa/contract_probe` both
-depend on the **published** `riantr/tesseract@0.1.14`, so they measure what a
+depend on the **published** `riantr/tesseract@0.1.15`, so they measure what a
 consumer gets rather than what is sitting in the working tree — which is why the
 checkpoint contract reports its findings against the published artifact and none
-against the tree. The version is pinned in `qa/contract_probe/moon.mod`, and the
-contract audit reads it from there: one place to bump when the next release
-lands.
+against the tree. The version is pinned in `qa/contract_probe/moon.mod` and
+`qa/fuzz/moon.mod`, and the contract audit reads it from the first of those:
+**two** places to bump when the next release lands, and the audit's own
+`[C1.7]` check is what tells you the second one was missed.
 
 The house gate, unchanged and green at the end of this round:
 
