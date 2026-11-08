@@ -35,8 +35,9 @@ static-analysis pass files 150 entries and one doubleML run files 219 **before**
 run metadata, value contexts, slices or history, and no cross-run history fits in
 255 at all. The lattice side is now chosen from the live entry count and recorded
 in the file, up to side 10, so the ceiling is 9999. What moved, and is
-re-measured below: the symbol count (+2, both new fns), the interface files (2 of
-15 differ from the published 0.1.16 until this tag is published), and the load
+re-measured below: the symbol count (+2, both new fns), the interface files (now
+**15 identical, 0 differing** — the published 0.1.17 is byte-identical to this
+tree), and the load
 curve, which now runs past the old ceiling. The suite grew six tests, 422 → **428**,
 one per loss the change closes and one per boundary of the new cap.
 
@@ -64,7 +65,7 @@ license should not change what a consumer's code has to compile against.
 | 4 | **Unit** | **428 tests, 428 passed, 0 failed**, on 4 check targets under `--deny-warn` | `moon test --target wasm --deny-warn` |
 | 5 | **Integration** | **22** production edges across 14 packages (+1 test-only); **11** crossed by an in-tree test that names the other package; **11** covered only from outside the package | `node qa/integration.mjs` |
 | 6 | **API** | **531** public symbols (62 types, 171 fns, 291 methods, 7 consts); naming **100 %** conformant; **0 findings** (75 in the 0.1.13 sweep); **54** symbols attributed to the `#derive` clause that generates them | `node qa/api.mjs` |
-| 7 | **Contract** | **531** symbols in the working tree against the published 0.1.16: **0** of the 529 published ones changed shape, **2** are local-only (`max_entries`, `saved_side`); the published package's own interface files **13 identical, 2 differing** until this tag is published; every published accessor **returns the number the contract names**; the probe of the published artifact: **9 tests, 9 passed**; **12** error codes, **12/12** documented and **12/12** asserted on the code; **0** findings in the working tree, **3** in the published artifact, **4** in the drift, **0** checks skipped | `node qa/contract.mjs` |
+| 7 | **Contract** | **531** symbols in the working tree against the published 0.1.17: **0** of the 529 published ones changed shape, **2** are local-only (`max_entries`, `saved_side`); the published package's own interface files **15 identical, 0 differing** — the published `pkg.generated.mbti` files are byte-identical to the tree's; every published accessor **returns the number the contract names**; the probe of the published artifact: **9 tests, 9 passed**; **12** error codes, **12/12** documented and **12/12** asserted on the code; **0** findings in the working tree, **3** in the published artifact, **0** in the drift, **0** checks skipped | `node qa/contract.mjs` |
 | 8 | **Component** | **8** library packages, coverage from **15.6 %** to **98.5 %**; **0** API findings across the module's packages | `node qa/api.mjs`, `node qa/coverage.mjs` |
 | 9 | **Gherkin** | **7** features, **54** scenarios, **222** steps, **54/54** pass | `node qa/gherkin.mjs` |
 | 10 | **E2E** | **72** commands across **5** CLIs mapped onto **4** layers; **0** exercised by no layer; **5** exercised only by the unit suite | `node qa/e2e.mjs` |
@@ -701,7 +702,7 @@ non-zero: the exit code means *the working tree has a defect*.
 ### The four checkpoint defects are closed in the artifact, not only in the tree
 
 They were fixed in the tree in the previous round and were closed in the
-published package by this one. The probe of the published 0.1.15 passes 9 of 9:
+published package by this one. The probe of the published 0.1.17 passes 9 of 9:
 the unknown version, the wrong header key, the missing header and the reload are
 all refused, the store keeps what it held when the reload is refused, and every
 accessor of the two opaque value types returns the number the contract names.
@@ -710,7 +711,7 @@ accessor of the two opaque value types returns the number the contract names.
 
 ## What is not claimed
 
-- **The published 0.1.15 is clean where it was measured, and that is not the
+- **The published 0.1.17 is clean where it was measured, and that is not the
   same as audited.** The probe covers the checkpoint contract's four refusals,
   the round trip, and the accessors of the two opaque value types; the
   published package's interface files are byte-identical to the tree's. The 3
@@ -728,10 +729,10 @@ accessor of the two opaque value types returns the number the contract names.
   fitted over a range the clock barely resolves) and the SQL store's drift
   over a run (the log clock is 1 ms and the whole run spans 10 ms — the
   1.33× ratio is **not resolved**). The durable store carries the drift
-  answer instead: 1.70× over 50 → 255 puts, exponent 1.15.
+  answer instead: 1.92× over 50 → 400 puts, exponent 1.15.
 - **The durable store's per-block figures are single samples of a cost the
   disk decides.** The exponent over the whole run (1.15) is the one that
-  holds; the 6.54 → 11.11 ms figures move about between runs.
+  holds; the 7.68 → 14.76 ms figures move about between runs.
 - **The full side-5 lattice cannot be loaded in one process** here: the
   command line exceeds what the platform carries, so the executor's largest
   measured load is 384 rows, not 625.
