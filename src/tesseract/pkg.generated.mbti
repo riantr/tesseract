@@ -3,6 +3,7 @@ package "riantr/tesseract/src/tesseract"
 
 import {
   "moonbitlang/core/debug",
+  "moonbitlang/core/json",
 }
 
 // Values
@@ -108,9 +109,9 @@ pub fn join(Array[String], String) -> String
 
 pub fn json_path_parse(String) -> Result[Array[JsonStep], String]
 
-pub fn json_to_sql(Json) -> SqlValue
+pub fn json_to_sql(@json.Json) -> SqlValue
 
-pub fn json_walk(Json, Array[JsonStep]) -> Json?
+pub fn json_walk(@json.Json, Array[JsonStep]) -> @json.Json?
 
 pub fn json_whole_number(String) -> Int64?
 
@@ -213,10 +214,11 @@ pub fn with_coord(Coords, Int64, Int64) -> Coords
 // Errors
 
 // Types and methods
+#derive(Eq, @debug.Debug)
 pub struct Assignment {
   column : String
   value : Expr
-} derive(Eq, @debug.Debug)
+}
 pub fn Assignment::equal(Self, Self) -> Bool
 pub fn Assignment::not_equal(Self, Self) -> Bool
 pub fn Assignment::to_repr(Self) -> @debug.Repr
@@ -247,12 +249,13 @@ pub struct CoordFilter {
   w : Int64
 }
 
+#derive(Eq, @debug.Debug)
 pub struct Coords {
   x : Int64
   y : Int64
   z : Int64
   w : Int64
-} derive(Eq, @debug.Debug)
+}
 pub fn Coords::equal(Self, Self) -> Bool
 pub fn Coords::not_equal(Self, Self) -> Bool
 pub fn Coords::to_repr(Self) -> @debug.Repr
@@ -277,6 +280,7 @@ pub struct DBStatus {
   digit_count : Int64
 }
 
+#derive(Eq, @debug.Debug)
 pub enum Expr {
   Literal(SqlValue)
   Column(String)
@@ -288,7 +292,7 @@ pub enum Expr {
   IsNull(Expr, Bool)
   Call(String, Array[Expr])
   Star
-} derive(Eq, @debug.Debug)
+}
 pub fn Expr::equal(Self, Self) -> Bool
 pub fn Expr::not_equal(Self, Self) -> Bool
 pub fn Expr::to_repr(Self) -> @debug.Repr
@@ -315,11 +319,12 @@ pub fn Lattice::max_digit(Self) -> Int64
 pub fn Lattice::side(Self) -> Int64
 pub fn Lattice::total(Self) -> Int64
 
+#derive(Eq, @debug.Debug)
 pub enum LexError {
   UnterminatedString(Int32)
   UnexpectedChar(Int32, Int32)
   BadNumber(Int32)
-} derive(Eq, @debug.Debug)
+}
 pub fn LexError::equal(Self, Self) -> Bool
 pub fn LexError::not_equal(Self, Self) -> Bool
 pub fn LexError::to_repr(Self) -> @debug.Repr
@@ -339,19 +344,21 @@ pub enum LogLevel {
   Error
 }
 
+#derive(Eq, @debug.Debug)
 pub struct OrderTerm {
   expr : Expr
   descending : Bool
-} derive(Eq, @debug.Debug)
+}
 pub fn OrderTerm::equal(Self, Self) -> Bool
 pub fn OrderTerm::not_equal(Self, Self) -> Bool
 pub fn OrderTerm::to_repr(Self) -> @debug.Repr
 
+#derive(Eq, @debug.Debug)
 pub struct ParseError {
   code : String
   message : String
   at : Int32
-} derive(Eq, @debug.Debug)
+}
 pub fn ParseError::equal(Self, Self) -> Bool
 pub fn ParseError::not_equal(Self, Self) -> Bool
 pub fn ParseError::to_repr(Self) -> @debug.Repr
@@ -378,6 +385,7 @@ pub struct Savepoint {
   mark : Int32
 }
 
+#derive(Eq, @debug.Debug)
 pub struct SelectSpec {
   star : Bool
   distinct : Bool
@@ -387,20 +395,22 @@ pub struct SelectSpec {
   order_by : Array[OrderTerm]
   limit : Expr?
   offset : Expr?
-} derive(Eq, @debug.Debug)
+}
 pub fn SelectSpec::equal(Self, Self) -> Bool
 pub fn SelectSpec::not_equal(Self, Self) -> Bool
 pub fn SelectSpec::to_repr(Self) -> @debug.Repr
 
+#derive(Eq, @debug.Debug)
 pub enum SqlValue {
   Null
   Int(Int64)
   Text(String)
-} derive(Eq, @debug.Debug)
+}
 pub fn SqlValue::equal(Self, Self) -> Bool
 pub fn SqlValue::not_equal(Self, Self) -> Bool
 pub fn SqlValue::to_repr(Self) -> @debug.Repr
 
+#derive(Eq, @debug.Debug)
 pub enum Stmt {
   CreateDatabase(String)
   Insert(Array[String], Array[Expr], Target)
@@ -413,16 +423,17 @@ pub enum Stmt {
   Savepoint(String)
   RollbackTo(String)
   Release(String)
-} derive(Eq, @debug.Debug)
+}
 pub fn Stmt::equal(Self, Self) -> Bool
 pub fn Stmt::not_equal(Self, Self) -> Bool
 pub fn Stmt::to_repr(Self) -> @debug.Repr
 
+#derive(Eq, @debug.Debug)
 pub enum Target {
   None
   Position(Int64)
   Coords(Array[Int64])
-} derive(Eq, @debug.Debug)
+}
 pub fn Target::equal(Self, Self) -> Bool
 pub fn Target::not_equal(Self, Self) -> Bool
 pub fn Target::to_repr(Self) -> @debug.Repr
@@ -483,21 +494,23 @@ pub fn TesseractLogger::log_warning(Self, String, Map[String, String]) -> Unit
 pub fn TesseractLogger::set_clock(Self, Clock) -> Unit
 pub fn TesseractLogger::set_echo(Self, Bool) -> Unit
 
+#derive(Eq, @debug.Debug)
 pub struct Token {
   kind : TokenKind
   at : Int32
-} derive(Eq, @debug.Debug)
+}
 pub fn Token::equal(Self, Self) -> Bool
 pub fn Token::not_equal(Self, Self) -> Bool
 pub fn Token::to_repr(Self) -> @debug.Repr
 
+#derive(Eq, @debug.Debug)
 pub enum TokenKind {
   Ident(String)
   IntLit(Int64)
   Text(String)
   Punct(String)
   Eof
-} derive(Eq, @debug.Debug)
+}
 pub fn TokenKind::equal(Self, Self) -> Bool
 pub fn TokenKind::not_equal(Self, Self) -> Bool
 pub fn TokenKind::to_repr(Self) -> @debug.Repr

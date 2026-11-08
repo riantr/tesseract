@@ -50,11 +50,18 @@ pub struct CellRow {
 
 ///|
 /// What a load put into the store.
+#derive(Eq, Debug)
 pub struct LoadReport {
   loaded : Int32
   rejected : Int32
   cursor : Int64
-} derive(Eq, Debug)
+}
+
+///|
+pub extend LoadReport with Eq::{equal, not_equal}
+
+///|
+pub extend LoadReport with Debug::{to_repr}
 
 ///|
 /// One row per occupied lattice position.

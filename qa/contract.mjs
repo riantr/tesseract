@@ -73,6 +73,10 @@ const PUBLISHED_CACHE = path.join(
 
 const findings = [];
 let failed = false;
+// A check that could not be run is not a check that passed. The count is
+// reported next to the finding counts so a skipped verification cannot be
+// mistaken for a green one.
+let skippedCount = 0;
 
 /**
  * A finding.
@@ -151,6 +155,7 @@ function pass(id, headline, detail) {
 }
 
 function skip(id, headline, why) {
+  skippedCount++;
   log(`SKIP [${id}] ${headline}`);
   log(`       ${why}`);
 }
@@ -1545,10 +1550,12 @@ if (driftFindings.length === 0) {
 
 log("");
 log(
-  `${treeFindings.length} finding(s) in the working tree, ${publishedFindings.length} in the published artifact, ${driftFindings.length} in the drift; ${
+  `${treeFindings.length} finding(s) in the working tree, ${publishedFindings.length} in the published artifact, ${driftFindings.length} in the drift, ${skippedCount} check(s) skipped; ${
     failed || treeFindings.length > 0
       ? "the working tree has something to fix"
-      : "the working tree is clean"
+      : skippedCount > 0
+        ? "the working tree is clean, and the skipped checks above are not part of that claim"
+        : "the working tree is clean"
   }`,
 );
 

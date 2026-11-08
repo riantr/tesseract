@@ -47,11 +47,12 @@
 ///
 /// `at` comes straight from `Token.at`, so it is a position in the text the
 /// caller passed rather than a line or column the caller has to reconstruct.
+#derive(Eq, Debug)
 pub struct ParseError {
   code : String
   message : String
   at : Int32
-} derive(Eq, Debug)
+}
 
 ///|
 pub extend ParseError with Eq::{equal, not_equal}

@@ -34,12 +34,19 @@ pub struct MemoryIndex {
 /// to go. A rebuild of an index that was already right says **nothing** on all
 /// three counts, and that is the proof that the index holds nothing of its
 /// own.
+#derive(Eq, Debug)
 pub struct RebuildReport {
   entries : Int32
   changed : Int32
   added : Int32
   removed : Int32
-} derive(Eq, Debug)
+}
+
+///|
+pub extend RebuildReport with Eq::{equal, not_equal}
+
+///|
+pub extend RebuildReport with Debug::{to_repr}
 
 ///|
 /// The table the index is.

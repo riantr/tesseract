@@ -108,7 +108,7 @@ way to write a cell directly.
 ## Install
 
 ```sh
-moon add riantr/tesseract@0.1.15
+moon add riantr/tesseract@0.1.16
 ```
 
 That is a **module** dependency, and it belongs in the consumer's `moon.mod`.
@@ -116,7 +116,7 @@ That is a **module** dependency, and it belongs in the consumer's `moon.mod`.
 
 ```toml
 import {
-  "riantr/tesseract@0.1.15",
+  "riantr/tesseract@0.1.16",
 }
 ```
 
@@ -136,7 +136,7 @@ a module and takes **no version at all**. A version in a `moon.pkg` import is
 not a newer spelling — it is an import the toolchain cannot find:
 
 ```
-Cannot find import 'riantr/tesseract/src/tesseract@0.1.15' in my/app/src/thing@0.1.0
+Cannot find import 'riantr/tesseract/src/tesseract@0.1.16' in my/app/src/thing@0.1.0
 ```
 
 The `src/` in the package path is part of the package's name, not a prefix the
@@ -147,7 +147,7 @@ paths — so `riantr/tesseract/src/tesseract_memory` is a package and
 alias, below.
 
 For the same reason there is no `@latest`: the version is parsed as semver, so
-`latest`, `^0.1.15`, `>=0.1.15`, `0.1` and `v0.1.15` are all rejected. A bare
+`latest`, `^0.1.16`, `>=0.1.16`, `0.1` and `v0.1.16` are all rejected. A bare
 `moon add riantr/tesseract` resolves the newest release and pins the concrete
 version it found — that is the "latest" this toolchain has.
 
@@ -172,21 +172,53 @@ package's symbols on under a name of its own.
 are the six executables in the same module — the command line, the file-backed
 store, the short-term memory, the durable memory, the scan database and the
 window. Registry entry:
-[mooncakes.io/docs/riantr/tesseract@0.1.15](https://mooncakes.io/docs/riantr/tesseract@0.1.15).
+[mooncakes.io/docs/riantr/tesseract@0.1.16](https://mooncakes.io/docs/riantr/tesseract@0.1.16).
 
 ### What the release was checked on
 
-`moon 0.1.20261023` — the toolchain every number in this file was measured on,
-and the one the release workflow's runner had when it built and published
-0.1.14.
+`moon 0.1.20261102`, carrying `moonc v0.10.19+bee578715` — the toolchain every
+number in this file was measured on.
 
 The workflow installs the toolchain from the official install script, which
-serves the **current** release, so the runner's version moves with it. The log
-of the run that published 0.1.14 records `moon 0.1.20261023`, and that is the
-same build the numbers here were measured on. That is the toolchain this release
-was **verified** against, not a tested **minimum**: no older toolchain has been
-exercised here, and quoting a lower bound nobody ran would be a claim, not a
-fact.
+serves the **current** release, so the runner's version moves with it. That is
+the toolchain this release was **verified** against, not a tested **minimum**: no
+older toolchain has been exercised here, and quoting a lower bound nobody ran
+would be a claim, not a fact.
+
+0.1.15 was measured on `moon 0.1.20261023`. Moving to 0.1.20261102 is what 0.1.16
+exists for, and it is not a cosmetic bump — see below.
+
+### What changed in 0.1.16
+
+**0.1.15 does not build on a current toolchain, and this release is that same
+code made buildable again.** Three things; only the third touches the published
+surface, and it only adds.
+
+- **`src/tesseract_memory_db` no longer spells `@builtin.Json`.** The toolchain
+  moved `Json` out of `builtin` into `moonbitlang/core/json`, so all fifteen
+  places that wrote `@builtin.Json` stopped resolving and the package did not
+  type-check. On `moon 0.1.20261102` that is fifteen `[4032]` errors — *"The
+  type @builtin.Json is undefined"* — and no build at all. The spellings are now
+  `@json.Json`. Any consumer that depended on 0.1.15 was depending on a package
+  it could not compile.
+- **The deprecated `derive(...)` clause is retired**, at all 42 sites. The
+  toolchain reports `[0027] deprecated_syntax` and asks for `#derive(...)` above
+  the declaration instead; the gate runs `--deny-warn`, so those warnings kept
+  the gate red even once the type errors were gone.
+- **`LoadReport` and `RebuildReport` now publish their derived methods
+  explicitly** — `pub extend … with Eq::{equal, not_equal}` and
+  `… with Debug::{to_repr}`. Both reached those methods only through the implicit
+  promotion the toolchain has deprecated and says it will remove, and both
+  packages silenced the warning with `warnings = "-79"` instead of saying where
+  the methods should live. The suppression is gone, so the methods survive the
+  removal. **This is additive**: the three methods were not in the 0.1.15
+  interface, and this release removes none.
+
+No existing signature changed. Beyond those adds, the regenerated
+`pkg.generated.mbti` files differ in two ways: the `#derive` attribute sits above
+the declaration rather than after it, and `json_to_sql`/`json_walk` render their
+argument as `@json.Json` instead of bare `Json` — the same type, spelled the way
+the toolchain now spells it. Still 422 tests, and both smoke scripts pass.
 
 ### What changed in 0.1.15
 

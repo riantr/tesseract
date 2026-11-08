@@ -25,11 +25,15 @@ pub struct CellRow {
   timestamp : String
 }
 
+#derive(Eq, @debug.Debug)
 pub struct LoadReport {
   loaded : Int32
   rejected : Int32
   cursor : Int64
-} derive(Eq, @debug.Debug)
+}
+pub fn LoadReport::equal(Self, Self) -> Bool
+pub fn LoadReport::not_equal(Self, Self) -> Bool
+pub fn LoadReport::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 

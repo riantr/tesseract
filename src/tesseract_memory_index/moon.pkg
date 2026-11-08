@@ -13,12 +13,6 @@ import {
   // never created is the normal case rather than a failure.
 } for "test"
 
-/// Same suppression `moonbit-community/sqlite3` uses: deriving a trait turns
-/// its methods into implicitly promoted methods on the type, which the
-/// toolchain warns about (79).
-
-warnings = "-79"
-
 /// The index is a SQLite file, and SQLite builds for `native` and `wasm` only.
 
 supported_targets = "native+wasm"

@@ -23,13 +23,17 @@ pub fn MemoryIndex::rebuild(Self, @tesseract_memory.Memory) -> Result[RebuildRep
 pub fn MemoryIndex::rows(Self) -> Result[Int32, String]
 pub fn MemoryIndex::verify(Self, @tesseract_memory.Memory) -> Result[RebuildReport, String]
 
+#derive(Eq, @debug.Debug)
 pub struct RebuildReport {
   entries : Int32
   changed : Int32
   added : Int32
   removed : Int32
-} derive(Eq, @debug.Debug)
+}
 pub fn RebuildReport::describe(Self) -> String
+pub fn RebuildReport::equal(Self, Self) -> Bool
+pub fn RebuildReport::not_equal(Self, Self) -> Bool
+pub fn RebuildReport::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 

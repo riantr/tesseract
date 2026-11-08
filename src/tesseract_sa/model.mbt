@@ -26,6 +26,7 @@
 /// than a Bool: a file can be read up to its first `struct` or `const` and no
 /// further, and reporting that as either "clean" or "found" would be a claim
 /// the tool never made.
+#derive(Eq, Debug)
 pub enum FileOutcome {
   /// Read end to end, nothing to report.
   Clean
@@ -34,7 +35,7 @@ pub enum FileOutcome {
   Partial
   /// Read end to end, with `defects` defects and `notices` notices.
   Found
-} derive(Eq, Debug)
+}
 
 ///|
 pub extend FileOutcome with Debug::{to_repr}
@@ -71,6 +72,7 @@ pub fn FileOutcome::found() -> FileOutcome {
 /// tool prints the two counts on the file header and does not label the
 /// individual lines, so the store does not invent a class for them. A notice
 /// shows up as a `ParseError` family; that is how the tool reports one.
+#derive(Debug)
 pub struct FileResult {
   /// The file kind the tool reported: `.mbti`, `.mbt`, `.mbt.md`, `.mbtp`.
   kind : String
@@ -89,26 +91,28 @@ pub struct FileResult {
   /// For a `Partial` file, how many lines after `read_up_to` were not shown.
   /// 0 otherwise.
   not_shown : Int32
-} derive(Debug)
+}
 
 ///|
 pub extend FileResult with Debug::{to_repr}
 
 ///|
 /// One `BYKIND` row: the per-file-kind rollup 0.4.0 prints.
+#derive(Debug)
 pub struct ByKind {
   kind : String
   files : Int32
   parsed : Int32
   defects : Int32
   notices : Int32
-} derive(Debug)
+}
 
 ///|
 pub extend ByKind with Debug::{to_repr}
 
 ///|
 /// One rendered finding.
+#derive(Debug)
 pub struct Finding {
   /// The file the `FOUND` line above it named.
   path : String
@@ -121,13 +125,14 @@ pub struct Finding {
   /// Which lenses saw it, e.g. `walk+types`.
   lenses : String
   message : String
-} derive(Debug)
+}
 
 ///|
 pub extend Finding with Debug::{to_repr}
 
 ///|
 /// One reason why a group of files could not be read.
+#derive(Debug)
 pub struct UnparsedGroup {
   reason : String
   /// How many files failed for this reason.
@@ -135,7 +140,7 @@ pub struct UnparsedGroup {
   /// Example paths, at most three. The tool prints at most three, so this is a
   /// sample and must not be read as the full list.
   examples : Array[String]
-} derive(Debug)
+}
 
 ///|
 pub extend UnparsedGroup with Debug::{to_repr}
@@ -154,6 +159,7 @@ pub extend UnparsedGroup with Debug::{to_repr}
 /// all. None of the three is a defect. On this project's scan every actionable
 /// defect sits on a file that was only read part of, and the three files read
 /// end to end carry `defects=0`.
+#derive(Debug)
 pub struct ScanReport {
   /// The target as given on the command line.
   target : String
@@ -190,7 +196,7 @@ pub struct ScanReport {
   unparsed : Array[UnparsedGroup]
   /// The per-file-kind rollup; empty before 0.4.0.
   by_kind : Array[ByKind]
-} derive(Debug)
+}
 
 ///|
 pub extend ScanReport with Debug::{to_repr}
@@ -226,6 +232,7 @@ pub fn FileResult::new(
 /// claims to be the whole run, and handing one back with three empty arrays
 /// would make a caller's `file_results.length()` read as "this scan covered no
 /// files" rather than "this listing does not carry file rows".
+#derive(Debug)
 pub struct RunSummary {
   id : Int32
   target : String
@@ -239,7 +246,7 @@ pub struct RunSummary {
   unreliable : Int32
   withheld : Int32
   total : Int32
-} derive(Debug)
+}
 
 ///|
 pub extend RunSummary with Debug::{to_repr}

@@ -22,21 +22,23 @@ pub fn save(String, ScanReport) -> Int32 raise
 // Errors
 
 // Types and methods
+#derive(@debug.Debug)
 pub struct ByKind {
   kind : String
   files : Int32
   parsed : Int32
   defects : Int32
   notices : Int32
-} derive(@debug.Debug)
+}
 pub fn ByKind::new(String, Int32, Int32, Int32, Int32) -> Self
 pub fn ByKind::to_repr(Self) -> @debug.Repr
 
+#derive(Eq, @debug.Debug)
 pub enum FileOutcome {
   Clean
   Partial
   Found
-} derive(Eq, @debug.Debug)
+}
 pub fn FileOutcome::clean() -> Self
 pub fn FileOutcome::equal(Self, Self) -> Bool
 pub fn FileOutcome::found() -> Self
@@ -44,6 +46,7 @@ pub fn FileOutcome::not_equal(Self, Self) -> Bool
 pub fn FileOutcome::partial() -> Self
 pub fn FileOutcome::to_repr(Self) -> @debug.Repr
 
+#derive(@debug.Debug)
 pub struct FileResult {
   kind : String
   path : String
@@ -53,10 +56,11 @@ pub struct FileResult {
   shown : Int32
   read_up_to : Int32
   not_shown : Int32
-} derive(@debug.Debug)
+}
 pub fn FileResult::new(String, String, FileOutcome, Int32, Int32, Int32, Int32, Int32) -> Self
 pub fn FileResult::to_repr(Self) -> @debug.Repr
 
+#derive(@debug.Debug)
 pub struct Finding {
   path : String
   line : Int32
@@ -65,10 +69,11 @@ pub struct Finding {
   family : String
   lenses : String
   message : String
-} derive(@debug.Debug)
+}
 pub fn Finding::new(String, Int32, Int32, String, String, String, String) -> Self
 pub fn Finding::to_repr(Self) -> @debug.Repr
 
+#derive(@debug.Debug)
 pub struct RunSummary {
   id : Int32
   target : String
@@ -82,10 +87,11 @@ pub struct RunSummary {
   unreliable : Int32
   withheld : Int32
   total : Int32
-} derive(@debug.Debug)
+}
 pub fn RunSummary::new(Int32, String, String, Int32, Int32, String, Int32, Int32, Int32, Int32, Int32, Int32) -> Self
 pub fn RunSummary::to_repr(Self) -> @debug.Repr
 
+#derive(@debug.Debug)
 pub struct ScanReport {
   target : String
   root : String
@@ -102,15 +108,16 @@ pub struct ScanReport {
   findings : Array[Finding]
   unparsed : Array[UnparsedGroup]
   by_kind : Array[ByKind]
-} derive(@debug.Debug)
+}
 pub fn ScanReport::new(String, String, Int32, Int32, String, Int32, Int32, Int32, Int32, Int32, Int32, Array[FileResult], Array[Finding], Array[UnparsedGroup], Array[ByKind]) -> Self
 pub fn ScanReport::to_repr(Self) -> @debug.Repr
 
+#derive(@debug.Debug)
 pub struct UnparsedGroup {
   reason : String
   count : Int32
   examples : Array[String]
-} derive(@debug.Debug)
+}
 pub fn UnparsedGroup::new(String, Int32, Array[String]) -> Self
 pub fn UnparsedGroup::to_repr(Self) -> @debug.Repr
 

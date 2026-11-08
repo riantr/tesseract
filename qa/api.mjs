@@ -103,15 +103,27 @@ function parseMbti(text) {
   };
   let inType = null;
   let inPublicType = false;
+  // `#derive(...)` sits **above** the declaration it applies to, so it is held
+  // here until the type it belongs to is seen. The older spelling put the
+  // clause after the closing brace; both are accepted, because the interface
+  // files of a published version were rendered by whichever toolchain built it.
+  let pendingDerive = null;
 
   for (const raw of text.split(/\r?\n/)) {
     const line = raw.trim();
-    if (line === "" || line.startsWith("//") || line.startsWith("#")) continue;
+    if (line === "" || line.startsWith("//")) continue;
+
+    const prefix = /^#derive\(([^)]*)\)/.exec(line);
+    if (prefix) {
+      pendingDerive = prefix[1];
+      continue;
+    }
+    if (line.startsWith("#")) continue;
 
     if (inType) {
       if (line.startsWith("}")) {
-        // `} derive(Eq, @debug.Debug)` — the traits the compiler generated
-        // the type's methods from.
+        // `} derive(Eq, @debug.Debug)` — the older spelling, where the clause
+        // trails the declaration.
         const derive = /derive\(([^)]*)\)/.exec(line);
         if (derive) surface.types.get(inType).derive = derive[1];
         inType = null;
@@ -139,12 +151,20 @@ function parseMbti(text) {
     }
     if ((m = /^pub(\(all\))?\s+(struct|enum)\s+([A-Za-z_][A-Za-z0-9_]*)/.exec(line))) {
       surface.types.set(m[3], { public: true, methods: [], fields: [] });
+      if (pendingDerive !== null) {
+        surface.types.get(m[3]).derive = pendingDerive;
+        pendingDerive = null;
+      }
       inType = m[3];
       inPublicType = true;
       continue;
     }
     if ((m = /^(struct|enum)\s+([A-Za-z_][A-Za-z0-9_]*)/.exec(line))) {
       surface.types.set(m[2], { public: false, methods: [], fields: [] });
+      if (pendingDerive !== null) {
+        surface.types.get(m[2]).derive = pendingDerive;
+        pendingDerive = null;
+      }
       inType = m[2];
       inPublicType = false;
       continue;
@@ -155,6 +175,10 @@ function parseMbti(text) {
         methods: [],
         fields: [],
       });
+      if (pendingDerive !== null) {
+        surface.types.get(m[2]).derive = pendingDerive;
+        pendingDerive = null;
+      }
       continue;
     }
     if (line.startsWith("pub fn ") || line.startsWith("pub(all) fn ")) {

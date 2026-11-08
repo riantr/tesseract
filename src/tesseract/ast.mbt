@@ -19,11 +19,12 @@
 
 ///|
 /// A literal written in the statement.
+#derive(Eq, Debug)
 pub enum SqlValue {
   Null
   Int(Int64)
   Text(String)
-} derive(Eq, Debug)
+}
 
 ///|
 pub extend SqlValue with Eq::{equal, not_equal}
@@ -39,6 +40,7 @@ pub extend SqlValue with @debug.Debug::{to_repr}
 /// the parser spell the same node two ways, and an executor that pattern-matches
 /// has to remember to handle both - the failure being that one spelling quietly
 /// matches nothing.
+#derive(Eq, Debug)
 pub enum Expr {
   Literal(SqlValue)
   Column(String)
@@ -50,7 +52,7 @@ pub enum Expr {
   IsNull(Expr, Bool)
   Call(String, Array[Expr])
   Star
-} derive(Eq, Debug)
+}
 
 ///|
 pub extend Expr with Eq::{equal, not_equal}
@@ -66,11 +68,12 @@ pub extend Expr with @debug.Debug::{to_repr}
 /// had to be handed, so the same statement meant different cells under different
 /// sides; carrying the four coordinates leaves that decision where the lattice
 /// is known.
+#derive(Eq, Debug)
 pub enum Target {
   None
   Position(Int64)
   Coords(Array[Int64])
-} derive(Eq, Debug)
+}
 
 ///|
 pub extend Target with Eq::{equal, not_equal}
@@ -80,10 +83,11 @@ pub extend Target with @debug.Debug::{to_repr}
 
 ///|
 /// One `column = expr` pair of an `UPDATE ... SET` list.
+#derive(Eq, Debug)
 pub struct Assignment {
   column : String
   value : Expr
-} derive(Eq, Debug)
+}
 
 ///|
 pub extend Assignment with Eq::{equal, not_equal}
@@ -96,10 +100,11 @@ pub extend Assignment with @debug.Debug::{to_repr}
 ///
 /// `ASC` is recorded as `descending = false` rather than as a separate spelling,
 /// so a term with no direction and a term written `ASC` are the same node.
+#derive(Eq, Debug)
 pub struct OrderTerm {
   expr : Expr
   descending : Bool
-} derive(Eq, Debug)
+}
 
 ///|
 pub extend OrderTerm with Eq::{equal, not_equal}
@@ -121,6 +126,7 @@ pub extend OrderTerm with @debug.Debug::{to_repr}
 /// `"count(*)"` and reading it back later, which is precisely the "accept the
 /// clause, then mean something else by it" failure this file exists to prevent -
 /// so `parse_select_list` refused it. Holding `Expr` removes the temptation.
+#derive(Eq, Debug)
 pub struct SelectSpec {
   star : Bool
   distinct : Bool
@@ -130,7 +136,7 @@ pub struct SelectSpec {
   order_by : Array[OrderTerm]
   limit : Expr?
   offset : Expr?
-} derive(Eq, Debug)
+}
 
 ///|
 pub extend SelectSpec with Eq::{equal, not_equal}
@@ -140,6 +146,7 @@ pub extend SelectSpec with @debug.Debug::{to_repr}
 
 ///|
 /// A whole statement.
+#derive(Eq, Debug)
 pub enum Stmt {
   CreateDatabase(String)
   Insert(Array[String], Array[Expr], Target)
@@ -152,7 +159,7 @@ pub enum Stmt {
   Savepoint(String)
   RollbackTo(String)
   Release(String)
-} derive(Eq, Debug)
+}
 
 ///|
 pub extend Stmt with Eq::{equal, not_equal}

@@ -36,7 +36,7 @@ pub const FORMAT_VERSION : Int64 = 1L
 ///|
 /// The header of a checkpoint: the format version and the clock.
 fn encode_header(clock : @tesseract_memory.MemoryClock) -> String {
-  let obj : Map[String, @builtin.Json] = Map([])
+  let obj : Map[String, @json.Json] = Map([])
   obj.set("format", @json.to_json(FORMAT_VERSION))
   if clock.is_manual() {
     obj.set("clock", @json.to_json("manual"))
@@ -90,7 +90,7 @@ fn decode_header(
 ///|
 /// One entry, as the JSON object a cell holds.
 fn encode_entry(entry : @tesseract_memory.Entry) -> String {
-  let obj : Map[String, @builtin.Json] = Map([])
+  let obj : Map[String, @json.Json] = Map([])
   obj.set("scope", @json.to_json(entry.scope()))
   obj.set("key", @json.to_json(entry.key()))
   obj.set("value", @json.to_json(entry.value()))
@@ -102,9 +102,9 @@ fn encode_entry(entry : @tesseract_memory.Entry) -> String {
   obj.set("hits", @json.to_json(entry.hits()))
   obj.set("importance", @json.to_json(entry.importance()))
   obj.set("pinned", @json.to_json(entry.pinned()))
-  let pairs : Array[@builtin.Json] = []
+  let pairs : Array[@json.Json] = []
   for (k, v) in entry.metadata().pairs() {
-    let pair : Map[String, @builtin.Json] = Map([])
+    let pair : Map[String, @json.Json] = Map([])
     pair.set("k", @json.to_json(k))
     pair.set("v", @json.to_json(v))
     pairs.push(@json.to_json(pair))
@@ -134,10 +134,10 @@ fn decode_entry(text : String) -> @tesseract_memory.Entry? {
   match obj.get("metadata") {
     Some(v) =>
       match v {
-        @builtin.Json::Array(items) =>
+        @json.Json::Array(items) =>
           for item in items {
             match item {
-              @builtin.Json::Object(p) =>
+              @json.Json::Object(p) =>
                 pairs.push((field_str(p, "k"), field_str(p, "v")))
               _ => ()
             }
@@ -166,21 +166,21 @@ fn decode_entry(text : String) -> @tesseract_memory.Entry? {
 
 ///|
 /// The object a piece of JSON is, or `None` when it is not an object.
-fn parse_object(text : String) -> Map[String, @builtin.Json]? {
+fn parse_object(text : String) -> Map[String, @json.Json]? {
   let parsed = @json.parse(text) catch { _ => return None }
   match parsed {
-    @builtin.Json::Object(obj) => Some(obj)
+    @json.Json::Object(obj) => Some(obj)
     _ => None
   }
 }
 
 ///|
 /// The string at a key, or `""` when there is none.
-fn field_str(obj : Map[String, @builtin.Json], key : String) -> String {
+fn field_str(obj : Map[String, @json.Json], key : String) -> String {
   match obj.get(key) {
     Some(v) =>
       match v {
-        @builtin.Json::String(s) => s
+        @json.Json::String(s) => s
         _ => ""
       }
     None => ""
@@ -193,7 +193,7 @@ fn field_str(obj : Map[String, @builtin.Json], key : String) -> String {
 /// The value is read from a string, because that is how an `Int64` is
 /// written: a JSON number is a double, and the largest deadline the store can
 /// express does not fit in one.
-fn field_int(obj : Map[String, @builtin.Json], key : String) -> Int64 {
+fn field_int(obj : Map[String, @json.Json], key : String) -> Int64 {
   match parse_i64(field_str(obj, key)) {
     Some(n) => n
     None => 0L
@@ -235,11 +235,11 @@ fn parse_i64(text : String) -> Int64? {
 
 ///|
 /// The flag at a key, or `false` when there is none.
-fn field_bool(obj : Map[String, @builtin.Json], key : String) -> Bool {
+fn field_bool(obj : Map[String, @json.Json], key : String) -> Bool {
   match obj.get(key) {
     Some(v) =>
       match v {
-        @builtin.Json::True => true
+        @json.Json::True => true
         _ => false
       }
     None => false
@@ -248,11 +248,11 @@ fn field_bool(obj : Map[String, @builtin.Json], key : String) -> Bool {
 
 ///|
 /// The number at a key, or `0.0` when there is none.
-fn field_double(obj : Map[String, @builtin.Json], key : String) -> Double {
+fn field_double(obj : Map[String, @json.Json], key : String) -> Double {
   match obj.get(key) {
     Some(v) =>
       match v {
-        @builtin.Json::Number(n, repr=_) => n
+        @json.Json::Number(n, repr=_) => n
         _ => 0.0
       }
     None => 0.0

@@ -37,18 +37,20 @@
 /// unchanged on purpose - a resize rewinds the cursor and the plane pickers are
 /// rebuilt from the new side, so clamping them here would only hide what the
 /// store decided.
+#derive(FromJson)
 struct LatticeReq {
   side : Int32
   x : Int32
   y : Int32
-} derive(FromJson)
+}
 
 ///|
 /// The resize result and the repaint it implies.
+#derive(ToJson)
 struct LatticeResp {
   response : RespView
   state : StateResp
-} derive(ToJson)
+}
 
 ///|
 /// Which plane the page is looking at.
@@ -56,10 +58,11 @@ struct LatticeResp {
 /// `Int32` for the wire, see the file header: `@json` would decode an `Int64`
 /// field only from a JSON string, and the page sends numbers. Both axes are
 /// widened to the lattice's `Int64` by `state_resp` before they are used.
+#derive(FromJson)
 struct StateReq {
   x : Int32
   y : Int32
-} derive(FromJson)
+}
 
 ///|
 /// A write. `op` is one of `insert`, `update`, `delete`, `clear`, `cursor`,
@@ -67,6 +70,7 @@ struct StateReq {
 ///
 /// `position`, `digit` and the plane axes are `Int32` for the wire, see the
 /// file header. `widen` hands them to the store as `Int64`.
+#derive(FromJson)
 struct WriteReq {
   op : String
   key : String
@@ -75,33 +79,36 @@ struct WriteReq {
   digit : Int32?
   x : Int32
   y : Int32
-} derive(FromJson)
+}
 
 ///|
 /// A write plus the repaint it implies.
+#derive(ToJson)
 struct WriteResp {
   response : RespView
   state : StateResp
-} derive(ToJson)
+}
 
 ///|
 /// One SQL statement, plus the plane the page is looking at so the repaint
 /// keeps showing it.
 ///
 /// The plane axes are `Int32` for the wire, see the file header.
+#derive(FromJson)
 struct QueryReq {
   sql : String
   x : Int32
   y : Int32
-} derive(FromJson)
+}
 
 ///|
 /// The response and its rows.
+#derive(ToJson)
 struct QueryResp {
   response : RespView
   rows : Array[RecordView]
   state : StateResp
-} derive(ToJson)
+}
 
 ///|
 /// A lattice question about one cell. `kind` is `line`, `slab` or `peers`;
@@ -109,13 +116,14 @@ struct QueryResp {
 ///
 /// `position`, `axis` and the plane axes are `Int32` for the wire, see the file
 /// header; the handler widens them to the lattice's `Int64`.
+#derive(FromJson)
 struct GeometryReq {
   position : Int32
   kind : String
   axis : Int32
   x : Int32
   y : Int32
-} derive(FromJson)
+}
 
 ///|
 /// The occupied cells of that sub-structure, plus every position it covers so
@@ -123,44 +131,49 @@ struct GeometryReq {
 ///
 /// `positions` is `Array[Int32]` for the wire, see the file header; a lattice's
 /// positions never exceed `MAX_SIDE^4`, which fits `Int32`.
+#derive(ToJson)
 struct GeometryResp {
   response : RespView
   rows : Array[RecordView]
   positions : Array[Int32]
   state : StateResp
-} derive(ToJson)
+}
 
 ///|
 /// Which serialisation to render.
+#derive(FromJson)
 struct ExportReq {
   format : String
-} derive(FromJson)
+}
 
 ///|
 /// The serialised store.
+#derive(ToJson)
 struct ExportResp {
   format : String
   text : String
-} derive(ToJson)
+}
 
 ///|
 /// Text to load back in.
 ///
 /// The plane axes are `Int32` for the wire, see the file header.
+#derive(FromJson)
 struct ImportReq {
   format : String
   text : String
   x : Int32
   y : Int32
-} derive(FromJson)
+}
 
 ///|
 /// The import result and the repaint it implies.
+#derive(ToJson)
 struct ImportResp {
   ok : Bool
   detail : String
   state : StateResp
-} derive(ToJson)
+}
 
 ///|
 /// Repaint the current plane.

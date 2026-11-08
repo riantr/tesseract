@@ -1,7 +1,7 @@
 # QA — a deep sweep across sixteen dimensions
 
-Measured against the tree that ships as **v0.1.15** — the revision that follows the
-0.1.13 sweep. Every number below was produced by a tool in `qa/`, and every tool
+Measured against the tree that ships as **v0.1.16** — the toolchain repair that
+follows the 0.1.15 documentation release. Every number below was produced by a tool in `qa/`, and every tool
 prints where its number came from. A number that could not be measured says so
 instead of carrying an estimate.
 
@@ -10,12 +10,18 @@ found**: the findings that were defects are fixed, the findings that were questi
 about what the package should offer are answered and recorded, and every number
 below was re-measured afterwards.
 
-**v0.1.15 is published.** The registry's latest version is 0.1.15, and the probe
-that measures what a consumer actually gets now passes **9 of 9** against it: the
-four checkpoint defects are closed in the artifact, not only in the tree, and
-every accessor of the two opaque value types returns the number the contract
-names. Getting there took a fix to the release, five fixes to the audit, and
-one hole in the house gate — see "The release failed" below.
+**v0.1.15 is the published version this round starts from, and 0.1.16 is that
+same tree made to build.** Nothing in 0.1.16 changes behaviour: the package that
+failed to type-check on `moon 0.1.20261102` was `src/tesseract_memory_db`, and the
+fix is the spelling of a type. The dimensions that measure behaviour — unit,
+integration, Gherkin, E2E, DAST, SAST, coverage, fuzz, performance, load — were
+measured on this tree, and they moved by nothing, because the behaviours they
+measure did not move. The two dimensions that **count symbols** (API, contract)
+were re-measured, because those counts did move: **529** symbols and **291**
+methods, up six by methods this release makes explicit. The probe of the
+**published** artifact is a different question, and it is answered after the
+publish — see "The tree stopped building on the toolchain it was measured on"
+below.
 
 0.1.15 itself carries no behaviour change: it is the **logo** (the artwork from
 the attachment, at 438×438 and 1024×1024), the move from **Apache-2.0 to MIT**,
@@ -35,8 +41,8 @@ license should not change what a consumer's code has to compile against.
 | 3 | **Dependency / SCA** | **14** modules in the closure, **6** direct pins, every pin current; 0 yanked; vendored SQLite **3.49.1** against upstream 3.54.1; **4** NVD advisories, **0** reachable; **1** transitive gap left | `node qa/deps.mjs` |
 | 4 | **Unit** | **422 tests, 422 passed, 0 failed**, on 4 check targets under `--deny-warn` | `moon test --target wasm --deny-warn` |
 | 5 | **Integration** | **22** production edges across 14 packages (+1 test-only); **11** crossed by an in-tree test that names the other package; **11** covered only from outside the package | `node qa/integration.mjs` |
-| 6 | **API** | **523** public symbols (62 types, 169 fns, 285 methods, 7 consts); naming **100 %** conformant; **0 findings** (75 in the 0.1.13 sweep) | `node qa/api.mjs` |
-| 7 | **Contract** | **523** published symbols matched, **0** mismatched; the published package's own interface files **15 identical, 0 differing**; every published accessor **returns the number the contract names**; the probe of the published artifact: **9 tests, 9 passed**; **12** error codes, **12/12** documented and **12/12** asserted on the code; **0** findings in the working tree, **3** in the published artifact, **0** drift | `node qa/contract.mjs` |
+| 6 | **API** | **529** public symbols (62 types, 169 fns, 291 methods, 7 consts); naming **100 %** conformant; **0 findings** (75 in the 0.1.13 sweep); **54** symbols attributed to the `#derive` clause that generates them | `node qa/api.mjs` |
+| 7 | **Contract** | **523** published symbols matched at 0.1.15, **0** mismatched; the published package's own interface files **15 identical, 0 differing**; every published accessor **returns the number the contract names**; the probe of the published artifact: **9 tests, 9 passed**; **12** error codes, **12/12** documented and **12/12** asserted on the code; **0** findings in the working tree, **3** in the published artifact, **0** drift — and in this tree's run **3 checks skipped**, because the three that read the published artifact have no 0.1.16 to read until it publishes | `node qa/contract.mjs` |
 | 8 | **Component** | **8** library packages, coverage from **15.6 %** to **98.5 %**; **0** API findings across the module's packages | `node qa/api.mjs`, `node qa/coverage.mjs` |
 | 9 | **Gherkin** | **7** features, **54** scenarios, **222** steps, **54/54** pass | `node qa/gherkin.mjs` |
 | 10 | **E2E** | **72** commands across **5** CLIs mapped onto **4** layers; **0** exercised by no layer; **5** exercised only by the unit suite | `node qa/e2e.mjs` |
@@ -312,6 +318,81 @@ One correction the README carried and the release did not: the "Running it"
 section claimed `moon test # 401 tests` while the suite has 422. It had been
 right once and was left behind when the count moved.
 
+### 11. The tree stopped building on the toolchain it was measured on
+
+This is the defect behind 0.1.16, and it is the one no check in the tree was
+looking for: **a published version that does not compile.**
+
+`src/tesseract_memory_db` wrote `Map[String, @builtin.Json]` in fifteen places.
+The toolchain moved `Json` out of `builtin` and into `moonbitlang/core/json`, so
+on `moon 0.1.20261102` every one of those is *"The type @builtin.Json is
+undefined"* and the package does not type-check at all — fifteen `[4032]` errors
+and no build. The probe reproduced it **from the registry rather than from the
+tree**, which is the only way this class of defect is visible: it pinned the
+published 0.1.15 and failed identically, so the artifact a consumer was getting
+could not be compiled by any toolchain at or after that move.
+
+The gate could not see it, and that is the part worth recording. Every check the
+release workflow runs is against the **working tree**, whose dependency pins are
+its own, and it runs a subset of the house gate: `fmt --check`, `wasm`, `js`,
+`test --target wasm` and `build --target wasm` — no `native`, no `wasm-gc`, and
+neither nested module. So of the sixteen dimensions here, the two that build the
+**published** package are the two the release never runs. `qa/fuzz` and
+`qa/contract_probe` are in `AGENTS.md`'s gate precisely because they are the only
+places that build what a consumer gets, and the awkward part is unavoidable: a
+probe of the published artifact cannot pass before the release it is probing
+exists.
+
+Three things were fixed, and only the third moves the surface:
+
+| the change | the sites |
+|---|---|
+| `@builtin.Json` → `@json.Json` | 15, all in `src/tesseract_memory_db/format.mbt` |
+| `} derive(...)` → `#derive(...)` above the declaration | 42, across 10 files |
+| `pub extend T with Eq::{…}` and `Debug::{to_repr}` for the two report types that relied on the deprecated promotion | 2 types, 6 methods |
+
+The second is the toolchain's own migration, and `moon fmt` performs it — which is
+why it could not be dealt with by leaving the old spelling alone: the tree's
+`moon fmt --check` was already red on it before anything was edited, and
+`[0027] deprecated_syntax` under `--deny-warn` is a red gate whether or not the
+code works.
+
+The third was found while doing the second. `LoadReport` and `RebuildReport`
+reached `equal`, `not_equal` and `to_repr` only through
+`[0079] implicit_impl_as_method`, a promotion the toolchain says it will remove,
+and `src/tesseract_sqlite/moon.pkg` and `src/tesseract_memory_index/moon.pkg`
+silenced the warning with `warnings = "-79"` rather than saying where the methods
+should live. Both now say it. **This is additive**: those six methods were not in
+the 0.1.15 interface. A method-by-method diff of the regenerated `.mbti` files
+against a snapshot taken before the migration shows **0 lost, 6 added**, and the
+only other difference is the toolchain's own rendering — `json_to_sql` and
+`json_walk` spell their argument `@json.Json` where they used to spell it `Json`,
+the same type.
+
+#### The audit that had to be fixed first
+
+`node qa/api.mjs` went from **0 findings** to **54** the moment the source moved
+from the trailing `} derive(...)` to the leading `#derive(...)`, and all 54 were
+wrong. The parser reads the interface files, skipped every line beginning with
+`#`, and looked for the derive clause on the closing brace — so a prefix attribute
+was invisible and the 54 methods the compiler generates looked like public symbols
+that nothing in the module references.
+
+It now holds a leading `#derive(...)` until the declaration it belongs to, and
+accepts the trailing spelling too, because the interface files of a published
+version were rendered by whichever toolchain built it. The count it reports is now
+**54 symbols attributed to a derive** — the same 54 the broken parser had
+misfiled, which is the control that shows the attribution is live rather than
+silently zero. A fix that made the finding disappear without moving that count
+would have been indistinguishable from a fix that made the parser stop reading
+derives at all.
+
+One thing was **not** fixed, deliberately. `node qa/contract.mjs` reports `SKIP`
+for the three checks that read the published artifact, because there is no 0.1.16
+on the registry to read before the publish. It printed those skips and then closed
+with *"the working tree is clean"*, which reads as verification. The summary now
+carries the skip count and says the skipped checks are not part of that claim.
+
 ---
 
 ## What the 0.1.13 sweep found, and what this round closed
@@ -567,7 +648,7 @@ cd qa/fuzz && moon test --target native   # fuzz, against the published package
 `qa/fuzz` and `qa/contract_probe` are **nested modules**: they have their own
 `moon.mod`, so the parent module's build never sees them, they carry their own
 gate, and they can never be published. `qa/fuzz` and `qa/contract_probe` both
-depend on the **published** `riantr/tesseract@0.1.15`, so they measure what a
+depend on the **published** `riantr/tesseract@0.1.16`, so they measure what a
 consumer gets rather than what is sitting in the working tree — which is why the
 checkpoint contract reports its findings against the published artifact and none
 against the tree. The version is pinned in `qa/contract_probe/moon.mod` and

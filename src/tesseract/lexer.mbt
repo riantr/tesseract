@@ -27,13 +27,14 @@
 /// concerned. Splitting them here would need a keyword table that then has to
 /// stay in step with the grammar in `parser.mbt`, and the only thing it buys is
 /// an earlier error message.
+#derive(Eq, Debug)
 pub enum TokenKind {
   Ident(String)
   IntLit(Int64)
   Text(String)
   Punct(String)
   Eof
-} derive(Eq, Debug)
+}
 
 ///|
 pub extend TokenKind with Eq::{equal, not_equal}
@@ -47,10 +48,11 @@ pub extend TokenKind with @debug.Debug::{to_repr}
 /// The offset is kept per token rather than recovered from the token text, so an
 /// error in the middle of a long statement points at the offending token instead
 /// of at the start of the statement.
+#derive(Eq, Debug)
 pub struct Token {
   kind : TokenKind
   at : Int32
-} derive(Eq, Debug)
+}
 
 ///|
 pub extend Token with Eq::{equal, not_equal}
@@ -63,11 +65,12 @@ pub extend Token with @debug.Debug::{to_repr}
 ///
 /// Offsets are the same as `Token.at`: the opening quote for an unterminated
 /// literal, the first character that cannot continue a token for the other two.
+#derive(Eq, Debug)
 pub enum LexError {
   UnterminatedString(Int32)
   UnexpectedChar(Int32, Int32)
   BadNumber(Int32)
-} derive(Eq, Debug)
+}
 
 ///|
 pub extend LexError with Eq::{equal, not_equal}

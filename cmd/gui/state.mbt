@@ -78,6 +78,7 @@ const LOG_TAIL : Int32 = 40
 /// - it does, but `MAX_SIDE` is what makes that true - but because `@json`
 /// encodes `Int64` as a string and the page speaks numbers. The file header has
 /// the full argument; `MAX_SIDE^4` fits `Int32`, so nothing is lost.
+#derive(ToJson)
 struct CellView {
   position : Int32
   x : Int32
@@ -89,17 +90,18 @@ struct CellView {
   digit : Int32
   timestamp : String
   occupied : Bool
-} derive(ToJson)
+}
 
 ///|
 /// One log line, newest last.
+#derive(ToJson)
 struct LogView {
   seq : Int32
   stamp : String
   level : String
   message : String
   details : String
-} derive(ToJson)
+}
 
 ///|
 /// Sudoku health over the whole lattice, not just the visible plane: how many
@@ -108,24 +110,26 @@ struct LogView {
 ///
 /// `placed` is `Int32` for the wire; it counts cells, so `MAX_SIDE^4` bounds
 /// it and the narrow is lossless. See the file header.
+#derive(ToJson)
 struct PuzzleView {
   placed : Int32
   violations : Array[String]
   complete : Bool
-} derive(ToJson)
+}
 
 ///|
 /// The status line the C# view model showed above the grid.
 ///
 /// Every count is `Int32` for the wire. All four are bounded by the cell count,
 /// which `MAX_SIDE^4` keeps inside `Int32`. See the file header.
+#derive(ToJson)
 struct StatusView {
   db_name : String
   total_cells : Int32
   occupancy : Int32
   cursor : Int32
   digit_count : Int32
-} derive(ToJson)
+}
 
 ///|
 /// Everything one repaint needs. Sent after every mutation so the page never
@@ -140,6 +144,7 @@ struct StatusView {
 /// digit list all have to be rebuilt from the lattice the cells actually came
 /// from, and a page that remembered a stale `3` would quietly offer a digit the
 /// store would reject.
+#derive(ToJson)
 struct StateResp {
   status : StatusView
   side : Int32
@@ -148,7 +153,7 @@ struct StateResp {
   cells : Array[CellView]
   puzzle : PuzzleView
   logs : Array[LogView]
-} derive(ToJson)
+}
 
 ///|
 /// A `DBResponse` reduced to what the page shows. `text` is the library's own
@@ -157,6 +162,7 @@ struct StateResp {
 ///
 /// The three numbers are `Int32` for the wire; rows and records cannot outnumber
 /// the cells. See the file header.
+#derive(ToJson)
 struct RespView {
   success : Bool
   operation : String
@@ -167,13 +173,14 @@ struct RespView {
   position : Int32
   total_records : Int32
   text : String
-} derive(ToJson)
+}
 
 ///|
 /// A `SELECT` row.
 ///
 /// `position` and `digit` are `Int32` for the wire, narrowed from the store's
 /// `Int64`. `MAX_SIDE` bounds both. See the file header.
+#derive(ToJson)
 struct RecordView {
   key : String
   value : String
@@ -181,7 +188,7 @@ struct RecordView {
   coords : String
   timestamp : String
   digit : Int32
-} derive(ToJson)
+}
 
 ///|
 /// The view of one cell, empty or not.

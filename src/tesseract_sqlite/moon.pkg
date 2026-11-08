@@ -11,10 +11,4 @@ import {
   "riantr/tesseract/src/tesseract_dgp",
 } for "test"
 
-// Same suppression `moonbit-community/sqlite3` uses: deriving a trait turns
-// its methods into implicitly promoted methods on the type, which the
-// toolchain warns about (79).
-
-warnings = "-79"
-
 supported_targets = "native+wasm"

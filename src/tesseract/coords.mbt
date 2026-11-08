@@ -188,12 +188,13 @@ pub fn slot_of(position : Int64) -> Int32 {
 /// Equality and debug output are structural; the `extend` declarations keep the
 /// trait methods from being implicitly promoted as regular methods, which the
 /// compiler warns about.
+#derive(Eq, Debug)
 pub struct Coords {
   x : Int64
   y : Int64
   z : Int64
   w : Int64
-} derive(Eq, Debug)
+}
 
 ///|
 pub extend Coords with Eq::{equal, not_equal}

@@ -48,6 +48,7 @@ pub struct Dataset {
 /// `rejected` is not an error path that should normally be zero - it is the
 /// count the store refused, so that "recorded 81 of 93" and "recorded 93" stay
 /// two different answers.
+#derive(Eq, Debug)
 pub struct RecordReport {
   /// Rows the store accepted.
   recorded : Int32
@@ -61,7 +62,7 @@ pub struct RecordReport {
   /// number that had to be narrowed to fit the old `Int32` report was already
   /// the wrong type for a side big enough to matter.
   stopped_at : Int64
-} derive(Eq, Debug)
+}
 
 ///|
 pub extend RecordReport with Eq::{not_equal, equal}
