@@ -18,10 +18,14 @@ integration, Gherkin, E2E, DAST, SAST, coverage, fuzz, performance, load — wer
 measured on this tree, and they moved by nothing, because the behaviours they
 measure did not move. The two dimensions that **count symbols** (API, contract)
 were re-measured, because those counts did move: **529** symbols and **291**
-methods, up six by methods this release makes explicit. The probe of the
-**published** artifact is a different question, and it is answered after the
-publish — see "The tree stopped building on the toolchain it was measured on"
-below.
+methods, up six by methods this release makes explicit.
+
+**v0.1.16 is now published, and the artifact builds.** The registry's latest
+version is 0.1.16 with `build_status: success` and `license: MIT`, and the probe
+that only ever reads the **published** package — the one that reproduced the
+defect against 0.1.15 — passes **9 of 9** against it. `qa/fuzz` passes **6 of 6**
+against the same artifact. See "The tree stopped building on the toolchain it was
+measured on" below for what that probe was reading before.
 
 0.1.15 itself carries no behaviour change: it is the **logo** (the artwork from
 the attachment, at 438×438 and 1024×1024), the move from **Apache-2.0 to MIT**,
@@ -42,7 +46,7 @@ license should not change what a consumer's code has to compile against.
 | 4 | **Unit** | **422 tests, 422 passed, 0 failed**, on 4 check targets under `--deny-warn` | `moon test --target wasm --deny-warn` |
 | 5 | **Integration** | **22** production edges across 14 packages (+1 test-only); **11** crossed by an in-tree test that names the other package; **11** covered only from outside the package | `node qa/integration.mjs` |
 | 6 | **API** | **529** public symbols (62 types, 169 fns, 291 methods, 7 consts); naming **100 %** conformant; **0 findings** (75 in the 0.1.13 sweep); **54** symbols attributed to the `#derive` clause that generates them | `node qa/api.mjs` |
-| 7 | **Contract** | **523** published symbols matched at 0.1.15, **0** mismatched; the published package's own interface files **15 identical, 0 differing**; every published accessor **returns the number the contract names**; the probe of the published artifact: **9 tests, 9 passed**; **12** error codes, **12/12** documented and **12/12** asserted on the code; **0** findings in the working tree, **3** in the published artifact, **0** drift — and in this tree's run **3 checks skipped**, because the three that read the published artifact have no 0.1.16 to read until it publishes | `node qa/contract.mjs` |
+| 7 | **Contract** | **529** published symbols matched, **0** mismatched; the published package's own interface files **15 identical, 0 differing**; every published accessor **returns the number the contract names**; the probe of the published artifact: **9 tests, 9 passed**; **12** error codes, **12/12** documented and **12/12** asserted on the code; **0** findings in the working tree, **3** in the published artifact, **0** drift, **0** checks skipped | `node qa/contract.mjs` |
 | 8 | **Component** | **8** library packages, coverage from **15.6 %** to **98.5 %**; **0** API findings across the module's packages | `node qa/api.mjs`, `node qa/coverage.mjs` |
 | 9 | **Gherkin** | **7** features, **54** scenarios, **222** steps, **54/54** pass | `node qa/gherkin.mjs` |
 | 10 | **E2E** | **72** commands across **5** CLIs mapped onto **4** layers; **0** exercised by no layer; **5** exercised only by the unit suite | `node qa/e2e.mjs` |
@@ -387,11 +391,21 @@ silently zero. A fix that made the finding disappear without moving that count
 would have been indistinguishable from a fix that made the parser stop reading
 derives at all.
 
-One thing was **not** fixed, deliberately. `node qa/contract.mjs` reports `SKIP`
-for the three checks that read the published artifact, because there is no 0.1.16
-on the registry to read before the publish. It printed those skips and then closed
-with *"the working tree is clean"*, which reads as verification. The summary now
-carries the skip count and says the skipped checks are not part of that claim.
+One thing was **not** covered by the source change: the probe had the same defect
+one line deep. `qa/contract_probe/probe.mbt` assembled a header with
+`@builtin.Json::Object(obj)`, so the module whose entire purpose is to check the
+published package failed for the same reason the package did — and it could not
+say so until 0.1.16 existed, because before that it never got as far as that line.
+That is the shape of this class of defect: the tool that would have caught it was
+carrying the same bug.
+
+`node qa/contract.mjs` also reported `SKIP` for the three checks that read the
+published artifact, and then closed with *"the working tree is clean"*, which reads
+as verification. The summary now carries the skip count and says the skipped
+checks are not part of that claim. After the publish that run is **0 skipped**:
+**529** published symbols matched and **0** mismatched, **15** interface files
+identical and **0** differing, the probe **9 of 9**, and 3 standing findings about
+the registry's index rather than about the code — the same 3 every release carries.
 
 ---
 

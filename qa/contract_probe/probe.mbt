@@ -228,7 +228,7 @@ pub fn rewrite_header_version(path : String, version : String) -> Unit raise {
   let old = if stmt.step() { stmt.column(index=0) } else { "" }
   let parsed = @json.parse(old) catch { _ => return }
   match parsed {
-    @builtin.Json::Object(obj) => {
+    @json.Json::Object(obj) => {
       obj.set("format", @json.to_json(version))
       let fresh = @json.to_json(obj).stringify()
       let update = conn.prepare(
