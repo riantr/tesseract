@@ -268,13 +268,194 @@ test "a checkpoint that does not fit the store it is opened with is refused" {
 }
 
 ///|
-/// A capacity a checkpoint lattice cannot hold is refused.
+/// The ceiling is the largest checkpoint lattice, not the smallest one.
 ///
-/// A store that could not be written out is not a store that can be reopened.
-test "a capacity a checkpoint lattice cannot hold is refused" {
+/// It used to be 255 — a side-4 lattice's worth — so a capacity of a thousand
+/// was refused before the file was even opened. That made the tier unusable for
+/// the thing it is for: one static-analysis pass files 150 entries and one
+/// doubleML run files 219 before run metadata, VCs or history, and a store that
+/// cannot be opened with room for them is not a store to persist them in.
+test "a capacity larger than a small checkpoint lattice is accepted" {
   let path = scratch("big")
   remove(path)
-  assert_true(refused(@tesseract_memory_db.open(path, config(1000))))
+  assert_eq(@tesseract_memory_db.max_entries(), 9999)
+  let d = open_at(path, 5000, 0L)
+  assert_eq(d.memory().capacity(), 5000)
+  remove(path)
+}
+
+///|
+/// A capacity above the largest lattice is refused, and the refusal names the
+/// real ceiling.
+///
+/// The rule itself is unchanged and still right: a store whose capacity exceeds
+/// what a checkpoint can hold could not be reopened. Only the number moved.
+test "a capacity above the largest checkpoint lattice is refused" {
+  let path = scratch("toobigcapacity")
+  remove(path)
+  let result = @tesseract_memory_db.open(path, config(10000))
+  assert_true(refused(result))
+  assert_true(
+    match result {
+      Err(message) => message.contains("9999")
+      Ok(_) => false
+    },
+  )
+  remove(path)
+}
+
+///|
+/// A thousand entries round trip.
+///
+/// This is the case the tier was reported unable to serve: a store opened with
+/// capacity 5000 and asked to hold a thousand entries. It could not be opened at
+/// all — the capacity was refused before the file was touched — because a side-4
+/// lattice holds 255.
+///
+/// The side is chosen from how many entries are live and **recorded in the
+/// file**, so the reader builds the lattice the file was written on. Without
+/// that record a reader would build a side-4 lattice, refuse every row above
+/// position 256, and come back with a store quietly missing its tail.
+///
+/// The writes go through the handle and are checkpointed once: a checkpoint
+/// re-serialises the whole store, so a thousand checkpoints of a thousand
+/// entries would measure the file rather than this rule.
+test "a thousand entries round trip" {
+  let path = scratch("grow")
+  remove(path)
+  let d = open_at(path, 5000, 0L)
+  let handle = d.memory()
+  let mut i = 0
+  while i < 1000 {
+    ignore(handle.put("k" + i.to_string(), "v" + i.to_string()))
+    i = i + 1
+  }
+  assert_eq(d.size(), 1000)
+  ignore(d.checkpoint().unwrap())
+  // 1000 entries and the header need more than the 625 cells side 5 has, and
+  // no more than the 1296 side 6 has.
+  assert_eq(@tesseract_sqlite.saved_side(path), Some(6L))
+  let again = open_at(path, 5000, 0L)
+  assert_eq(again.size(), 1000)
+  assert_eq(again.get("k0"), Some("v0"))
+  assert_eq(again.get("k999"), Some("v999"))
+  remove(path)
+}
+
+///|
+/// The lattice grows at exactly the entry the old one could not hold, and not
+/// before.
+///
+/// Growth is by need rather than always to the maximum: the store is one flat
+/// array of `side^4` cells, so a store of a hundred entries on a side-10 lattice
+/// would allocate ten thousand cells to write a hundred and one. The floor also
+/// matters for a different reason — a side-4 file is what every build before
+/// this one reads, so a small store must keep writing one.
+test "the checkpoint lattice grows at the entry the old one could not hold" {
+  let path = scratch("boundary")
+  remove(path)
+  let d = open_at(path, 5000, 0L)
+  let handle = d.memory()
+  let mut i = 0
+  while i < 255 {
+    ignore(handle.put("k" + i.to_string(), "v"))
+    i = i + 1
+  }
+  ignore(d.checkpoint().unwrap())
+  assert_eq(@tesseract_sqlite.saved_side(path), Some(4L))
+  // The 256th entry is one past what a side-4 lattice holds: 255 entries and
+  // the header fill it exactly.
+  ignore(d.put("one-more", "v").unwrap())
+  assert_eq(@tesseract_sqlite.saved_side(path), Some(5L))
+  assert_eq(d.size(), 256)
+  let again = open_at(path, 5000, 0L)
+  assert_eq(again.size(), 256)
+  assert_eq(again.get("one-more"), Some("v"))
+  remove(path)
+}
+
+///|
+/// A checkpoint that records no side is read as the side-4 file it is.
+///
+/// Every checkpoint written before 0.1.17 carries no side — the row was added
+/// with that release — and every one of those is a side-4 lattice. So the reader
+/// falls back to four rather than refusing the file: the alternative would strand
+/// every memory a caller already has on disk, which is the one thing a format
+/// change must not do.
+test "a checkpoint that records no side is read as a side-4 file" {
+  let path = scratch("noside")
+  remove(path)
+  let d = open_at(path, 10, 0L)
+  ignore(d.put("k", "v").unwrap())
+  ignore(d.checkpoint().unwrap())
+  drop_meta(path, "side")
+  assert_eq(@tesseract_sqlite.saved_side(path), None)
+  let again = open_at(path, 10, 0L)
+  assert_eq(again.get("k"), Some("v"))
+  assert_eq(again.size(), 1)
+  remove(path)
+}
+
+///|
+/// A file whose cells do not fit the lattice it says it was written on is
+/// refused, not half-read.
+///
+/// The reader sizes its lattice from the side the file records, so a row above
+/// that lattice's last position means the file disagrees with itself — a
+/// hand-edited file, or one written by something that got the side wrong. The
+/// store refuses such rows one at a time; a reader that dropped the count would
+/// report "loaded 256" as a success and hand back a store quietly missing its
+/// tail.
+test "a checkpoint whose cells do not fit its own side is refused" {
+  let path = scratch("truncated")
+  remove(path)
+  let d = open_at(path, 10, 0L)
+  ignore(d.put("k", "v").unwrap())
+  ignore(d.checkpoint().unwrap())
+  assert_eq(@tesseract_sqlite.saved_side(path), Some(4L))
+  let conn = @sqlite3.Connection::open(path)
+  let stmt = conn.prepare(
+    "INSERT INTO sudoku_cells (grid_position, key, value, digit, timestamp) VALUES (300, ?, ?, 0, ?)",
+  )
+  stmt.bind(index=1, "ghost")
+  stmt.bind(index=2, "{}")
+  stmt.bind(index=3, "1")
+  ignore(stmt.step())
+  stmt.finalize()
+  conn.close()
+  assert_true(refused(@tesseract_memory_db.open(path, config(10))))
+  remove(path)
+}
+
+///|
+/// A checkpoint written on a lattice larger than this build reads is refused by
+/// name, rather than read for the part that fits.
+///
+/// This is the guarantee the recorded side buys, and it is the honest one: a
+/// checkpoint is readable by any build whose maximum side is at least its own.
+/// The alternative — a fixed side for everybody — is what capped the tier at
+/// 255 in the first place.
+test "a checkpoint written on a lattice this build cannot address is refused" {
+  let path = scratch("futureside")
+  remove(path)
+  let d = open_at(path, 10, 0L)
+  ignore(d.put("k", "v").unwrap())
+  ignore(d.checkpoint().unwrap())
+  let conn = @sqlite3.Connection::open(path)
+  let stmt = conn.prepare(
+    "UPDATE sudoku_meta SET value = '11' WHERE name = 'side'",
+  )
+  ignore(stmt.step())
+  stmt.finalize()
+  conn.close()
+  let result = @tesseract_memory_db.open(path, config(10))
+  assert_true(refused(result))
+  assert_true(
+    match result {
+      Err(message) => message.contains("side 11")
+      Ok(_) => false
+    },
+  )
   remove(path)
 }
 
@@ -488,6 +669,18 @@ fn drop_header(path : String) -> Unit raise {
   defer conn.close()
   let stmt = conn.prepare("DELETE FROM sudoku_cells WHERE grid_position = 1")
   defer stmt.finalize()
+  ignore(stmt.step())
+}
+
+///|
+/// Removes one row of the file's meta table, as a file written before that row
+/// existed would be missing it.
+fn drop_meta(path : String, name : String) -> Unit raise {
+  let conn = @sqlite3.Connection::open(path)
+  defer conn.close()
+  let stmt = conn.prepare("DELETE FROM sudoku_meta WHERE name = ?")
+  defer stmt.finalize()
+  stmt.bind(index=1, name)
   ignore(stmt.step())
 }
 

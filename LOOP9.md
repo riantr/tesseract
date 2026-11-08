@@ -61,6 +61,16 @@ Six rules, and everything below follows from them.
 Rule 6 has a price and the price is the point of stating it: a durable memory
 holds at most **255 entries** — one cell for the header, one for each entry.
 
+> **Amended in 0.1.17 — rule 6 no longer holds, and rule 5 is the one that
+> survives it.** The fixed side is what capped the tier at 255, which is below
+> what one doubleML run files (219 entries before run metadata, value contexts,
+> slices or history) and far below any cross-run history. The side is now chosen
+> from the live entry count and recorded in the file, up to side 10 — **9999
+> entries** — and a store of up to 255 entries still writes the side-4 file
+> described here. The guarantee rule 6 was buying becomes the honest version of
+> itself: a checkpoint is readable by any build whose largest side is at least
+> its own, and one on a larger lattice is refused by name. See `QA.md` §12.
+
 ---
 
 ## The four steps

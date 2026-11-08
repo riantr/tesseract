@@ -12,7 +12,7 @@
 
 name = "riantr/tesseract"
 
-version = "0.1.16"
+version = "0.1.17"
 
 // The file with the real content. `README.md` is a symlink to this one, so
 // naming the real file here states it rather than relying on every consumer
@@ -36,10 +36,10 @@ preferred_target = "wasm"
 description = "Tiny multi-key JSON value database over a 4D sudoku lattice (1..215 cells per axis, 81 by default), with a SQL surface and sudoku digit constraints."
 
 import {
-  "moonbit-community/proton@0.6.0",
-  "moonbit-community/proton_contract@0.6.0",
-  "moonbit-community/sqlite3@0.2.3",
-  "moonbitlang/async@0.22.5",
-  "moonbitlang/x@0.5.6",
-  "riantr/moonbit_doubleML@0.164.35",
+  "moonbit-community/proton@0.7.0",
+  "moonbit-community/proton_contract@0.7.0",
+  "moonbit-community/sqlite3@0.2.4",
+  "moonbitlang/async@0.22.7",
+  "moonbitlang/x@0.5.7",
+  "riantr/moonbit_doubleML@0.164.62",
 }

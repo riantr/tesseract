@@ -14,6 +14,8 @@ pub fn load(String, @tesseract.Tesseract) -> LoadReport raise
 
 pub fn save(String, @tesseract.Tesseract) -> Int32 raise
 
+pub fn saved_side(String) -> Int64? raise
+
 // Errors
 
 // Types and methods

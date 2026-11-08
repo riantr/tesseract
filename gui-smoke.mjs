@@ -34,6 +34,10 @@ function startApp() {
     env: { ...process.env, PROTON_HEADLESS: "1" },
   });
   let buf = "";
+  let code = null;
+  proc.on("exit", (c) => {
+    code = c ?? -1;
+  });
   proc.stdout.on("data", (d) => {
     buf += d;
     process.stdout.write("[app] " + d);
@@ -42,7 +46,14 @@ function startApp() {
     buf += d;
     process.stderr.write("[app] " + d);
   });
-  return { proc, port: () => (PORT || (buf.match(/127\.0\.0\.1:(\d+)\/devtools/) || [])[1]) };
+  return {
+    proc,
+    port: () => PORT || (buf.match(/127\.0\.0\.1:(\d+)\/devtools/) || [])[1],
+    // Exposed so the wait loop can notice a dead app instead of sitting out the
+    // full two minutes and then blaming a missing endpoint.
+    exitCode: () => code,
+    tail: () => buf.trim().split("\n").slice(-15).join("\n"),
+  };
 }
 
 async function pageTarget(port) {
@@ -96,7 +107,9 @@ class Cdp {
 }
 
 let failures = 0;
+let checks = 0;
 function check(name, got, want, extra) {
+  checks++;
   const ok = got === want;
   if (!ok) failures++;
   log(
@@ -109,7 +122,7 @@ const chips = (cdp) => cdp.eval("document.getElementById('chips').innerText.repl
 const resp = (cdp) => cdp.eval("document.getElementById('outResp').innerText.replace(/\\n/g,' | ')");
 
 async function main() {
-  const { proc, port } = startApp();
+  const { proc, port, exitCode, tail } = startApp();
   let cdp;
   try {
     const ready = Date.now() + 120000;
@@ -117,6 +130,11 @@ async function main() {
     while (Date.now() < ready) {
       port_ = port();
       if (port_) break;
+      if (exitCode() !== null) {
+        throw new Error(
+          `proton_cli exited with code ${exitCode()} before a DevTools endpoint appeared:\n${tail()}`,
+        );
+      }
       await new Promise((r) => setTimeout(r, 500));
     }
     if (!port_) throw new Error("no DevTools endpoint appeared on stderr");
@@ -470,17 +488,24 @@ async function main() {
     check("side 3 header is back", await cdp.eval("document.getElementById('shape').innerText.includes('3×3×3×3')"), true, await cdp.eval("document.getElementById('shape').innerText"));
 
     log("");
-    log(failures === 0 ? "all smoke checks passed" : `${failures} smoke check(s) FAILED`);
+    // A suite that runs no checks has not passed: `failures === 0` is vacuously
+    // true then. This file once exited 0 while printing not one check, because
+    // `finally` called process.exit before the startup error could propagate.
+    const ok = failures === 0 && checks > 0;
+    log(ok ? "all smoke checks passed" : `${failures} smoke check(s) FAILED`);
+    return ok;
   } finally {
     try {
       killTree(proc.pid);
     } catch {}
     await new Promise((r) => setTimeout(r, 1500));
-    process.exit(failures === 0 ? 0 : 1);
   }
 }
 
-main().catch((e) => {
-  console.error("smoke test failed to run:", e.message);
-  process.exit(2);
-});
+main().then(
+  (ok) => process.exit(ok ? 0 : 1),
+  (e) => {
+    console.error("smoke test failed to run:", e.message);
+    process.exit(2);
+  },
+);

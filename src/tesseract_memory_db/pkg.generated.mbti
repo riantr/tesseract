@@ -10,6 +10,8 @@ pub const FORMAT_VERSION : Int64 = 1
 
 pub const HEADER_KEY : String = "tesseract-memory"
 
+pub fn max_entries() -> Int32
+
 pub fn open(String, @tesseract_memory.Config) -> Result[DurableMemory, String]
 
 pub fn open_with_clock(String, @tesseract_memory.Config, @tesseract_memory.MemoryClock) -> Result[DurableMemory, String]

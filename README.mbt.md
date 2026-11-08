@@ -108,7 +108,7 @@ way to write a cell directly.
 ## Install
 
 ```sh
-moon add riantr/tesseract@0.1.16
+moon add riantr/tesseract@0.1.17
 ```
 
 That is a **module** dependency, and it belongs in the consumer's `moon.mod`.
@@ -116,7 +116,7 @@ That is a **module** dependency, and it belongs in the consumer's `moon.mod`.
 
 ```toml
 import {
-  "riantr/tesseract@0.1.16",
+  "riantr/tesseract@0.1.17",
 }
 ```
 
@@ -136,7 +136,7 @@ a module and takes **no version at all**. A version in a `moon.pkg` import is
 not a newer spelling — it is an import the toolchain cannot find:
 
 ```
-Cannot find import 'riantr/tesseract/src/tesseract@0.1.16' in my/app/src/thing@0.1.0
+Cannot find import 'riantr/tesseract/src/tesseract@0.1.17' in my/app/src/thing@0.1.0
 ```
 
 The `src/` in the package path is part of the package's name, not a prefix the
@@ -147,7 +147,7 @@ paths — so `riantr/tesseract/src/tesseract_memory` is a package and
 alias, below.
 
 For the same reason there is no `@latest`: the version is parsed as semver, so
-`latest`, `^0.1.16`, `>=0.1.16`, `0.1` and `v0.1.16` are all rejected. A bare
+`latest`, `^0.1.17`, `>=0.1.17`, `0.1` and `v0.1.17` are all rejected. A bare
 `moon add riantr/tesseract` resolves the newest release and pins the concrete
 version it found — that is the "latest" this toolchain has.
 
@@ -172,7 +172,7 @@ package's symbols on under a name of its own.
 are the six executables in the same module — the command line, the file-backed
 store, the short-term memory, the durable memory, the scan database and the
 window. Registry entry:
-[mooncakes.io/docs/riantr/tesseract@0.1.16](https://mooncakes.io/docs/riantr/tesseract@0.1.16).
+[mooncakes.io/docs/riantr/tesseract@0.1.17](https://mooncakes.io/docs/riantr/tesseract@0.1.17).
 
 ### What the release was checked on
 
@@ -187,6 +187,65 @@ would be a claim, not a fact.
 
 0.1.15 was measured on `moon 0.1.20261023`. Moving to 0.1.20261102 is what 0.1.16
 exists for, and it is not a cosmetic bump — see below.
+
+### What changed in 0.1.17
+
+**A durable memory held 255 entries, and that is the wrong number for the thing
+it is for.** The checkpoint lattice was fixed at side 4 — 255 entries, one cell
+for the header — and the capacity was checked against it at open, so
+`open(path, config.with_capacity(5000))` was refused before the file was
+touched. The measured need in the two projects this tier is for: one
+static-analysis pass files 103 L1 + 47 L2 findings = 150 entries, and one
+doubleML run files 92 + 127 = 219 **before** run metadata, value contexts,
+slices or any cross-run history. History does not fit in 255 at all, and the
+alternative — LRU/TTL eviction under pressure — silently drops the audit records
+the tier exists to keep.
+
+- **The side is chosen from the live entry count and recorded in the file.** A
+  store of up to 255 entries writes exactly the side-4 file every earlier release
+  wrote, so the floor did not move and a small checkpoint is still readable by
+  0.1.16. Past 255 the side grows by one step at a time, to a maximum of side 10.
+- **A durable memory holds 9999 entries**, up from 255. `max_entries()` reports
+  it. The ceiling is a memory cost, not a disk one: the lattice is one flat array
+  of `side^4` cells, so side 10 is ten thousand cells allocated and walked per
+  write — which is why the number is ten and not two hundred.
+- **The reader sizes its lattice from the file**, through a new `saved_side` row
+  in the `sudoku_meta` table. A file written before that row existed carries no
+  side and is read as side 4, which is what every one of them was. A file on a
+  **larger** lattice than this build addresses is refused by name.
+- **A load that rejects rows is now a failure.** `tesseract_sqlite::load` counted
+  the rows it could not place in `LoadReport::rejected`, and the durable store
+  read `loaded` and ignored the count — so a file whose cells did not fit its own
+  lattice came back as a shorter store that reported success. It is now an error.
+- **A side this build cannot build is an error, not a fallback.** The old
+  `new_checkpoint_lattice` fell back to the 3-per-axis lattice — 79 entries — if
+  `lattice_of` failed. It cannot fail for side 4, but a fallback there would have
+  written a file missing entries while reporting success.
+- **A cell that does not land is an error.** `insert_cell` ignored the store's
+  answer, which is the one way a write can be refused — a cell past the lattice's
+  last position. A checkpoint could therefore be written missing its tail and
+  still be reported as written.
+
+**What the new ceiling costs, stated plainly.** A checkpoint is rewritten in
+full on every write, so the cost of touching a store grows with what it holds:
+measured on this tree, a command against a store of N entries takes **55 ms** at
+50, **95 ms** at 255, and **602 ms** at 1000. The ceiling rose; a put did not get
+cheap. A caller filling thousands of entries writes through `memory()` — whose
+writes are deliberately not checkpointed — and calls `checkpoint()` once, which
+is what the thousand-entry round trip in the test suite does.
+
+The published surface only **grows**: `max_entries()` and
+`tesseract_sqlite::saved_side` are new, and no signature moved. The 255-entry
+checkpoint a caller has on disk is still exactly the checkpoint this build reads
+and still writes back.
+
+Two QA tools that reported on processes which never ran were fixed in this
+round, because a green gate has to mean something: `qa/perf.mjs` printed a
+timing for a spawn the OS had refused, and `gui-smoke.mjs` could print no check
+at all and still exit 0. Both now fail instead of reporting. That is how the
+`proton` 0.7.0 upgrade was caught breaking the window — the library and
+`proton_cli` are version-keyed, so **upgrade them together** (see [The
+window](#the-window)).
 
 ### What changed in 0.1.16
 
@@ -459,7 +518,7 @@ dependency. The memory tier adds `@math.pow` from `moonbitlang/core/math`, for
 the same reason.
 
 `cmd/gui` is the one exception, and only because it needs a window: it depends on
-`moonbit-community/proton@0.6.0`. Proton is native-only, so that package declares
+`moonbit-community/proton@0.7.0`. Proton is native-only, so that package declares
 `supported_targets = "native"` and the rest of the module stays target-agnostic.
 
 ## The window
@@ -1481,14 +1540,33 @@ Three things are what make those two rules true:
 The checkpoint is a **lattice of its own** — its own cells, never shared with
 the sudoku records — and the file it writes is a *checkpoint container*, a
 lattice whose cells hold the memory's entries, rather than a tesseract database
-a person would query. Its side is **fixed** at four cells per axis, so a file
-written by a store with a large capacity is readable by a store with a small
-one. That gives a durable memory at most **255 entries**: one cell for the
-header and one for each entry.
+a person would query.
+
+The lattice's **side** is chosen from the number of live entries and recorded in
+the file. A store of up to 255 entries writes the side-4 file every earlier
+release wrote; one that outgrows it writes side 5, 6 … up to side 10, and a
+durable memory holds at most **9999 entries** — one cell for the header and one
+for each entry. `max_entries()` reports the ceiling, so a caller can ask rather
+than hard-code a number that has moved.
+
+The side is read back **before** the cells are, because a position is only
+meaningful relative to a lattice: a reader that guessed would either lose the
+rows above its own last position or refuse a file it could have read. So a
+checkpoint is readable by any build whose largest side is at least its own, and a
+file written on a larger lattice than this build addresses is **refused by
+name** rather than read for the part that fits.
+
+Why ten and not two hundred: the store is one **flat array of `side^4` cells**,
+so the ceiling is a memory cost. Side 10 is ten thousand cells, allocated and
+walked on every write; side 40 would be two and a half million. A store that
+needs more than this wants storage that is not one flat array, which is a
+different design rather than a larger number here.
 
 A checkpoint that does not fit the store it is opened with is **refused**
 rather than half-loaded — restoring an entry into a store that is already full
-would evict the entries that were there.
+would evict the entries that were there. A file whose cells do not fit the
+lattice it records is refused for the same reason: "loaded 200 of 219" and
+"loaded 200" are different answers, and only the first one is what happened.
 
 ### The SQL index
 
@@ -1623,11 +1701,11 @@ The full plan and the measurements behind it are in `LOOP3.md`, `LOOP4.md`,
 
 ```sh
 moon check --target all     # type-check every backend
-moon test                   # 422 tests
+moon test                   # 428 tests
 moon fmt --check            # canonical formatting
 
 node cli-smoke.mjs          # the CLIs, as real processes (builds them first)
-node gui-smoke.mjs          # the window, over CDP (needs `proton_cli dev` running)
+node gui-smoke.mjs          # the window, over CDP (it starts `proton_cli dev` itself)
 
 moon run cmd/main -- .help
 moon run cmd/main -- .status
@@ -1842,7 +1920,7 @@ the CEF runtime once:
 
 ```sh
 moon update                                        # refresh the registry index
-moon install moonbit-community/proton_cli@0.6.0   # match the library version
+moon install moonbit-community/proton_cli@0.7.0   # match the library version
 proton_cli cef setup                               # CEF runtime + subprocess helper
 
 proton_cli doctor                  # identity, toolchain and runtime
@@ -1852,9 +1930,18 @@ proton_cli package --dry-run       # check the packaging plan
 proton_cli package                 # produce dist/
 ```
 
-`proton_cli` and the CEF layout it installs are both version-keyed, so a CLI left
-on an older version still works — it resolves the same CEF build — but it prints
-an upgrade notice on every run. Matching them keeps `doctor` output meaningful.
+The two are version-keyed and a mismatch is not cosmetic: a CLI older than the
+library builds the app and then fails at launch. Measured on 2026-11-09, proton
+0.7.0 with `proton_cli` 0.5.1 exits 1 immediately after printing
+
+```
+package.platforms has moved to root platforms.<platform>.package;
+arrays now replace shared values
+```
+
+with no page ever loading — while `proton_cli doctor` still reports the project
+and runtime as valid, because the schema it validates is its own, older one.
+Matching the versions fixed it with no change to `proton.project.json`.
 
 `proton_cli dev` builds `cmd/gui` for the native target and launches it with the
 resource directory pointed at the repository root, so `cmd/gui/web/index.html` is
@@ -1896,7 +1983,7 @@ The gate, and the result it produced for this version:
 | `moon check --target js --deny-warn` | exit 0 |
 | `moon check --target native --deny-warn` | exit 0 |
 | `moon check --target wasm-gc --deny-warn` | exit 0 |
-| `moon test --target wasm --deny-warn` | **422 passed, 0 failed** |
+| `moon test --target wasm --deny-warn` | **428 passed, 0 failed** |
 | `moon build --target wasm` | exit 0 |
 | `typos` (v1.50.3 — the version the workflow pins) | exit 0 |
 | `node cli-smoke.mjs` | **103 passed, 0 failed** |
@@ -2014,7 +2101,7 @@ Stated plainly, because "it has a SQL surface" invites the wrong assumption.
   structural, computed at query time, and exact — the same two texts always
   give the same score. There is no embedding, no index, and no model to drift.
 - **The window is Proton, not a native GUI toolkit.** `cmd/gui` depends on
-  `moonbit-community/proton@0.6.0` and is therefore native-only. The library and
+  `moonbit-community/proton@0.7.0` and is therefore native-only. The library and
   `cmd/main` do not depend on it.
 - **The core library has no third-party dependencies.** File I/O and stdin are
   not in this toolchain's core, so what the package needs is implemented here. The
@@ -2039,7 +2126,7 @@ the one thing that trips people up here.
 From this repository, the suite and every layer:
 
 ```sh
-moon test             # Total tests: 422, passed: 422, failed: 0.
+moon test             # Total tests: 428, passed: 428, failed: 0.
 
 moon run cmd/main -- .demo                        # a store, a statement, a report
 moon run cmd/main -- .solve .verify               # the sudoku solver, and the check
@@ -2085,7 +2172,7 @@ caller cannot set an entry's accounting behind the store's back.
 
 ## Gates and drift detectors
 
-`moon fmt --check`, the four `moon check` targets, `moon test` (422 wasm tests)
+`moon fmt --check`, the four `moon check` targets, `moon test` (428 wasm tests)
 and `moon build --target wasm` are the baseline, and `typos` guards the prose.
 Eleven detectors run on top, because a green suite says nothing about a claim
 written in prose:

@@ -225,10 +225,10 @@ function wordsOf(i, count) {
  * is a limit of the platform, not of the store. Each process opens the store
  * the earlier ones left behind, so the result is the same store.
  */
-function buildStore(dir, db, n, words, chunk = 60) {
+function buildStore(dir, db, n, words, chunk = 60, capacity = 255) {
   const started = Date.now();
   for (let start = 0; start < n; start += chunk) {
-    const args = ["--file", db, "--capacity", "255"];
+    const args = ["--file", db, "--capacity", String(capacity)];
     for (let i = start; i < Math.min(start + chunk, n); i++) {
       args.push(`put k${i} ${wordsOf(i, words)}`);
     }
@@ -300,7 +300,11 @@ function main() {
   log("");
 
   // ---- 4. the durable store at its capacity ----
-  log("the durable memory at its checkpoint limit");
+  // Not at its *ceiling*: the default capacity is 100, so 255 writes into it
+  // evict from the hundredth onwards. The ceiling was 255 until 0.1.17 and the
+  // number is kept as the same data point a previous release measured.
+  log("the durable memory at its capacity: 255 writes into the default 100-entry");
+  log("store, so each write past the hundredth evicts before it checkpoints.");
   const db = "load.db";
   const writes = 255;
   const w0 = Date.now();
@@ -380,10 +384,11 @@ function sectionIndexOverAFullStore(dir) {
   const indexBytes = [];
   const storeBytes = [];
 
-  log("  the durable store holds at most 255 entries - the checkpoint lattice has");
-  log("  one cell per entry and one for its header - so 255 is the largest store");
-  log("  there is to index. Each entry holds 50 words, so the index over it holds");
-  log("  50 rows per entry and the rebuild has rows to write.");
+  log("  the durable store held at most 255 entries until 0.1.17 - a side-4");
+  log("  checkpoint lattice, one cell per entry and one for its header - so 255 is");
+  log("  where that lattice filled and these counts run up to it. Each entry holds");
+  log("  50 words, so the index over it holds 50 rows per entry and the rebuild has");
+  log("  rows to write.");
   log("");
   log("  entries    rows   rebuild ms   base ms   find ms   index bytes   store bytes");
   for (const n of counts) {
@@ -781,17 +786,29 @@ function sectionASustainedRun(dir) {
 
   // ---- the durable store, in one process ----
   log("  the durable store, whose checkpoint is rewritten after every command:");
-  const marks = [50, 100, 150, 200, 255];
+  // 255 was the ceiling until 0.1.17, so the marks straddle it: the point of the
+  // marks above it is that the store can now hold them *and* that the cost of a
+  // put keeps climbing with the store - the ceiling moved, the curve did not.
+  //
+  // They stop at 400 because the puts ride on the command line, and a thousand
+  // of them is longer than the platform carries. That limit used to be invisible
+  // here: a spawn the shell refuses returns in about a millisecond, and the row
+  // was printed as a thousand puts costing 1 ms - a fake number in a report
+  // about performance. A mark that does not run is now an error, and the sizes
+  // the command line cannot reach are measured one put at a time below.
+  const marks = [50, 100, 150, 200, 255, 400];
   const cumulative = measureEach(
     marks.map((k) => () => {
       const file = path.join(dir, `sustained-${k}.db`);
       // The store is thrown away first: a run that opened a store left behind
       // by an earlier round would be measuring a bigger store than it says.
       if (fs.existsSync(file)) fs.unlinkSync(file);
-      const args = ["--file", file, "--capacity", "255"];
+      const args = ["--file", file, "--capacity", "5000"];
       for (let i = 0; i < k; i++) args.push(`put k${i} ${wordsOf(i, 5)}`);
       const started = Date.now();
-      run("cmd/memory_db", args, dir, 300000);
+      const r = run("cmd/memory_db", args, dir, 300000);
+      const st = status(r);
+      if (st !== "ok") throw new Error(`${k} puts did not run: ${st}`);
       return Date.now() - started;
     }),
     HEAVY_REPEATS,
@@ -828,6 +845,48 @@ function sectionASustainedRun(dir) {
   log(`  ${driftVerdictExponent(cum.e)}`);
   log("  (the blocks above are single samples of a cost the disk decides, so they");
   log("  move about; the exponent over the whole run is the one that holds.)");
+  log("");
+
+  // ---- what a command costs against a store that is already big ----
+  // The question the cumulative run cannot reach now that a store holds 9999,
+  // and the one a caller actually pays: this binary rewrites the checkpoint
+  // after **every** command, so a command against a store of N entries costs one
+  // full checkpoint write. One process, one command, and the launch cancels out
+  // against the `stats` baseline.
+  //
+  // The difference between the two is deliberately reported rather than dressed
+  // up: `stats` writes the checkpoint too, so the extra is the memory write
+  // alone, and it is under the clock. What the table is for is the **first**
+  // column - the cost of touching a big store at all.
+  log("  a command against a store that already holds N entries:");
+  log("    entries   stats ms   one put ms   difference");
+  for (const n of [50, 255, 500, 1000]) {
+    const file = path.join(dir, `bigput-${n}.db`);
+    if (fs.existsSync(file)) fs.unlinkSync(file);
+    // 100 puts per process: the building is not measured, but it still has to
+    // fit on a command line, and this is the chunk size the other sections use.
+    const built = buildStore(dir, file, n, 5, 100, 5000);
+    if (status(built) !== "ok") {
+      log(`    ${String(n).padStart(7)}  undeliverable - ${status(built)}`);
+      continue;
+    }
+    const [base, one] = measureEach(
+      [
+        () => run("cmd/memory_db", ["--file", file, "--capacity", "5000", "stats"], dir, 300000).ms,
+        () => run("cmd/memory_db", ["--file", file, "--capacity", "5000", "put extra v"], dir, 300000).ms,
+      ],
+      HEAVY_REPEATS,
+      "min",
+    );
+    const delta = one - base;
+    log(
+      `    ${String(n).padStart(7)}  ${String(base).padStart(9)}  ${String(one).padStart(12)}  ${(delta < 1 ? "under 1 ms" : delta.toFixed(0) + " ms").padStart(12)}`,
+    );
+  }
+  log("  both commands write the checkpoint on the way out, so what separates them");
+  log("  is the memory write alone and it is under the clock. The number to read is");
+  log("  the first: touching a store of N entries costs a whole checkpoint write,");
+  log("  and at a thousand entries that is most of a second per command.");
   log("");
 }
 

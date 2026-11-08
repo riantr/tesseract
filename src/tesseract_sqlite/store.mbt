@@ -145,18 +145,58 @@ fn write_cells(
 }
 
 ///|
-/// The cursor, so a reopened file resumes where the last one left off.
+/// The cursor and the lattice side.
+///
+/// The cursor is what lets a reopened file resume where the last one left off.
+/// The side is what lets a **reader size the lattice before it reads the
+/// cells**: a position is only meaningful relative to a lattice, so a reader
+/// that guessed the side wrong would either lose the rows above its own last
+/// position or refuse a file it could have read. A file written before this
+/// row existed has no side and is read as a side-4 lattice, which is what
+/// every one of them was.
 fn write_meta(
   conn : @sqlite3.Connection,
   db : @tesseract.Tesseract,
 ) -> Unit raise {
   let status = @tesseract.Tesseract::status(db)
+  let lat = @tesseract.Tesseract::lattice_of_db(db)
   let ins = conn.prepare("INSERT INTO sudoku_meta (name, value) VALUES (?, ?)")
   defer ins.finalize()
   ins.reset(clear_bindings=true)
   ins.bind(index=1, "cursor")
   ins.bind(index=2, status.current_position.to_string())
   ignore(ins.step())
+  ins.reset(clear_bindings=true)
+  ins.bind(index=1, "side")
+  ins.bind(index=2, @tesseract.Lattice::side(lat).to_string())
+  ignore(ins.step())
+}
+
+///|
+/// The lattice side the file at `path` was saved on, or `None` when the file
+/// carries no side.
+///
+/// `None` is not an error: it is what every file written before the side was
+/// recorded looks like, and those are all side-4 lattices. A caller that needs
+/// a lattice to read such a file should treat `None` as `4`.
+///
+/// This reads one row and no cells, so it is cheap enough to call before
+/// deciding how large a lattice to build.
+pub fn saved_side(path : String) -> Int64? raise {
+  let conn = @sqlite3.Connection::open(path)
+  defer conn.close()
+  ensure_schema(conn)
+  match read_meta(conn, "side") {
+    Some(text) =>
+      match @tesseract.parse_int(text) {
+        Some(side) => Some(side.to_int64())
+        // A side that is not a number is not a side. Reporting `None` makes
+        // the reader fall back to the old default rather than to a lattice
+        // built from junk.
+        None => None
+      }
+    None => None
+  }
 }
 
 ///|

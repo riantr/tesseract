@@ -54,19 +54,70 @@ pub struct DurableScope {
 }
 
 ///|
-/// The side of the checkpoint lattice.
+/// The smallest side a checkpoint lattice is ever built at.
 ///
 /// The lattice holds the header in its first cell and one entry in each cell
-/// after it, so a checkpoint holds `side^4 - 1` entries. Four gives 255,
-/// which is more than the memory's own default of a hundred, and the side is
-/// **fixed** rather than derived from the capacity — a checkpoint written by a
-/// store with a large capacity has to be readable by a store with a small
-/// one, and a lattice that changed size with the capacity could not be.
-const CHECKPOINT_SIDE : Int64 = 4L
+/// after it, so a side-4 lattice holds 255 entries — more than the memory's own
+/// default of a hundred. It stays the **floor** rather than being derived from
+/// the capacity for a reason worth keeping: every checkpoint written before the
+/// side was recorded is a side-4 file, so a store that still fits in 255 keeps
+/// writing exactly the shape of file it always did. The file a small store
+/// writes does not change.
+const CHECKPOINT_MIN_SIDE : Int64 = 4L
 
 ///|
-/// The most entries a checkpoint lattice can hold: the header takes one cell.
-const MAX_ENTRIES : Int32 = 255
+/// The largest side this build will build a checkpoint lattice at — and the
+/// largest it will read.
+///
+/// A side-10 lattice holds 9999 entries, which is 39 times the 255 a side-4
+/// lattice holds. It is not larger because the store is one **flat array of
+/// `side^4` cells**: a side-10 checkpoint allocates ten thousand cells and
+/// walks them on every write, so the ceiling is a memory cost, not a disk one.
+/// A store that grows past this wants storage that is not one flat array, which
+/// is a different design rather than a larger number here.
+///
+/// The side a checkpoint was written with is recorded in the file, so a
+/// checkpoint is readable by any build whose maximum is at least its side. That
+/// is the guarantee, and it is the honest one: it replaces "one fixed size for
+/// everybody", which could not be both 255 and enough.
+const CHECKPOINT_MAX_SIDE : Int64 = 10L
+
+///|
+/// The most entries a checkpoint holds: `side^4 - 1` at the largest side,
+/// because the header takes one cell.
+///
+/// Public so a caller can ask instead of hard-coding a number that has moved.
+pub fn max_entries() -> Int32 {
+  checkpoint_capacity(CHECKPOINT_MAX_SIDE)
+}
+
+///|
+/// How many entries a side-`side` checkpoint lattice holds.
+fn checkpoint_capacity(side : Int64) -> Int32 {
+  (side * side * side * side - 1L).to_int()
+}
+
+///|
+/// The smallest side that holds `entries` entries plus the header.
+///
+/// Smallest rather than always the largest, because the lattice is a flat
+/// array: a store holding 300 entries on a side-10 lattice would allocate
+/// 10,000 cells to write 301 of them.
+fn checkpoint_side_for(entries : Int32) -> Result[Int64, String] {
+  let mut side = CHECKPOINT_MIN_SIDE
+  while side <= CHECKPOINT_MAX_SIDE {
+    if checkpoint_capacity(side) >= entries {
+      return Ok(side)
+    }
+    side = side + 1L
+  }
+  Err(
+    "a checkpoint holds at most " +
+    max_entries().to_string() +
+    " entries, and this one would need " +
+    entries.to_string(),
+  )
+}
 
 ///|
 /// Opens the memory in the file at `path`, reading the checkpoint if there is
@@ -101,14 +152,17 @@ pub fn open_with_clock(
   config : @tesseract_memory.Config,
   clock : @tesseract_memory.MemoryClock,
 ) -> Result[DurableMemory, String] {
-  if config.capacity > MAX_ENTRIES {
+  if config.capacity > max_entries() {
     return Err(
       "a durable memory holds at most " +
-      MAX_ENTRIES.to_string() +
+      max_entries().to_string() +
       " entries, because the checkpoint lattice holds one cell per entry and one for the header",
     )
   }
-  let lattice = new_checkpoint_lattice()
+  let lattice = match read_checkpoint_lattice(path) {
+    Ok(l) => l
+    Err(message) => return Err(message)
+  }
   let loaded = match load_file(path, lattice) {
     Ok(n) => n
     Err(message) => return Err(message)
@@ -193,7 +247,10 @@ pub fn DurableMemory::checkpoint(self : DurableMemory) -> Result[Int32, String] 
 /// and a reload that swapped the store out from under it would leave the
 /// caller holding a store that is no longer the one it opened.
 pub fn DurableMemory::reload(self : DurableMemory) -> Result[Int32, String] {
-  let lattice = new_checkpoint_lattice()
+  let lattice = match read_checkpoint_lattice(self.path) {
+    Ok(l) => l
+    Err(message) => return Err(message)
+  }
   let loaded = match load_file(self.path, lattice) {
     Ok(n) => n
     Err(message) => return Err(message)
@@ -395,10 +452,10 @@ pub fn DurableMemory::set_config(
   self : DurableMemory,
   config : @tesseract_memory.Config,
 ) -> Result[Bool, String] {
-  if config.capacity > MAX_ENTRIES {
+  if config.capacity > max_entries() {
     return Err(
       "a durable memory holds at most " +
-      MAX_ENTRIES.to_string() +
+      max_entries().to_string() +
       " entries, because the checkpoint lattice holds one cell per entry and one for the header",
     )
   }
@@ -709,61 +766,143 @@ pub fn DurableScope::search(
 ///
 /// The sweep comes first, so what is written is what is **live**. An entry
 /// whose time is up is not in the file, and it does not come back.
+///
+/// The entries are encoded **before** the lattice is built, because the lattice
+/// is sized from how many there are: the smallest side that holds them, so a
+/// store of a hundred entries pays for 256 cells rather than for the ten
+/// thousand the largest checkpoint could hold. That side is what the file
+/// records, and it is what a reader sizes its own lattice from.
 fn write_checkpoint(
   memory : @tesseract_memory.Memory,
   path : String,
 ) -> Result[Int32, String] {
-  let lattice = new_checkpoint_lattice()
-  insert_cell(lattice, 1L, HEADER_KEY, encode_header(memory.clock()))
-  let mut position = 2L
+  let encoded : Array[(String, String)] = []
   for scope in memory.scopes() {
     for entry in memory.scope(scope).entries() {
-      insert_cell(lattice, position, cell_key(entry.key()), encode_entry(entry))
-      position = position + 1L
+      encoded.push((cell_key(entry.key()), encode_entry(entry)))
     }
+  }
+  let side = match checkpoint_side_for(encoded.length()) {
+    Ok(s) => s
+    Err(message) => return Err(message)
+  }
+  let lattice = match new_checkpoint_lattice(side) {
+    Ok(l) => l
+    Err(message) => return Err(message)
+  }
+  if !insert_cell(lattice, 1L, HEADER_KEY, encode_header(memory.clock())) {
+    return Err("the checkpoint header could not be written at " + path)
+  }
+  let mut position = 2L
+  for cell in encoded {
+    if !insert_cell(lattice, position, cell.0, cell.1) {
+      return Err(
+        "the entry at position " +
+        position.to_string() +
+        " of " +
+        encoded.length().to_string() +
+        " could not be written at " +
+        path,
+      )
+    }
+    position = position + 1L
   }
   save_file(path, lattice)
 }
 
 ///|
-/// A fresh lattice for a checkpoint.
+/// A fresh lattice for a checkpoint, of the given side.
 ///
 /// It is a lattice of its own: the sudoku records and the memory's entries
 /// never share a cell, because they are different things with different rules
 /// and a write that landed on the wrong one would be a bug in a layer neither
 /// of them knows about.
-fn new_checkpoint_lattice() -> @tesseract.Tesseract {
-  let lat = match @tesseract.lattice_of(CHECKPOINT_SIDE) {
+///
+/// A side this build cannot build is an error rather than a fallback. There
+/// used to be a fallback here — to the 3-per-axis lattice — and it was the one
+/// failure mode that would have been silent: a side-3 checkpointer holds 79
+/// entries, so a store that overflowed it would have written a file that was
+/// missing entries while reporting success.
+fn new_checkpoint_lattice(side : Int64) -> Result[@tesseract.Tesseract, String] {
+  let lat = match @tesseract.lattice_of(side) {
     Ok(l) => l
-    // Four is in range, so this cannot happen. The default is the same
-    // shape anyway, and a checkpoint that fell back to it would still be a
-    // checkpoint.
-    Err(_) => @tesseract.default_lattice()
+    Err(message) => return Err(message)
   }
   let logger = @tesseract.new_logger("tesseract-memory-db")
-  @tesseract.new_db("tesseract-memory", lat, logger)
+  Ok(@tesseract.new_db("tesseract-memory", lat, logger))
 }
 
 ///|
-/// Writes one cell of the checkpoint.
+/// A lattice sized for the checkpoint at `path`.
+///
+/// The reader cannot build a lattice until it knows the side, and the side is
+/// in the file rather than in the build: that is what lets one build read a
+/// checkpoint written by a store with a larger capacity. A file that carries no
+/// side was written by a store from before the side was recorded, and every one
+/// of those is a side-4 lattice.
+///
+/// A file written on a lattice **larger** than this build can address is
+/// refused, by name. The alternative is not "read what fits": the rows above
+/// this lattice's last position are refused one by one by `insert_stamped`, and
+/// a reader that ignored that count would hand back a store quietly missing its
+/// tail.
+fn read_checkpoint_lattice(
+  path : String,
+) -> Result[@tesseract.Tesseract, String] {
+  let recorded = @tesseract_sqlite.saved_side(path) catch {
+    _ => return Err("the checkpoint at " + path + " could not be opened")
+  }
+  let side = match recorded {
+    Some(s) =>
+      if s < CHECKPOINT_MIN_SIDE {
+        // A side below the floor is not one this build writes, but it is one it
+        // can read: a smaller lattice's positions are a prefix of a larger one's.
+        CHECKPOINT_MIN_SIDE
+      } else {
+        s
+      }
+    None => CHECKPOINT_MIN_SIDE
+  }
+  if side > CHECKPOINT_MAX_SIDE {
+    return Err(
+      "the file at " +
+      path +
+      " is a checkpoint written on a lattice of side " +
+      side.to_string() +
+      ", and this build reads at most side " +
+      CHECKPOINT_MAX_SIDE.to_string(),
+    )
+  }
+  new_checkpoint_lattice(side)
+}
+
+///|
+/// Writes one cell of the checkpoint, and says whether it landed.
 ///
 /// The cell carries no digit, so the sudoku rule has nothing to say about it:
 /// a checkpoint is a container, not a puzzle.
+///
+/// The answer is the caller's to check rather than to ignore. A cell that does
+/// not land — the one way a lattice can refuse a write is to be too small — used
+/// to be dropped here, so a checkpoint could be written missing its tail and
+/// still be reported as written. The count the lattice was sized from comes from
+/// the same list that is being written, so this cannot fire; it is checked
+/// because "cannot fire" is what the two silent losses this release fixed both
+/// looked like from the inside.
 fn insert_cell(
   lattice : @tesseract.Tesseract,
   position : Int64,
   key : String,
   value : String,
-) -> Unit {
-  let response = @tesseract.Tesseract::insert_stamped(
+) -> Bool {
+  @tesseract.Tesseract::insert_stamped(
     lattice,
     key,
     value,
     Some(position),
     @tesseract.NO_DIGIT,
     None,
-  )
-  ignore(response)
+  ).success
 }
 
 ///|
@@ -850,12 +989,28 @@ fn total_bytes(entries : Array[@tesseract_memory.Entry]) -> Int64 {
 
 ///|
 /// Reads the file into the lattice.
+///
+/// A load that **rejected** rows is a failure, not a partial success. The
+/// lattice the reader built is sized from the side the file records, so a
+/// rejection means the file and its own record of itself disagree — a
+/// hand-edited file, or one written by something that got the side wrong. Both
+/// are cases where "loaded 200 of 219" and "loaded 200" are different answers,
+/// and only the first one is what happened.
 fn load_file(
   path : String,
   lattice : @tesseract.Tesseract,
 ) -> Result[Int32, String] {
   let report = @tesseract_sqlite.load(path, lattice) catch {
     _ => return Err("the checkpoint at " + path + " could not be read")
+  }
+  if report.rejected > 0 {
+    return Err(
+      "the checkpoint at " +
+      path +
+      " holds " +
+      report.rejected.to_string() +
+      " cells its lattice cannot address, so it was not read",
+    )
   }
   Ok(report.loaded)
 }

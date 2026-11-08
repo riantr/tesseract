@@ -1,7 +1,7 @@
 # QA — a deep sweep across sixteen dimensions
 
-Measured against the tree that ships as **v0.1.16** — the toolchain repair that
-follows the 0.1.15 documentation release. Every number below was produced by a tool in `qa/`, and every tool
+Measured against the tree that ships as **v0.1.17** — the release that raises the
+durable memory's ceiling from 255 entries to 9999. Every number below was produced by a tool in `qa/`, and every tool
 prints where its number came from. A number that could not be measured says so
 instead of carrying an estimate.
 
@@ -27,6 +27,24 @@ defect against 0.1.15 — passes **9 of 9** against it. `qa/fuzz` passes **6 of 
 against the same artifact. See "The tree stopped building on the toolchain it was
 measured on" below for what that probe was reading before.
 
+**0.1.17 is a cap, and the cap was the blocker.** A durable memory held 255
+entries — a side-4 checkpoint lattice, one cell for the header and one per entry
+— and the capacity was checked against it at open, so a store opened with room
+for 5000 was refused before the file was touched. The need is not marginal: one
+static-analysis pass files 150 entries and one doubleML run files 219 **before**
+run metadata, value contexts, slices or history, and no cross-run history fits in
+255 at all. The lattice side is now chosen from the live entry count and recorded
+in the file, up to side 10, so the ceiling is 9999. What moved, and is
+re-measured below: the symbol count (+2, both new fns), the interface files (2 of
+15 differ from the published 0.1.16 until this tag is published), and the load
+curve, which now runs past the old ceiling. The suite grew six tests, 422 → **428**,
+one per loss the change closes and one per boundary of the new cap.
+
+Two tools that reported on processes which never ran were fixed in the same
+round: `qa/perf.mjs` printed *"1000 puts: 1 ms"* for a spawn the OS had refused,
+and `gui-smoke.mjs` exited 0 while running no check at all (see 13 below). Both
+now fail instead of reporting.
+
 0.1.15 itself carries no behaviour change: it is the **logo** (the artwork from
 the attachment, at 438×438 and 1024×1024), the move from **Apache-2.0 to MIT**,
 and a README restructured to the shape `riantr/pyroduct@0.1.35` uses. The
@@ -43,17 +61,17 @@ license should not change what a consumer's code has to compile against.
 | 1 | **SAST** | 71 files / 14 packages, **0 errors, 0 warnings**; 17 `unwrap`s classified as 8 guarded, 4 bounded, 5 waived, **0 unproven**; **0** SQL concatenations; 106 `Int64`→`Int` narrowings measured | `node qa/sast.mjs` |
 | 2 | **DAST** | **119** hostile argv vectors against 5 binaries; **104** deliverable, all refused cleanly; 15 undeliverable (the OS command-line limit); **0 crashes, 0 hangs** | `node qa/dast.mjs` |
 | 3 | **Dependency / SCA** | **14** modules in the closure, **6** direct pins, every pin current; 0 yanked; vendored SQLite **3.49.1** against upstream 3.54.1; **4** NVD advisories, **0** reachable; **1** transitive gap left | `node qa/deps.mjs` |
-| 4 | **Unit** | **422 tests, 422 passed, 0 failed**, on 4 check targets under `--deny-warn` | `moon test --target wasm --deny-warn` |
+| 4 | **Unit** | **428 tests, 428 passed, 0 failed**, on 4 check targets under `--deny-warn` | `moon test --target wasm --deny-warn` |
 | 5 | **Integration** | **22** production edges across 14 packages (+1 test-only); **11** crossed by an in-tree test that names the other package; **11** covered only from outside the package | `node qa/integration.mjs` |
-| 6 | **API** | **529** public symbols (62 types, 169 fns, 291 methods, 7 consts); naming **100 %** conformant; **0 findings** (75 in the 0.1.13 sweep); **54** symbols attributed to the `#derive` clause that generates them | `node qa/api.mjs` |
-| 7 | **Contract** | **529** published symbols matched, **0** mismatched; the published package's own interface files **15 identical, 0 differing**; every published accessor **returns the number the contract names**; the probe of the published artifact: **9 tests, 9 passed**; **12** error codes, **12/12** documented and **12/12** asserted on the code; **0** findings in the working tree, **3** in the published artifact, **0** drift, **0** checks skipped | `node qa/contract.mjs` |
+| 6 | **API** | **531** public symbols (62 types, 171 fns, 291 methods, 7 consts); naming **100 %** conformant; **0 findings** (75 in the 0.1.13 sweep); **54** symbols attributed to the `#derive` clause that generates them | `node qa/api.mjs` |
+| 7 | **Contract** | **531** symbols in the working tree against the published 0.1.16: **0** of the 529 published ones changed shape, **2** are local-only (`max_entries`, `saved_side`); the published package's own interface files **13 identical, 2 differing** until this tag is published; every published accessor **returns the number the contract names**; the probe of the published artifact: **9 tests, 9 passed**; **12** error codes, **12/12** documented and **12/12** asserted on the code; **0** findings in the working tree, **3** in the published artifact, **4** in the drift, **0** checks skipped | `node qa/contract.mjs` |
 | 8 | **Component** | **8** library packages, coverage from **15.6 %** to **98.5 %**; **0** API findings across the module's packages | `node qa/api.mjs`, `node qa/coverage.mjs` |
 | 9 | **Gherkin** | **7** features, **54** scenarios, **222** steps, **54/54** pass | `node qa/gherkin.mjs` |
 | 10 | **E2E** | **72** commands across **5** CLIs mapped onto **4** layers; **0** exercised by no layer; **5** exercised only by the unit suite | `node qa/e2e.mjs` |
 | 11 | **Coverage** | whole module **3484/4966 = 70.2 %**; libraries **3484/4423 = 78.8 %**; binaries **0/543** | `moon coverage analyze -- -f cobertura`, `node qa/coverage.mjs` |
 | 12 | **Fuzz** | **6** properties × **3000** rounds ≈ **18,000** hostile statements, all pass, error vocabulary closed | `cd qa/fuzz && moon test --target native` |
-| 13 | **Performance** | index rebuild exponent **0.67**, lookup **0.69**; the index's own share **0.35 ms/entry** against the store's **1.36 ms/entry**; checkpoint write **0.20**, size **0.52**; lattice cost **1.03**; opening the store **0.86** | `node qa/perf.mjs` |
-| 14 | **Load** | the durable store over 50 → 255 puts: exponent **1.15** — the cost of a put grows with the store; per-put **6.54 → 11.11 ms** (ratio 1.70×). The SQL store's own statements sit below the log clock's resolution (ratio 1.33×, **not resolved**) | `node qa/perf.mjs` |
+| 13 | **Performance** | index rebuild exponent **0.68**, lookup **0.70**; the index's own share **0.27 ms/entry** against the store's **1.51 ms/entry**; checkpoint write **0.22**, size **0.52**; lattice cost **1.10**; opening the store **0.83** | `node qa/perf.mjs` |
+| 14 | **Load** | the durable store over 50 → 400 puts: exponent **1.15** — the cost of a put grows with the store; per-put **7.68 → 14.76 ms** (ratio 1.92×), the range now reaching past the old 255 ceiling. A command against a store of N entries costs one whole checkpoint write: **55 ms** at 50, **95 ms** at 255, **602 ms** at 1000 — the price of the new ceiling. The SQL store's own statements sit below the log clock's resolution (ratio 1.00×, **not resolved**) | `node qa/perf.mjs` |
 | 15 | **Duplicate code** | **34** duplicated blocks / **240** duplicated lines over 71 files (28 blocks in library code, 6 in tests) | `node qa/dup.mjs` |
 | 16 | **Metrics** | this table; and the defects below, with the proof that each one was real | — |
 
@@ -403,9 +421,96 @@ carrying the same bug.
 published artifact, and then closed with *"the working tree is clean"*, which reads
 as verification. The summary now carries the skip count and says the skipped
 checks are not part of that claim. After the publish that run is **0 skipped**:
-**529** published symbols matched and **0** mismatched, **15** interface files
+**531** published symbols matched and **0** mismatched, **15** interface files
 identical and **0** differing, the probe **9 of 9**, and 3 standing findings about
 the registry's index rather than about the code — the same 3 every release carries.
+
+### 12. A durable memory held 255 entries — 255 → 9999
+
+The checkpoint lattice was fixed at **side 4**: 255 entries, one cell for the
+header and one per entry. The capacity was checked against it at `open`, so a
+store opened with room for a large run was refused before the file was touched —
+`Config::with_capacity(5000)` failed with *"a durable memory holds at most 255
+entries"*.
+
+The number was not a guess. It was chosen so that a checkpoint written by a store
+with a large capacity stayed readable by a store with a small one. That guarantee
+is what capped the tier, and keeping it exactly is the thing that cannot be done:
+a fixed side cannot be both 255 and enough.
+
+- **The side is chosen from the live entry count and recorded in the file**, in
+  the `sudoku_meta` table the adapter already keeps the cursor in. Up to 255
+  entries the side stays 4, so a small store writes **exactly** the file it wrote
+  before and 0.1.16 still reads it. Past 255 the side steps up, to side 10.
+- **The reader sizes its lattice from that row before it reads the cells**,
+  because a position only means something relative to a lattice. A file that
+  records no side is a side-4 file, which is what every earlier one was. A file on
+  a lattice **larger** than this build addresses is refused by name.
+- **The guarantee becomes the honest version of itself**: a checkpoint is
+  readable by any build whose largest side is at least its own.
+- **Three silent losses became errors.** `load` counts the rows it cannot place
+  in `LoadReport::rejected`, and the durable store read `loaded` and dropped the
+  count — so a file whose cells did not fit its own lattice came back as a shorter
+  store that reported success. `new_checkpoint_lattice` fell back to the
+  3-per-axis lattice — 79 entries — if `lattice_of` failed. And `insert_cell`
+  ignored the store's answer, which is the only way a cell write is refused, so a
+  checkpoint could be written missing its tail and still reported as written.
+  None of the three can fire for a well-formed side-4 store, which is exactly why
+  none of them had been noticed.
+
+**The measured cost, and it is why the ceiling is 10 and not 200:** a checkpoint
+is rewritten **in full** on every write, and the lattice is one flat array of
+`side^4` cells. Measured on this tree: the sustained-put curve keeps its
+exponent of **1.15** past the old ceiling (7.68 → 14.76 ms per put over 50 → 400
+puts), and a command against a store of N entries costs one whole checkpoint
+write — **55 ms** at 50 entries, **95 ms** at 255, **602 ms** at 1000. So raising
+the ceiling did not make a put cheap; it made a store that can hold a run
+possible at all. A caller filling thousands of entries writes through
+`memory()` and checkpoints once, which is what the thousand-entry round trip in
+the test suite does. More than this, or a cheap put at that size, wants storage
+that is not one flat array.
+
+---
+
+### 13. The GUI smoke suite could not fail
+
+`gui-smoke.mjs` ended in a `finally` that killed the app and then called
+`process.exit(failures === 0 ? 0 : 1)`. When the window failed to start, the
+`try` body threw *"no DevTools endpoint appeared"*, the `finally` ran before that
+error could reach the `catch`, and `process.exit(0)` ended the process first: the
+suite printed **no check at all** and reported success. `failures === 0` is
+vacuously true when zero checks run, so the verdict rested on nothing.
+
+It was found by accident. Proton was upgraded from 0.6.0 to 0.7.0 as one of six
+dependency bumps and the window stopped launching, yet `node gui-smoke.mjs`
+exited **0** — the only evidence was the child's own log line that the gate
+script happens to echo. Two defects, one hiding the other:
+
+- **The window was really broken.** proton 0.7.0 needs `proton_cli` 0.7.0. With
+  the installed 0.5.1 the app prints
+
+  ```
+  package.platforms has moved to root platforms.<platform>.package;
+  arrays now replace shared values
+  ```
+
+  and exits 1 with no page ever loading — while `proton_cli doctor` reports
+  *"0 errors, 0 warnings"*, because the schema it validates is its own, older
+  one. Pinning the library back to 0.6.0 restored it; so does
+  `moon install moonbit-community/proton_cli@0.7.0`, which is the version taken,
+  and `proton.project.json` needed no change. The README claimed an older CLI
+  *"still works — it resolves the same CEF build"*; that is measured false and
+  the paragraph now records the failure instead.
+- **The harness now fails honestly.** The wait loop watches the child's exit
+  code and throws with its last 15 output lines instead of sitting out the full
+  two minutes; `finally` no longer exits the process; and the verdict requires
+  `checks > 0`, so a suite that runs nothing cannot pass. Verified by running it
+  against the broken pair: exit **2** with the app's own message, where it had
+  printed nothing and exited **0**. Against the fixed pair it is exit **0**,
+  **45** checks, all passing.
+
+The lesson is the same one the performance harness taught earlier in this round:
+a tool that reports on a process which never ran is not reporting.
 
 ---
 
@@ -678,7 +783,7 @@ moon check --target wasm --deny-warn
 moon check --target js --deny-warn
 moon check --target native --deny-warn
 moon check --target wasm-gc --deny-warn
-moon test --target wasm --deny-warn     # 422 passed, 0 failed
+moon test --target wasm --deny-warn     # 428 passed, 0 failed
 moon build --target wasm
 typos
 node cli-smoke.mjs                      # 103 checks
